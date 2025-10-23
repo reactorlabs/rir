@@ -312,8 +312,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
                                     code->getClosureVersion()
                                         ->registerProtoSlotUsed(
-                                            f->typeFeedback()
-                                                .feedbackOrigin); ////////
+                                            f->typeFeedback().feedbackOrigin,
+                                            false); ////////
                                 }
                             }
                         }
@@ -388,7 +388,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     ip = bb->insert(ip, assume);
                     anyChange = true;
 
-                    code->getClosureVersion()->registerProtoSlotUsed(assume);
+                    code->getClosureVersion()->registerProtoSlotUsed(assume,
+                                                                     false);
                 }
             }
             if (auto f = Force::Cast(*ip)) {
@@ -430,9 +431,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
                     ip = bb->insert(ip, newAssume) + 1;
                     code->getClosureVersion()->registerProtoSlotUsed(
-                        newAssume); ///////
+                        newAssume, false); ///////
                     code->getClosureVersion()->registerProtoSlotUsed(
-                        f->typeFeedback().feedbackOrigin); ////////
+                        f->typeFeedback().feedbackOrigin, false); ////////
 
                     auto casted = new CastType(inp, CastType::Downcast,
                                                PirType::any(), newTT->typeTest);
