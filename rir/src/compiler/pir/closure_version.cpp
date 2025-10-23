@@ -57,7 +57,8 @@ void ClosureVersion::scanForPreciseTypeSlots() {
 
 // <Is succesful, the slot used>
 std::pair<bool, report::SlotUsed>
-slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin) {
+slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin,
+                   bool lookForCast) {
     auto& reason = assume->reason.reason;
     if (reason != DeoptReason::Reason::Typecheck &&
         reason != DeoptReason::Reason::Typecheck2 &&
@@ -82,7 +83,7 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin) {
 
     // The cast of speculated instr to the assumed type
     pir::CastType* cast = nullptr;
-    {
+    if (lookForCast) {
         auto bb = assume->bb();
         auto assumeSeen = false;
 
@@ -96,6 +97,8 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin) {
             }
 
             auto mbyCast = CastType::Cast(i);
+            // if (mbyCast && mbyCast->kind == CastType::Downcast &&
+            // mbyCast->arg<0>().val() == speculatedOn) {
             if (mbyCast && mbyCast->arg<0>().val() == speculatedOn) {
                 // sanity check
                 assert(mbyCast->type == (mbyCast->type & speculatedOn->type));
@@ -150,7 +153,7 @@ void ClosureVersion::scanForSpeculation() {
         }
 
         // Slot used
-        auto maybeSlotUsed = slotUsedFromAssume(assume, origin);
+        auto maybeSlotUsed = slotUsedFromAssume(assume, origin, true);
         if (!maybeSlotUsed.first) {
             return;
         }
@@ -236,7 +239,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     // Construct the SlotUsed
     report::SlotUsed slotUsed;
     if (assume) {
-        auto maybeSlotUsed = slotUsedFromAssume(assume, origin);
+        auto maybeSlotUsed = slotUsedFromAssume(assume, origin, false);
         if (!maybeSlotUsed.first) {
             return;
         }
