@@ -58,6 +58,12 @@ void ClosureVersion::scanForPreciseTypeSlots() {
 // <Is succesful, the slot used>
 std::pair<bool, report::SlotUsed>
 slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin) {
+    auto& reason = assume->reason.reason;
+    if (reason != DeoptReason::Reason::Typecheck &&
+        reason != DeoptReason::Reason::Typecheck2 &&
+        (!IsType::Cast(assume->condition()))) {
+        return {false, {}};
+    }
 
     auto assumeArg = assume->arg<0>().val();
     auto typeTest = IsType::Cast(assumeArg);

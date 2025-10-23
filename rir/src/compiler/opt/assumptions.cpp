@@ -388,13 +388,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     ip = bb->insert(ip, assume);
                     anyChange = true;
 
-                    if (assume->reason.reason ==
-                            DeoptReason::Reason::Typecheck ||
-                        assume->reason.reason ==
-                            DeoptReason::Reason::Typecheck2) {
-                        code->getClosureVersion()->registerProtoSlotUsed(
-                            assume); ////////
-                    }
+                    code->getClosureVersion()->registerProtoSlotUsed(assume);
                 }
             }
             if (auto f = Force::Cast(*ip)) {
@@ -421,7 +415,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         expected = expected.orFullyPromiseWrapped();
                     }
                     assert(!expected.maybeLazy());
-                    auto newTT = new IsType(expected, tt->arg<0>().val(), tt->origin);
+                    auto newTT =
+                        new IsType(expected, tt->arg<0>().val(), tt->origin);
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
 
