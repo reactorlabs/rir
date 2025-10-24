@@ -16,6 +16,9 @@ bool COLLECT_USED = !(std::getenv("STATS_NO_USED") != nullptr &&
                       std::string(std::getenv("STATS_NO_USED")) == "1");
 
 void ClosureVersion::computeFeedbackStats() {
+    if (!COLLECT_USED) {
+        return;
+    }
 
     // fill in slotsOptimizedAway .  Slots that don't appear in the code and are
     // non-empty remove from slotsReadNotUsedStaticTypeReason and
@@ -136,10 +139,6 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin,
 }
 
 void ClosureVersion::scanForSpeculation() {
-    if (!COLLECT_USED) {
-        return;
-    }
-
     Visitor::run(this->entry, [&](Instruction* i) {
         auto assume = Assume::Cast(i);
         if (!assume) {
