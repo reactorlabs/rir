@@ -245,11 +245,12 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
         slotUsed = maybeSlotUsed.second;
     } else {
         // Dummy slot
+        slotUsed.observedType = new PirType(report::getSlotPirType(origin));
+
         static auto any = pir::PirType::any();
 
         slotUsed.checkFor = &any;
         slotUsed.inferredType = &any;
-        slotUsed.observedType = &any;
         slotUsed.requiredType = &any;
 
         slotUsed.speculatedOn = "?";
