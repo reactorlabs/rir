@@ -157,7 +157,7 @@ REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name) {
 
         Compiler::compileClosure(what, name);
 
-        if (!report::useRIRNames()) {
+        if (!report::UseRIRNames::value) {
             auto outerDT = DispatchTable::unpack(BODY(what));
             auto name = report::getClosureName(what);
             if (name != "") {

@@ -37,7 +37,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
-    if (!report::useRIRNames()) {
+    if (!report::UseRIRNames::value) {
         tbl->closureName = name;
     }
 

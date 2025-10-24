@@ -548,7 +548,7 @@ void ClosureVersionStats::perSlotInfo(
             res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
-            if (useRIRNames()) {
+            if (UseRIRNames::value) {
                 assert(res.closure.size());
             }
             res.slot_idx = slot.idx;
@@ -1133,11 +1133,10 @@ RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name) {
     return {false, USED_SLOTS[closure_name]};
 }
 
-const bool USE_RIR_NAMES =
+const bool UseRIRNames::value =
     std::getenv("STATS_USE_RIR_NAMES") != nullptr &&
     std::string(std::getenv("STATS_USE_RIR_NAMES")) == "1";
 
-bool useRIRNames() { return USE_RIR_NAMES; }
 
 } // namespace report
 } // namespace rir

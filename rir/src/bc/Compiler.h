@@ -49,7 +49,7 @@ class Compiler {
         Compiler c(ast);
 
         std::string closureName = "";
-        if (report::useRIRNames()) {
+        if (report::UseRIRNames::value) {
             closureName = report::getClosureName(ast);
         }
         return c.finalize(closureName, closureName, nullptr);
@@ -69,7 +69,7 @@ class Compiler {
 
         // Allocate a new vtable.
         auto dt = DispatchTable::create();
-        if (report::useRIRNames()) {
+        if (report::UseRIRNames::value) {
             dt->closureName = thisClosureName;
         }
 
@@ -83,7 +83,7 @@ class Compiler {
     static void compileClosure(SEXP inClosure, SEXP name = R_NilValue) {
 
         std::string closureName = "";
-        if (report::useRIRNames()) {
+        if (report::UseRIRNames::value) {
             if (name != R_NilValue) {
                 if (TYPEOF(name) == STRSXP) {
                     closureName = CHAR(name);
@@ -120,7 +120,7 @@ class Compiler {
         // Allocate a new vtable.
         auto dt = DispatchTable::create();
         p(dt->container());
-        if (report::useRIRNames()) {
+        if (report::UseRIRNames::value) {
             dt->closureName = closureName;
         }
 

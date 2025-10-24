@@ -326,7 +326,9 @@ struct RecordedUsedSlots {
 RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name);
 
 // Only use the names that are identifyable at RIR compile time
-bool useRIRNames();
+struct UseRIRNames {
+    static const bool value;
+};
 
 } // namespace report
 } // namespace rir
