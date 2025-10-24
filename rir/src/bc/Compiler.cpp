@@ -144,9 +144,11 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+    report::RecordedUsedSlots recordedUsedSlots;
 
-    CompilerContext(FunctionWriter& fun, Preserve& preserve)
-        : fun(fun), preserve(preserve) {}
+    CompilerContext(FunctionWriter& fun, Preserve& preserve,
+                    const report::RecordedUsedSlots& recordedUsedSlots)
+        : fun(fun), preserve(preserve), recordedUsedSlots(recordedUsedSlots) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
@@ -212,9 +214,7 @@ class CompilerContext {
     MaybeBC recordType() {
         auto slotIdx = typeFeedbackBuilder.addType();
 
-        auto usedSlots = report::getUsedSlotsFor(this_name);
-
-        if (!usedSlots.first || usedSlots.second.find(slotIdx) != usedSlots.second.end()) {
+        if (recordedUsedSlots.all || recordedUsedSlots.slots.count(slotIdx)) {
             return MaybeBC(BC::recordType(slotIdx));
         }
 
@@ -2045,7 +2045,9 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
 SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
                         size_t* name_index) {
     FunctionWriter function;
-    CompilerContext ctx(function, preserve);
+
+    const auto& slots = report::getUsedSlotsFor(this_name);
+    CompilerContext ctx(function, preserve, slots);
 
     // Allocate the correct name
     size_t local_index = 0;

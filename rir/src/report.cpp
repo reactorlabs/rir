@@ -1120,17 +1120,17 @@ void loadSlotsUsed() {
     }
 }
 
-std::pair<bool, const std::unordered_set<size_t>&>
-getUsedSlotsFor(const std::string& closure_name) {
+RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name) {
     if (!USED_SLOTS_TRIED_LOADING) {
         loadSlotsUsed();
     }
 
-    if (!USED_SLOTS.count(closure_name)) {
-        return {false, {}};
+    static const std::unordered_set<size_t> empty;
+    if (USED_SLOTS.count(closure_name)) {
+        return {true, empty};
     }
 
-    return {true, USED_SLOTS[closure_name]};
+    return {false, USED_SLOTS[closure_name]};
 }
 
 const bool USE_RIR_NAMES =
