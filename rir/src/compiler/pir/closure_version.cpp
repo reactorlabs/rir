@@ -164,7 +164,7 @@ void ClosureVersion::scanForSpeculation() {
         assert(this->owner()->rirFunction());
 
         auto& info = this->feedbackStatsFor(origin.function());
-        info.slotsUsed[origin.index()].push_back(slotUsed);
+        info.finalVersionSlotsUsed[origin.index()].push_back(slotUsed);
     });
 }
 

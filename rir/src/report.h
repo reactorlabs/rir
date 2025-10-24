@@ -242,7 +242,8 @@ struct FunctionInfo {
 // ------------------------------------------------------------
 
 struct FeedbackStatsPerFunction {
-    std::unordered_map<FeedbackIndex, std::vector<SlotUsed>> slotsUsed;
+    std::unordered_map<FeedbackIndex, std::vector<SlotUsed>>
+        finalVersionSlotsUsed;
     std::unordered_map<FeedbackIndex, std::vector<SlotUsed>> protoSlotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, std::vector<SlotPresent>> slotsPresent;

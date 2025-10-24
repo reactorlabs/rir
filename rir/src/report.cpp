@@ -447,11 +447,13 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.referencedNonEmpty =
         intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
-    agg.used = std::count_if(slotsUsed.begin(), slotsUsed.end(),
+    agg.used = std::count_if(finalVersionSlotsUsed.begin(),
+                             finalVersionSlotsUsed.end(),
                              [](auto& i) { return i.second.size(); });
 
-    assert(keys_nonempty(slotsUsed) ==
-               intersect(info.nonEmptySlots, keys_nonempty(slotsUsed)) &&
+    assert(keys_nonempty(finalVersionSlotsUsed) ==
+               intersect(info.nonEmptySlots,
+                         keys_nonempty(finalVersionSlotsUsed)) &&
            "There is an empty used slot");
 
     assert(slotsPromiseInlined ==
@@ -555,7 +557,7 @@ void ClosureVersionStats::perSlotInfo(
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
 
-            bool hasSlotUsed = feedback_info.slotsUsed[slot].size();
+            bool hasSlotUsed = feedback_info.finalVersionSlotsUsed[slot].size();
             bool hasProtoSlotUsed = feedback_info.protoSlotsUsed[slot].size();
             res.used = hasSlotUsed || hasProtoSlotUsed;
 
@@ -601,7 +603,7 @@ void ClosureVersionStats::perSlotInfo(
                     };
 
                 if (hasSlotUsed) {
-                    consumeSlotUsed(feedback_info.slotsUsed[slot]);
+                    consumeSlotUsed(feedback_info.finalVersionSlotsUsed[slot]);
                 } else {
                     assert(hasProtoSlotUsed);
                     consumeSlotUsed(feedback_info.protoSlotsUsed[slot]);
@@ -827,7 +829,7 @@ void report(std::ostream& os, bool breakdownInfo,
     auto printSlotBreakdown =
         [&](const FeedbackIndex& index, const pir::PirType& observedType,
             FeedbackStatsPerFunction& stats, FunctionInfo& info) {
-            bool used = stats.slotsUsed[index].size();
+            bool used = stats.finalVersionSlotsUsed[index].size();
 
             os << StreamColor::red << index << StreamColor::clear;
 
@@ -843,7 +845,7 @@ void report(std::ostream& os, bool breakdownInfo,
                << StreamColor::clear;
 
             if (used) {
-                for (const auto& i : stats.slotsUsed.at(index)) {
+                for (const auto& i : stats.finalVersionSlotsUsed.at(index)) {
                     os << i;
                 }
             } else {
