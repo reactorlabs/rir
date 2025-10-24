@@ -309,11 +309,6 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                         cp = replaced.at(cp);
                                     hoistCheck[f] = {tt, cp, assume};
                                     anyChange = true;
-
-                                    code->getClosureVersion()
-                                        ->registerProtoSlotUsed(
-                                            f->typeFeedback().feedbackOrigin,
-                                            false); ////////
                                 }
                             }
                         }
@@ -431,9 +426,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
                     ip = bb->insert(ip, newAssume) + 1;
                     code->getClosureVersion()->registerProtoSlotUsed(
-                        newAssume, false); ///////
+                        newAssume); ///////
                     code->getClosureVersion()->registerProtoSlotUsed(
-                        f->typeFeedback().feedbackOrigin, false); ////////
+                        f->typeFeedback().feedbackOrigin); ////////
 
                     auto casted = new CastType(inp, CastType::Downcast,
                                                PirType::any(), newTT->typeTest);
