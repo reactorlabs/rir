@@ -835,9 +835,11 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
 
-    auto baseline = c->function()->dispatchTable()->baseline();
-    baseline->slotsDeopted.insert(deoptReason->origin);
-    baseline->allDeoptsCount++;
+    if (report::CollectStats::value) {
+        auto baseline = c->function()->dispatchTable()->baseline();
+        baseline->slotsDeopted.insert(deoptReason->origin);
+        baseline->allDeoptsCount++;
+    }
 
     deoptReason->record(deoptTrigger);
 
@@ -1321,7 +1323,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
     auto fail = !missingAsmpt->empty();
-    REC_HOOK( bool recoveredMA = false );
+    REC_HOOK(bool recoveredMA = false);
     if (fail) {
         if (missingAsmpt->numMissing() == 0 &&
             missingAsmpt->getFlags().empty()) {
@@ -1412,7 +1414,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = !call.givenContext.smaller(fun->context());
         }
 
-        REC_HOOK( recoveredMA = !fail );
+        REC_HOOK(recoveredMA = !fail);
     }
     if (!fun->body()->nativeCode() || fun->disabled())
         fail = true;

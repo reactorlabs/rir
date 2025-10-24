@@ -397,7 +397,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 inlineeCls->rirFunction()->flags.set(
                     rir::Function::NotInlineable);
             } else {
-                {
+                if (report::CollectStats::value) {
                     if (!report::UseRIRNames::value) {
                         auto& name = inlineeCls->rirFunction()
                                          ->dispatchTable()

@@ -126,9 +126,18 @@ void myFinalizer(SEXP) {
     }
 }
 
+// The first time this is called, it is set to the actuall value that is wanted.
+// This is to avoid weird static members initialization orders
 std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
-    R_PreserveObject(sexpDT);
-    PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
+    if (report::CollectStats::value) {
+        DispatchTable::onNewDt = [](SEXP sexpDT) {
+            R_PreserveObject(sexpDT);
+            PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
+        };
+        DispatchTable::onNewDt(sexpDT);
+    } else {
+        DispatchTable::onNewDt = [](SEXP) {};
+    }
 };
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
@@ -143,14 +152,17 @@ REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name) {
 
         // register rir closures
         if (!finalizerSet) {
-            // Call `loadNamespace("Base")`
-            SEXP baseStr = PROTECT(Rf_mkString("base"));
-            SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-            SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
-            R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
-            UNPROTECT(3);
-
             finalizerSet = true;
+
+            if (report::CollectStats::value) {
+                // Call `loadNamespace("Base")`
+                SEXP baseStr = PROTECT(Rf_mkString("base"));
+                SEXP expr =
+                    PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+                SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+                R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
+                UNPROTECT(3);
+            }
         }
 
         // Change the input closure inplace

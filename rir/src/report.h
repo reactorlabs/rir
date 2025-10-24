@@ -330,6 +330,11 @@ struct UseRIRNames {
     static const bool value;
 };
 
+// Collect all sorts of data
+struct CollectStats {
+    static const bool value;
+};
+
 } // namespace report
 } // namespace rir
 

@@ -131,14 +131,16 @@ void BB::append(Instruction* i) {
 }
 
 BB::Instrs::iterator BB::remove(Instrs::iterator it) {
-    if (auto j = Assume::Cast(*it)) {
-        auto reason = j->reason.reason;
-        if (reason == DeoptReason::Typecheck ||
-            reason == DeoptReason::Typecheck2) {
-            auto origin = j->reason.origin;
-            this->owner->getClosureVersion()
-                ->feedbackStatsFor(origin.function())
-                .slotsAssumeRemoved.insert(origin.index());
+    if (report::CollectStats::value) {
+        if (auto j = Assume::Cast(*it)) {
+            auto reason = j->reason.reason;
+            if (reason == DeoptReason::Typecheck ||
+                reason == DeoptReason::Typecheck2) {
+                auto origin = j->reason.origin;
+                this->owner->getClosureVersion()
+                    ->feedbackStatsFor(origin.function())
+                    .slotsAssumeRemoved.insert(origin.index());
+            }
         }
     }
     deleted.push_back(*it);
@@ -182,14 +184,16 @@ BB* BB::cloneInstrs(BB* src, unsigned id, Code* target) {
 }
 
 void BB::replace(Instrs::iterator it, Instruction* i) {
-    if (auto j = Assume::Cast(*it)) {
-        auto reason = j->reason.reason;
-        if (reason == DeoptReason::Typecheck ||
-            reason == DeoptReason::Typecheck2) {
-            auto origin = j->reason.origin;
-            this->owner->getClosureVersion()
-                ->feedbackStatsFor(origin.function())
-                .slotsAssumeRemoved.insert(origin.index());
+    if (report::CollectStats::value) {
+        if (auto j = Assume::Cast(*it)) {
+            auto reason = j->reason.reason;
+            if (reason == DeoptReason::Typecheck ||
+                reason == DeoptReason::Typecheck2) {
+                auto origin = j->reason.origin;
+                this->owner->getClosureVersion()
+                    ->feedbackStatsFor(origin.function())
+                    .slotsAssumeRemoved.insert(origin.index());
+            }
         }
     }
     deleted.push_back(*it);

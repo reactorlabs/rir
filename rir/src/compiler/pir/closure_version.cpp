@@ -11,12 +11,8 @@
 
 namespace rir {
 namespace pir {
-
-bool COLLECT_USED = !(std::getenv("STATS_NO_USED") != nullptr &&
-                      std::string(std::getenv("STATS_NO_USED")) == "1");
-
 void ClosureVersion::computeFeedbackStats() {
-    if (!COLLECT_USED) {
+    if (!report::CollectStats::value) {
         return;
     }
 
@@ -31,6 +27,9 @@ void ClosureVersion::computeFeedbackStats() {
 }
 
 void ClosureVersion::scanForPreciseTypeSlots() {
+    if (!report::CollectStats::value) {
+        return;
+    }
 
     Visitor::run(this->entry, [&](Instruction* i) {
         if (!i->hasTypeFeedback()) {
@@ -199,6 +198,10 @@ void ClosureVersion::computeSlotsPresent() {
 }
 
 void ClosureVersion::promiseInlined(Promise* promise) {
+    if (!report::CollectStats::value) {
+        return;
+    }
+
     auto newSlots = report::findAllSlots(promise->rirSrc());
 
     feedbackStatsFor(promise->rirSrc()->function())
@@ -216,7 +219,7 @@ const bool STATS_MINIMAL_PATCHES_USED =
 void ClosureVersion::registerProtoSlotUsed(Assume* assume,
                                            const FeedbackOrigin& origin,
                                            bool patch) {
-    if (!COLLECT_USED) {
+    if (!report::CollectStats::value) {
         return;
     }
 

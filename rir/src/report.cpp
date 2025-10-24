@@ -1137,6 +1137,9 @@ const bool UseRIRNames::value =
     std::getenv("STATS_USE_RIR_NAMES") != nullptr &&
     std::string(std::getenv("STATS_USE_RIR_NAMES")) == "1";
 
+const bool CollectStats::value =
+    !(std::getenv("STATS_NO_USED") != nullptr &&
+      std::string(std::getenv("STATS_NO_USED")) == "1");
 
 } // namespace report
 } // namespace rir
