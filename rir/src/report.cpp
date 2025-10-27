@@ -1125,12 +1125,12 @@ RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name) {
         loadSlotsUsed();
     }
 
-    static const std::unordered_set<size_t> empty;
     if (USED_SLOTS.count(closure_name)) {
-        return {true, empty};
+        return {false, USED_SLOTS[closure_name]};
     }
 
-    return {false, USED_SLOTS[closure_name]};
+    static const std::unordered_set<size_t> empty;
+    return {true, empty};
 }
 
 const bool UseRIRNames::value =
