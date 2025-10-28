@@ -92,6 +92,7 @@ struct SlotInfo {
     X(bool, exactMatch, "exact match")                                         \
     X(bool, narrowed, "narrowed")                                              \
     X(std::string, slotUsedSource, "slot used source")                         \
+    X(bool, speculation, "used as speculation")                                \
                                                                                \
     /* Unused */                                                               \
     X(bool, notPresent, "not present")                                         \
@@ -154,6 +155,8 @@ struct SlotUsed {
 
     bool hoistedForce;
     SlotUsedSource source;
+
+    bool speculation = false;
 
     SlotUsed() {}
 };

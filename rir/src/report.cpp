@@ -578,6 +578,7 @@ void ClosureVersionStats::perSlotInfo(
                             res.narrowed = usage.narrowedWithStaticType();
                             res.slotUsedSource = streamToString(
                                 [&](std::ostream& os) { os << usage.source; });
+                            res.speculation = usage.speculation;
 
                             // Unused defaults
                             res.promiseInlined =

@@ -134,6 +134,8 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin,
 
     slotUsed.hoistedForce = assume->hoistedForce;
 
+    slotUsed.speculation = true;
+
     return {true, slotUsed};
 }
 
@@ -260,6 +262,8 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
         slotUsed.assumeInstr = "?";
 
         slotUsed.hoistedForce = false;
+
+        slotUsed.speculation = false;
     }
     slotUsed.source = patch ? report::Patch : report::Proto;
 
