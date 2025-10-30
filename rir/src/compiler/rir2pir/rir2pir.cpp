@@ -413,6 +413,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::subsumed_type_:
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
         auto& feedback = typeFeedback->types(idx);

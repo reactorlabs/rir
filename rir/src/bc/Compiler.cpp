@@ -80,8 +80,9 @@ class CompilerContext {
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
 
-        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : cs(fun, ast), parent(p) {}
+        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p,
+                    const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+            : cs(fun, ast, subsumedSlots), parent(p) {}
         virtual ~CodeContext() {}
         bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
         BC::Label loopNext() {
@@ -120,8 +121,10 @@ class CompilerContext {
     class PromiseContext : public CodeContext {
 
       public:
-        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : CodeContext(ast, fun, p) {}
+        PromiseContext(
+            SEXP ast, FunctionWriter& fun, CodeContext* p,
+            const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+            : CodeContext(ast, fun, p, subsumedSlots) {}
         bool loopIsLocal() override {
             if (loops.empty()) {
                 parent->setContextNeeded();
@@ -140,6 +143,8 @@ class CompilerContext {
     std::string name;
     std::string this_name;
     size_t* name_index;
+
+    std::unordered_map<uint32_t, uint32_t> subsumedSlots;
 
     FunctionWriter& fun;
     Preserve& preserve;
@@ -179,8 +184,8 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        code.push(
-            new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
+        code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
+                                  subsumedSlots));
     }
 
     bool isInPromise() { return pushedPromiseContexts > 0; }
@@ -188,8 +193,8 @@ class CompilerContext {
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
 
-        code.push(
-            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
+        code.push(new PromiseContext(
+            ast, fun, code.empty() ? nullptr : code.top(), subsumedSlots));
     }
 
     Code* pop() {

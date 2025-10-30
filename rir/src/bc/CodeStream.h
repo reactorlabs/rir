@@ -27,8 +27,11 @@ class CodeStream {
     FunctionWriter& function;
     Preserve preserve;
 
+  public:
     unsigned missingSlots = 0;
+    std::unordered_map<uint32_t, uint32_t> subsumedSlots;
 
+  private:
     SEXP ast;
 
     unsigned nextLabel = 0;
@@ -71,8 +74,9 @@ class CodeStream {
         insert((BC::Jmp)-1);
     }
 
-    CodeStream(FunctionWriter& function, SEXP ast)
-        : function(function), ast(ast) {
+    CodeStream(FunctionWriter& function, SEXP ast,
+               const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+        : function(function), subsumedSlots(subsumedSlots), ast(ast) {
         code = new std::vector<char>(1024);
     }
 
@@ -90,12 +94,18 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const MaybeBC& b) {
-        if (!b.hasValue) {
-            this->missingSlots++;
-            return *this;
+        if (b.hasValue) {
+            return (*this) << b.value;
         }
 
-        return (*this) << b.value;
+        this->missingSlots++;
+
+        assert(b.value.bc == Opcode::record_type_);
+        if (subsumedSlots.count(b.value.immediate.i)) {
+            *this << BC::subsumedType(subsumedSlots.at(b.value.immediate.i));
+        }
+
+        return *this;
     }
 
     CodeStream& operator<<(BC::Label label) {

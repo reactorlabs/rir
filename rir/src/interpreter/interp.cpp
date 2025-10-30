@@ -2021,6 +2021,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(invalid_) assert(false && "wrong or unimplemented opcode");
 
         INSTRUCTION(nop_) NEXT();
+        INSTRUCTION(subsumed_type_) {
+            advanceImmediate();
+            NEXT();
+        }
 
         INSTRUCTION(clear_binding_cache_) {
             size_t start = readImmediate();

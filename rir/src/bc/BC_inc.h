@@ -314,6 +314,7 @@ class BC {
     inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
+    inline static BC subsumedType(uint32_t idx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -563,6 +564,7 @@ class BC {
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+        case Opcode::subsumed_type_:
         case Opcode::record_call_:
         case Opcode::record_test_:
         case Opcode::record_type_:
