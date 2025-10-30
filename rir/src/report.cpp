@@ -758,9 +758,6 @@ std::ostream& operator<<(std::ostream& os, const SlotUsedSource source) {
     case Patch:
         os << "patch";
         break;
-    case SubsumedAssumption:
-        os << "subsumed assumption";
-        break;
     default:
         assert(false);
     }
