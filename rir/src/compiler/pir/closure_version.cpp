@@ -271,6 +271,28 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     info.protoSlotsUsed[origin.index()].push_back(slotUsed);
 }
 
+void ClosureVersion::registerSubsumedAssumption(Assume* assume) {
+    if (!report::CollectStats::value) {
+        return;
+    }
+
+    const auto& origin = assume->reason.origin;
+    if (origin.index().isUndefined() || assume->defaultFeedback ||
+        origin.index().kind != FeedbackKind::Type) {
+        return;
+    }
+
+    auto maybeSlotUsed = slotUsedFromAssume(assume, origin, false);
+    if (!maybeSlotUsed.first) {
+        return;
+    }
+    auto slotUsed = maybeSlotUsed.second;
+    slotUsed.source = report::SubsumedAssumption;
+
+    auto& info = this->feedbackStatsFor(origin.function());
+    info.protoSlotsUsed[origin.index()].push_back(slotUsed);
+}
+
 void ClosureVersion::print(std::ostream& out, bool tty) const {
     print(DebugStyle::Standard, out, tty, false);
 }

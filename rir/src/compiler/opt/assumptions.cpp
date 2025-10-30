@@ -271,6 +271,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
             if (auto assume = Assume::Cast(instr)) {
                 if (assumptionsIncludes(AAssumption(assume))) {
                     anyChange = true;
+                    code->getClosureVersion()->registerSubsumedAssumption(
+                        assume);
                     next = bb->remove(ip);
                 } else {
                     // We are trying to group multiple assumes into the same

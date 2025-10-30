@@ -72,11 +72,125 @@ void Value::checkReplace(Value* replace) const {
     }
 }
 
+// Find the transitive closure of all casts and forces
+void collectMaybeAssumedOn(Value* val, SmallSet<Instruction*>& maybeAssumedOn) {
+    auto i = Instruction::Cast(val);
+    if (!i) {
+        return;
+    }
+
+    if (maybeAssumedOn.count(i)) {
+        return;
+    }
+
+    maybeAssumedOn.insert(i);
+
+    if (!Instruction::Cast(val))
+        return;
+
+    // From `cFollowCastsAndForce`
+    if (auto cast = PirCopy::Cast(val))
+        return collectMaybeAssumedOn(cast->arg<0>().val(), maybeAssumedOn);
+    if (auto cast = CastType::Cast(val))
+        return collectMaybeAssumedOn(cast->arg<0>().val(), maybeAssumedOn);
+    if (auto force = Force::Cast(val))
+        return collectMaybeAssumedOn(force->input(), maybeAssumedOn);
+    if (auto mkarg = MkArg::Cast(val))
+        if (mkarg->isEager())
+            return collectMaybeAssumedOn(mkarg->eagerArg(), maybeAssumedOn);
+    if (auto chk = ChkFunction::Cast(val))
+        return collectMaybeAssumedOn(chk->arg<0>().val(), maybeAssumedOn);
+    if (auto chk = ChkMissing::Cast(val))
+        return collectMaybeAssumedOn(chk->arg<0>().val(), maybeAssumedOn);
+}
+
+void checkSubsumed(IsType* tt) {
+    if (!report::CollectStats::value) {
+        return;
+    }
+
+    auto testedValue = tt->arg<0>().val();
+    if (!Instruction::Cast(testedValue)) {
+        return;
+    }
+
+    std::vector<Assume*> subsumedAssumes;
+
+    // First check which assumptions is `tt` input to
+    Visitor::run(tt->bb(), [&](BB* bb) {
+        for (auto i : *bb) {
+            if (auto assume = Assume::Cast(i)) {
+                if (assume->condition() == tt) {
+                    subsumedAssumes.push_back(assume);
+                }
+            }
+        }
+    });
+
+    if (subsumedAssumes.size() == 0) {
+        return;
+    }
+
+    bool subsumed = false;
+    auto code = tt->bb()->owner;
+    auto entry = code->entry;
+
+    // Find if `testedValue` is assumed on; if yes change subsumed
+    {
+        SmallSet<Instruction*> maybeAssumedOn;
+        collectMaybeAssumedOn(testedValue, maybeAssumedOn);
+
+        Visitor::run(entry, [&](BB* bb) {
+            for (auto i : *bb) {
+                if (subsumed) {
+                    return;
+                }
+
+                // There is an IsType on one of the values value
+                if (auto tt = IsType::Cast(i)) {
+                    auto ttArg = tt->arg<0>().val();
+                    if (auto ttArgI = Instruction::Cast(ttArg)) {
+                        if (maybeAssumedOn.includes(ttArgI)) {
+
+                            // and the IsType (tt) is an input to some other
+                            // assume
+                            Visitor::run(bb, [&](BB* bb) {
+                                for (auto i : *bb) {
+                                    if (auto assume = Assume::Cast(i)) {
+                                        if (assume->condition() == tt) {
+                                            subsumed = true;
+                                            return;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Register the subsumed assumes
+    if (subsumed) {
+        for (const auto& assume : subsumedAssumes) {
+            code->getClosureVersion()->registerSubsumedAssumption(assume);
+        }
+    }
+}
+
 void Value::replaceUsesIn(
     Value* replace, BB* start,
     const std::function<void(Instruction*, size_t)>& postAction,
     const std::function<bool(Instruction*)>& replaceOnly) {
     checkReplace(replace);
+
+    if (replace == True::instance()) {
+        if (auto tt = IsType::Cast(this)) {
+            checkSubsumed(tt);
+        }
+    }
+
     Visitor::run(start, [&](BB* bb) {
         for (auto& i : *bb) {
             std::vector<size_t> changed;

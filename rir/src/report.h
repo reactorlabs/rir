@@ -134,6 +134,7 @@ enum SlotUsedSource {
     FinalVersion,
     Proto,
     Patch,
+    SubsumedAssumption,
 };
 
 std::ostream& operator<<(std::ostream& os, const SlotUsedSource source);
