@@ -142,8 +142,12 @@ void checkSubsumed(IsType* tt) {
 
         Visitor::run(entry, [&](BB* bb) {
             for (auto i : *bb) {
-                // There is an IsType on one of the values value
+                // There is an IsType on one of the values
                 if (auto tt = IsType::Cast(i)) {
+                    if (!tt->typeTest.isA(tt->typeTest)) {
+                        continue;
+                    }
+
                     auto ttArg = tt->arg<0>().val();
                     if (auto ttArgI = Instruction::Cast(ttArg)) {
                         if (maybeAssumedOn.includes(ttArgI)) {
@@ -167,9 +171,11 @@ void checkSubsumed(IsType* tt) {
     }
 
     // Register the subsumed assumes
-    for (const auto& assume : subsumedAssumes) {
-        code->getClosureVersion()->registerSubsumedAssumption(assume,
-                                                              subsumedBy);
+    if (!subsumedBy.empty()) {
+        for (const auto& assume : subsumedAssumes) {
+            code->getClosureVersion()->registerSubsumedAssumption(assume,
+                                                                  subsumedBy);
+        }
     }
 }
 
