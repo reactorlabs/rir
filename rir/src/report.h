@@ -4,6 +4,7 @@
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
+#include "utils/Set.h"
 #include <numeric>
 #include <string>
 #include <unordered_map>
@@ -252,6 +253,8 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, std::vector<SlotPresent>> slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
     std::unordered_set<FeedbackIndex> slotsPromiseInlined;
+
+    std::unordered_map<FeedbackIndex, SmallSet<FeedbackOrigin>> slotSubsumedBy;
 
     // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;

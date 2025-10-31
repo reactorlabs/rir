@@ -131,7 +131,7 @@ void checkSubsumed(IsType* tt) {
         return;
     }
 
-    bool subsumed = false;
+    std::vector<Assume*> subsumedBy;
     auto code = tt->bb()->owner;
     auto entry = code->entry;
 
@@ -142,10 +142,6 @@ void checkSubsumed(IsType* tt) {
 
         Visitor::run(entry, [&](BB* bb) {
             for (auto i : *bb) {
-                if (subsumed) {
-                    return;
-                }
-
                 // There is an IsType on one of the values value
                 if (auto tt = IsType::Cast(i)) {
                     auto ttArg = tt->arg<0>().val();
@@ -158,8 +154,7 @@ void checkSubsumed(IsType* tt) {
                                 for (auto i : *bb) {
                                     if (auto assume = Assume::Cast(i)) {
                                         if (assume->condition() == tt) {
-                                            subsumed = true;
-                                            return;
+                                            subsumedBy.push_back(assume);
                                         }
                                     }
                                 }
@@ -172,10 +167,9 @@ void checkSubsumed(IsType* tt) {
     }
 
     // Register the subsumed assumes
-    if (subsumed) {
-        for (const auto& assume : subsumedAssumes) {
-            code->getClosureVersion()->registerSubsumedAssumption(assume);
-        }
+    for (const auto& assume : subsumedAssumes) {
+        code->getClosureVersion()->registerSubsumedAssumption(assume,
+                                                              subsumedBy);
     }
 }
 
@@ -212,5 +206,5 @@ void Value::replaceUsesIn(
         }
     });
 }
-}
-}
+} // namespace pir
+} // namespace rir

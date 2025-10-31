@@ -271,9 +271,29 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     info.protoSlotsUsed[origin.index()].push_back(slotUsed);
 }
 
-void ClosureVersion::registerSubsumedAssumption(Assume* assume) {
+void ClosureVersion::registerSubsumedAssumption(
+    Assume* assume, const std::vector<Assume*>& subsumedBy) {
     if (!report::CollectStats::value) {
         return;
+    }
+
+    const auto& origin = assume->reason.origin;
+    if (origin.index().isUndefined() || assume->defaultFeedback ||
+        origin.index().kind != FeedbackKind::Type) {
+        return;
+    }
+
+    auto& info = this->feedbackStatsFor(origin.function());
+    auto& subsumptions = info.slotSubsumedBy[origin.index()];
+
+    for (auto i : subsumedBy) {
+        const auto& subsumedOrigin = i->reason.origin;
+        if (subsumedOrigin.index().isUndefined() ||
+            subsumedOrigin.index().kind != FeedbackKind::Type) {
+            continue;
+        }
+
+        subsumptions.insert(subsumedOrigin);
     }
 }
 

@@ -15,10 +15,11 @@ namespace rir {
 namespace pir {
 
 struct AAssumption {
-    AAssumption(Value* i, const PirType& t) : yesNo(true), kind(Typecheck) {
+    AAssumption(Value* i, const PirType& t)
+        : yesNo(true), kind(Typecheck), origin(nullptr) {
         c.typecheck = {i, t};
     }
-    explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
+    explicit AAssumption(Assume* a) : yesNo(a->assumeTrue), origin(a) {
         auto cond = a->condition();
         switch (a->reason.reason) {
         case DeoptReason::Unknown:
@@ -66,6 +67,7 @@ struct AAssumption {
     AAssumption& operator=(const AAssumption& o) {
         yesNo = o.yesNo;
         kind = o.kind;
+        origin = o.origin;
         switch (kind) {
         case IsEnvStub:
             c.env = o.c.env;
@@ -103,6 +105,8 @@ struct AAssumption {
         Value* misc;
     };
     Content c;
+
+    Assume* origin;
 
     bool operator==(const AAssumption& other) const {
         if (yesNo != other.yesNo)
@@ -256,23 +260,37 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
             auto assumptionsIncludes = [&](AAssumption a) {
                 auto as = assumptions.at(instr);
+                std::vector<Assume*> subsumers;
                 for (const auto& e : as) {
-                    if (e == a)
-                        return true;
+                    if (e == a) {
+                        subsumers.push_back(e.origin);
+                    }
                     if (e.kind == AAssumption::Typecheck &&
                         a.kind == AAssumption::Typecheck)
                         if (a.c.typecheck.first == e.c.typecheck.first &&
-                            e.c.typecheck.second.isA(a.c.typecheck.second))
-                            return true;
+                            e.c.typecheck.second.isA(a.c.typecheck.second)) {
+                            subsumers.push_back(e.origin);
+                        }
                 }
-                return false;
+
+                if (subsumers.empty()) {
+                    return false;
+                }
+
+                subsumers.erase(
+                    std::remove(subsumers.begin(), subsumers.end(), nullptr),
+                    subsumers.end());
+
+                assert(a.origin);
+                code->getClosureVersion()->registerSubsumedAssumption(
+                    a.origin, subsumers);
+
+                return true;
             };
 
             if (auto assume = Assume::Cast(instr)) {
                 if (assumptionsIncludes(AAssumption(assume))) {
                     anyChange = true;
-                    code->getClosureVersion()->registerSubsumedAssumption(
-                        assume);
                     next = bb->remove(ip);
                 } else {
                     // We are trying to group multiple assumes into the same
