@@ -232,6 +232,58 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             ? atoi(getenv("PIR_DEFAULT_SPECULATION"))
             : true;
 
+    auto emitFeedback = [&](ObservedValues& feedback,
+                            FeedbackOrigin feedbackOrigin) {
+        if (auto i = Instruction::Cast(at(0))) {
+            // Search for the most specific feedback for this location
+            for (auto fb : outerFeedback) {
+                bool found = false;
+                // TODO: implement with a find method on register map
+                fb->forEachSlot(
+                    [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
+                        found = true;
+                        auto origin = fb->rirIdx(i);
+                        if (origin == feedbackOrigin.index() &&
+                            mdEntry.readyForReopt) {
+                            feedback = mdEntry.feedback;
+                        }
+                    });
+                if (found)
+                    break;
+            }
+            // TODO: deal with multiple locations
+            auto& t = i->updateTypeFeedback(false);
+            t.feedbackOrigin = feedbackOrigin;
+            if (feedback.numTypes) {
+
+                if (TRANSFER_FEEDBACK) {
+                    t.type.merge(feedback);
+                    if (auto force = Force::Cast(i)) {
+                        force->observed = static_cast<Force::ArgumentKind>(
+                            feedback.stateBeforeLastForce);
+
+                        if (t.type.maybeLazy()) {
+                            std::cerr << "maybelazy: \n\n";
+                            force->print(std::cerr, true);
+                            std::cerr << "\n";
+                            std::cerr << t.type << "\n";
+
+                            assert(false && "maybe lazy");
+                        }
+                    }
+                }
+            } else if (t.type.isVoid() &&
+                       (!insert.function->optFunction->isOptimized() ||
+                        insert.function->optFunction->deoptCount() == 0)) {
+
+                if (DEFAULT_SPECULATION) {
+                    t.type = PirType::val().notObject().fastVecelt();
+                    t.defaultFeedback = true;
+                }
+            }
+        }
+    };
+
     switch (bc.bc) {
 
     case Opcode::push_: {
@@ -413,60 +465,21 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subsumed_type_:
-    case Opcode::record_type_: {
+    case Opcode::subsumed_type_: {
         uint32_t idx = bc.immediate.i;
+
+        assert(typeFeedback->subsumedSlots.count(idx));
+        auto subsumer =
+            report::getConcreteSubsumer(typeFeedback->subsumedSlots.at(idx));
+
+        emitFeedback(subsumer.first, subsumer.second);
+        break;
+    }
+    case Opcode::record_type_: {
+        auto idx = bc.immediate.i;
         auto& feedback = typeFeedback->types(idx);
-
-        if (auto i = Instruction::Cast(at(0))) {
-            // Search for the most specific feedback for this location
-            for (auto fb : outerFeedback) {
-                bool found = false;
-                // TODO: implement with a find method on register map
-                fb->forEachSlot(
-                    [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
-                        found = true;
-                        auto origin = fb->rirIdx(i);
-                        if (origin == FeedbackIndex::type(idx) &&
-                            mdEntry.readyForReopt) {
-                            feedback = mdEntry.feedback;
-                        }
-                    });
-                if (found)
-                    break;
-            }
-            // TODO: deal with multiple locations
-            auto& t = i->updateTypeFeedback(false);
-            t.feedbackOrigin =
-                FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
-            if (feedback.numTypes) {
-
-                if (TRANSFER_FEEDBACK) {
-                    t.type.merge(feedback);
-                    if (auto force = Force::Cast(i)) {
-                        force->observed = static_cast<Force::ArgumentKind>(
-                            feedback.stateBeforeLastForce);
-
-                        if (t.type.maybeLazy()) {
-                            std::cerr << "maybelazy: \n\n";
-                            force->print(std::cerr, true);
-                            std::cerr << "\n";
-                            std::cerr << t.type << "\n";
-
-                            assert(false && "maybe lazy");
-                        }
-                    }
-                }
-            } else if (t.type.isVoid() &&
-                       (!insert.function->optFunction->isOptimized() ||
-                        insert.function->optFunction->deoptCount() == 0)) {
-
-                if (DEFAULT_SPECULATION) {
-                    t.type = PirType::val().notObject().fastVecelt();
-                    t.defaultFeedback = true;
-                }
-            }
-        }
+        emitFeedback(feedback, FeedbackOrigin(srcCode->function(),
+                                              FeedbackIndex::type(idx)));
         break;
     }
 

@@ -586,9 +586,17 @@ class BC {
 };
 
 class MaybeBC {
+private:
+    MaybeBC(bool hasValue, BC&& v) : hasValue(hasValue), value(std::move(v)) {}
+
   public:
-    MaybeBC() : hasValue(false), value() {}
-    MaybeBC(BC&& v) : hasValue(true), value(std::move(v)) {}
+    static MaybeBC none(BC&& bc) {
+        return MaybeBC(false, std::move(bc));
+    }
+
+    static MaybeBC some(BC&& bc) {
+        return MaybeBC(true, std::move(bc));
+    }
 
     bool hasValue;
     BC value;

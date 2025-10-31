@@ -12,6 +12,8 @@
 
 extern "C" SEXP R_GetVarLocValue(R_varloc_t);
 
+extern std::vector<rir::DispatchTable*> PreservedDispatchTables;
+
 namespace rir {
 namespace report {
 
@@ -1327,6 +1329,20 @@ const SubsumedSlots& getSubsumedSlots(const std::string& name) {
     }
 
     return SUBSUMED_SLOTS[name];
+}
+
+std::pair<ObservedValues&, FeedbackOrigin>
+getConcreteSubsumer(const SlotSubsumer& subsumer) {
+    auto dt = std::find_if(
+        PreservedDispatchTables.begin(), PreservedDispatchTables.end(),
+        [&](DispatchTable* dt) { return dt->closureName == subsumer.name; });
+    assert(dt != PreservedDispatchTables.end());
+
+    auto baseline = (*dt)->baseline();
+    auto origin = FeedbackOrigin(baseline, FeedbackIndex::type(subsumer.idx));
+    auto& feedback = baseline->typeFeedback()->types(subsumer.idx);
+
+    return {feedback, origin};
 }
 
 // ------------------------------------------------------------

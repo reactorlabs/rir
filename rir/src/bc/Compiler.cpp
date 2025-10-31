@@ -81,7 +81,7 @@ class CompilerContext {
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
 
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p,
-                    const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+                    const report::SubsumedSlots& subsumedSlots)
             : cs(fun, ast, subsumedSlots), parent(p) {}
         virtual ~CodeContext() {}
         bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
@@ -121,9 +121,8 @@ class CompilerContext {
     class PromiseContext : public CodeContext {
 
       public:
-        PromiseContext(
-            SEXP ast, FunctionWriter& fun, CodeContext* p,
-            const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p,
+                       const report::SubsumedSlots& subsumedSlots)
             : CodeContext(ast, fun, p, subsumedSlots) {}
         bool loopIsLocal() override {
             if (loops.empty()) {
@@ -144,16 +143,18 @@ class CompilerContext {
     std::string this_name;
     size_t* name_index;
 
-    std::unordered_map<uint32_t, uint32_t> subsumedSlots;
-
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+
     report::RecordedUsedSlots recordedUsedSlots;
+    const report::SubsumedSlots& subsumedSlots;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve,
-                    const report::RecordedUsedSlots& recordedUsedSlots)
-        : fun(fun), preserve(preserve), recordedUsedSlots(recordedUsedSlots) {}
+                    const report::RecordedUsedSlots& recordedUsedSlots,
+                    const report::SubsumedSlots& subsumedSlots)
+        : fun(fun), preserve(preserve), recordedUsedSlots(recordedUsedSlots),
+          subsumedSlots(subsumedSlots) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
@@ -220,10 +221,10 @@ class CompilerContext {
         auto slotIdx = typeFeedbackBuilder.addType();
 
         if (recordedUsedSlots.all || recordedUsedSlots.slots.count(slotIdx)) {
-            return MaybeBC(BC::recordType(slotIdx));
+            return MaybeBC::some(BC::recordType(slotIdx));
         }
 
-        return MaybeBC();
+        return MaybeBC::none(BC::recordType(slotIdx));
     }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
@@ -2052,7 +2053,8 @@ SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
     FunctionWriter function;
 
     const auto& slots = report::getUsedSlotsFor(this_name);
-    CompilerContext ctx(function, preserve, slots);
+    const auto& subsumed = report::getSubsumedSlots(this_name);
+    CompilerContext ctx(function, preserve, slots, subsumed);
 
     // Allocate the correct name
     size_t local_index = 0;
@@ -2099,7 +2101,7 @@ SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
+    TypeFeedback* feedback = ctx.typeFeedbackBuilder.build(subsumed);
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
     UNPROTECT(1);

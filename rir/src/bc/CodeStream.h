@@ -29,7 +29,7 @@ class CodeStream {
 
   public:
     unsigned missingSlots = 0;
-    std::unordered_map<uint32_t, uint32_t> subsumedSlots;
+    const report::SubsumedSlots& subsumedSlots;
 
   private:
     SEXP ast;
@@ -75,7 +75,7 @@ class CodeStream {
     }
 
     CodeStream(FunctionWriter& function, SEXP ast,
-               const std::unordered_map<uint32_t, uint32_t>& subsumedSlots)
+               const report::SubsumedSlots& subsumedSlots)
         : function(function), subsumedSlots(subsumedSlots), ast(ast) {
         code = new std::vector<char>(1024);
     }
@@ -98,11 +98,13 @@ class CodeStream {
             return (*this) << b.value;
         }
 
-        this->missingSlots++;
-
         assert(b.value.bc == Opcode::record_type_);
-        if (subsumedSlots.count(b.value.immediate.i)) {
-            *this << BC::subsumedType(subsumedSlots.at(b.value.immediate.i));
+
+        auto slot = b.value.immediate.i;
+        if (subsumedSlots.count(slot)) {
+            *this << BC::subsumedType(slot);
+        } else {
+            this->missingSlots++;
         }
 
         return *this;

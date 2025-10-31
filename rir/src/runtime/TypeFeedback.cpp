@@ -177,6 +177,8 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
+const report::SubsumedSlots EMPTY_SUBSUMED_SLOTS{};
+
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto size = InInteger(inp);
     std::vector<ObservedCallees> callees;
@@ -205,7 +207,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         types.push_back(std::move(tmp));
     }
 
-    auto res = TypeFeedback::create(callees, tests, types);
+    auto res = TypeFeedback::create(callees, tests, types, EMPTY_SUBSUMED_SLOTS);
 
     return res;
 }
@@ -273,15 +275,16 @@ uint32_t TypeFeedback::Builder::addTest() { return ntests_++; }
 
 uint32_t TypeFeedback::Builder::addType() { return ntypes_++; }
 
-TypeFeedback* TypeFeedback::Builder::build() {
+TypeFeedback*
+TypeFeedback::Builder::build(const report::SubsumedSlots& subsumedSlots) {
     std::vector<ObservedCallees> callees(ncallees_, ObservedCallees{});
     std::vector<ObservedTest> tests(ntests_, ObservedTest{});
     std::vector<ObservedValues> types(ntypes_, ObservedValues{});
 
-    return TypeFeedback::create(callees, tests, types);
+    return TypeFeedback::create(callees, tests, types, subsumedSlots);
 }
 
-TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
+TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}, EMPTY_SUBSUMED_SLOTS); }
 
 void FeedbackOrigin::function(Function* fun) {
     assert(!hasSlot() || fun->typeFeedback()->isValid(index_));
@@ -302,7 +305,8 @@ bool TypeFeedback::isValid(const FeedbackIndex& index) const {
 
 TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
                                    const std::vector<ObservedTest>& tests,
-                                   const std::vector<ObservedValues>& types) {
+                                   const std::vector<ObservedValues>& types,
+                                   const report::SubsumedSlots& subsumedSlots) {
     size_t dataSize = callees.size() * sizeof(ObservedCallees) +
                       tests.size() * sizeof(ObservedTest) +
                       types.size() * sizeof(ObservedValues);
@@ -312,16 +316,18 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
     SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
 
     TypeFeedback* res =
-        new (INTEGER(store)) TypeFeedback(callees, tests, types);
+        new (INTEGER(store)) TypeFeedback(callees, tests, types, subsumedSlots);
 
     return res;
 }
 
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
-                           const std::vector<ObservedValues>& types)
-    : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
-      tests_size_(tests.size()), types_size_(types.size()) {
+                           const std::vector<ObservedValues>& types,
+                           const report::SubsumedSlots& subsumedSlots)
+    : RirRuntimeObject(0, 0), owner_(nullptr), subsumedSlots(subsumedSlots),
+      callees_size_(callees.size()), tests_size_(tests.size()),
+      types_size_(types.size()) {
 
     size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
     size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);
