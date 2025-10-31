@@ -1,6 +1,7 @@
 #ifndef REPORT_H
 #define REPORT_H
 
+#include "report_subsumed.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
@@ -320,6 +321,10 @@ void reportCsv(std::ostream& os, const std::string& name,
                const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
 void reportSubsumedSlots(std::ostream& os);
+
+// ------------------------------------------------------------
+
+const SubsumedSlots& getSubsumedSlots(const std::string& name);
 
 // ------------------------------------------------------------
 

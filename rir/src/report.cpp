@@ -1206,9 +1206,10 @@ void reportSubsumedSlots(std::ostream& os) {
     }
 
     // Get components
-    std::unordered_map<size_t, FeedbackOrigin> componentRepresentant;
     auto c = stronglyConnectedComponents(allSlots, parents, children);
 
+    // Create a representant for each component
+    std::unordered_map<size_t, FeedbackOrigin> componentRepresentant;
     {
         std::function<FeedbackOrigin(size_t)> visit = [&](size_t component) {
             if (componentRepresentant.count(component)) {
@@ -1262,6 +1263,70 @@ void reportSubsumedSlots(std::ostream& os) {
             os << "\n";
         }
     }
+}
+
+bool SUBSUMED_SLOTS_TRIED_LOADING = false;
+
+std::unordered_map<std::string, SubsumedSlots> SUBSUMED_SLOTS;
+
+// Format is
+// <name>(\t<idx>-<subsumerName>,<subsumerIdx>)*
+void loadSubsumedSlots() {
+    SUBSUMED_SLOTS_TRIED_LOADING = true;
+
+    auto filepath = std::getenv("STATS_SUBSUMED_FROM");
+    if (filepath == nullptr) {
+        return;
+    }
+
+    std::ifstream ifs(filepath);
+    if (!ifs.is_open()) {
+        std::cerr << "Failed to open file: " << filepath << "\n";
+        exit(EXIT_FAILURE);
+        return;
+    }
+
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (line.empty())
+            continue; // skip blank lines
+
+        // find first tab
+        auto comma_pos = line.find('\t');
+        if (comma_pos == std::string::npos) {
+            // whole line is the parent fun, skip
+            continue;
+        }
+
+        auto parentFun = line.substr(0, comma_pos);
+        std::istringstream line_ss{line.substr(comma_pos + 1)};
+
+        auto& subsumers = SUBSUMED_SLOTS[parentFun];
+
+        std::string token;
+        while (std::getline(line_ss, token, '\t')) {
+            auto dash = token.find('-');
+            assert(dash != std::string::npos);
+
+            auto comma = token.find(',');
+            assert(comma != std::string::npos);
+
+            auto subsumedIdx = std::stoul(token.substr(0, dash));
+            auto subsumerName = token.substr(dash + 1, comma);
+            auto subsumerIdx = std::stoul(token.substr(comma + 1));
+
+            subsumers[subsumedIdx] = {subsumerName,
+                                      static_cast<uint32_t>(subsumerIdx)};
+        }
+    }
+}
+
+const SubsumedSlots& getSubsumedSlots(const std::string& name) {
+    if (!SUBSUMED_SLOTS_TRIED_LOADING) {
+        loadSubsumedSlots();
+    }
+
+    return SUBSUMED_SLOTS[name];
 }
 
 // ------------------------------------------------------------
