@@ -319,6 +319,7 @@ void report(std::ostream& os, bool breakdownInfo,
 void reportCsv(std::ostream& os, const std::string& name,
                const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
+void reportSubsumedSlots(std::ostream& os);
 
 // ------------------------------------------------------------
 

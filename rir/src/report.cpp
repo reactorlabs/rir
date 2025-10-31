@@ -8,6 +8,7 @@
 #include "utils/Terminal.h"
 
 #include <iostream>
+#include <queue>
 
 extern "C" SEXP R_GetVarLocValue(R_varloc_t);
 
@@ -1068,6 +1069,197 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                 benchmark_name, compilation_id, session_info,
                 [&](const SlotInfo& info) { info.print(os); });
             compilation_id++;
+        }
+    }
+}
+
+// ------------------------------------------------------------
+// SUBSUMED SLOTS
+// ------------------------------------------------------------
+
+struct StronglyConnectedComponents {
+    std::unordered_map<FeedbackOrigin, size_t> componentsForSlot;
+    std::unordered_map<size_t, SmallSet<FeedbackOrigin>> components;
+    std::unordered_map<size_t, SmallSet<size_t>> componentParents;
+};
+
+StronglyConnectedComponents stronglyConnectedComponents(
+    const SmallSet<FeedbackOrigin>& allSlots,
+    const std::unordered_map<FeedbackOrigin, SmallSet<FeedbackOrigin>>& parents,
+    const std::unordered_map<FeedbackOrigin, SmallSet<FeedbackOrigin>>&
+        children) {
+    // Kosaraju's algorithm
+    std::vector<FeedbackOrigin> stack;
+    stack.reserve(allSlots.size());
+
+    // Sort
+    {
+        SmallSet<FeedbackOrigin> visited;
+
+        std::function<void(const FeedbackOrigin&)> visit =
+            [&](const FeedbackOrigin& slot) {
+                if (visited.includes(slot)) {
+                    return;
+                }
+
+                visited.insert(slot);
+
+                if (parents.count(slot)) {
+                    for (const auto& i : parents.at(slot)) {
+                        visit(i);
+                    }
+                }
+
+                stack.push_back(slot);
+            };
+
+        for (const auto& slot : allSlots) {
+            visit(slot);
+        }
+    }
+
+    std::unordered_map<FeedbackOrigin, size_t> componentsForSlot;
+    std::unordered_map<size_t, SmallSet<FeedbackOrigin>> components;
+    std::unordered_map<size_t, SmallSet<size_t>> componentParents;
+
+    // Collect components
+    size_t currentComponent = 0;
+
+    std::function<void(const FeedbackOrigin&)> visit =
+        [&](const FeedbackOrigin& slot) {
+            componentsForSlot[slot] = currentComponent;
+            components[currentComponent].insert(slot);
+
+            if (children.count(slot)) {
+                for (const auto& child : children.at(slot)) {
+
+                    // Child has already been visited
+                    if (componentsForSlot.count(child)) {
+                        auto childComponent = componentsForSlot[child];
+                        if (childComponent != currentComponent) {
+                            // Add an edge from the child component to this
+                            // component
+                            componentParents[childComponent].insert(
+                                currentComponent);
+                        }
+                    } else {
+                        visit(child);
+                    }
+                }
+            }
+        };
+
+    for (auto i = stack.rbegin(); i != stack.rend(); ++i) {
+        if (componentsForSlot.count(*i)) {
+            continue;
+        }
+
+        visit(*i);
+        currentComponent++;
+    }
+
+    return {componentsForSlot, components, componentParents};
+}
+
+void reportSubsumedSlots(std::ostream& os) {
+    // First we need to create the graph vertices (parents, children)
+    //
+    // Since slots depend cyclically on each other a lot, we need to separate
+    // them into strongly connected components (~ an equivalence class).
+    //
+    // If the component has some other components as a parent components, we
+    // take the subsuming slot fromm them (one of them).
+    // Otherwise we take one of the slots in the component.
+
+    std::unordered_map<FeedbackOrigin, SmallSet<FeedbackOrigin>> parents;
+    std::unordered_map<FeedbackOrigin, SmallSet<FeedbackOrigin>> children;
+    SmallSet<FeedbackOrigin> allSlots;
+
+    std::unordered_map<Function*, SmallSet<FeedbackIndex>> slotsByFunction;
+
+    // Collect
+    for (const auto& session : COMPILATION_SESSIONS) {
+        for (const auto& stats : session.closureVersionStats) {
+            for (const auto& fstat : stats.feedbackStats) {
+                auto fun = fstat.first;
+
+                for (const auto& i : fstat.second.slotSubsumedBy) {
+                    auto idx = i.first;
+                    auto origin = FeedbackOrigin(fun, idx);
+
+                    allSlots.insert(origin);
+                    slotsByFunction[fun].insert(idx);
+
+                    for (const auto& parent : i.second) {
+                        if (!(origin == parent)) {
+                            parents[origin].insert(parent);
+                            children[parent].insert(origin);
+
+                            allSlots.insert(parent);
+                            slotsByFunction[parent.function()].insert(
+                                parent.index());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Get components
+    std::unordered_map<size_t, FeedbackOrigin> componentRepresentant;
+    auto c = stronglyConnectedComponents(allSlots, parents, children);
+
+    {
+        std::function<FeedbackOrigin(size_t)> visit = [&](size_t component) {
+            if (componentRepresentant.count(component)) {
+                return componentRepresentant[component];
+            }
+
+            if (c.componentParents[component].size()) {
+                // Take the first parent component
+                auto representant =
+                    visit(*c.componentParents[component].begin());
+                componentRepresentant[component] = representant;
+                return representant;
+            } else {
+                // Take the first slot in the component - does not matter,
+                // they're equivalent
+                auto representant = *c.components[component].begin();
+                componentRepresentant[component] = representant;
+                return representant;
+            }
+        };
+
+        for (const auto& i : c.components) {
+            visit(i.first);
+        }
+    }
+
+    // Output
+    for (const auto& funSlots : slotsByFunction) {
+        auto fun = funSlots.first;
+
+        bool nameEmited = false;
+
+        for (const auto& slot : funSlots.second) {
+            auto origin = FeedbackOrigin(fun, slot);
+            auto component = c.componentsForSlot.at(origin);
+            auto representant = componentRepresentant.at(component);
+
+            if (!(origin == representant)) {
+                if (!nameEmited) {
+                    nameEmited = true;
+                    os << fun->dispatchTable()->closureName;
+                }
+
+                os << "\t" << slot.idx << "-"
+                   << representant.function()->dispatchTable()->closureName
+                   << "," << representant.index().idx;
+            }
+        }
+
+        if (nameEmited) {
+            os << "\n";
         }
     }
 }

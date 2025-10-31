@@ -124,6 +124,13 @@ void myFinalizer(SEXP) {
         std::ofstream ofs{slots_file, std::ios::out | std::ios::app};
         report::reportPerSlot(ofs, stats_name);
     }
+
+    auto subsumed_file = getenv("STATS_SUBSUMED");
+    if (subsumed_file != nullptr) {
+        LockFile l{subsumed_file};
+        std::ofstream ofs{subsumed_file, std::ios::out | std::ios::app};
+        report::reportSubsumedSlots(ofs);
+    }
 }
 
 // The first time this is called, it is set to the actuall value that is wanted.
