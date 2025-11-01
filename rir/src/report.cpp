@@ -1331,18 +1331,21 @@ const SubsumedSlots& getSubsumedSlots(const std::string& name) {
     return SUBSUMED_SLOTS[name];
 }
 
-std::pair<ObservedValues&, FeedbackOrigin>
+std::tuple<bool, ObservedValues&, FeedbackOrigin>
 getConcreteSubsumer(const SlotSubsumer& subsumer) {
     auto dt = std::find_if(
         PreservedDispatchTables.begin(), PreservedDispatchTables.end(),
         [&](DispatchTable* dt) { return dt->closureName == subsumer.name; });
-    assert(dt != PreservedDispatchTables.end());
+    if (dt == PreservedDispatchTables.end()) {
+        static ObservedValues dummy;
+        return {false, dummy, FeedbackOrigin()};
+    }
 
     auto baseline = (*dt)->baseline();
     auto origin = FeedbackOrigin(baseline, FeedbackIndex::type(subsumer.idx));
     auto& feedback = baseline->typeFeedback()->types(subsumer.idx);
 
-    return {feedback, origin};
+    return {true, feedback, origin};
 }
 
 // ------------------------------------------------------------

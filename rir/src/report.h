@@ -325,7 +325,7 @@ void reportSubsumedSlots(std::ostream& os);
 // ------------------------------------------------------------
 
 const SubsumedSlots& getSubsumedSlots(const std::string& name);
-std::pair<ObservedValues&, FeedbackOrigin>
+std::tuple<bool, ObservedValues&, FeedbackOrigin>
 getConcreteSubsumer(const SlotSubsumer& subsumer);
 
 // ------------------------------------------------------------

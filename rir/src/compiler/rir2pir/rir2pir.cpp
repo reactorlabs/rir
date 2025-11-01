@@ -472,7 +472,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto subsumer =
             report::getConcreteSubsumer(typeFeedback->subsumedSlots.at(idx));
 
-        emitFeedback(subsumer.first, subsumer.second);
+        if (std::get<0>(subsumer)) {
+            emitFeedback(std::get<1>(subsumer), std::get<2>(subsumer));
+        }
         break;
     }
     case Opcode::record_type_: {
