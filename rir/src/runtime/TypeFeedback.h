@@ -6,6 +6,7 @@
 #include "common.h"
 #include "interpreter/profiler.h"
 #include "recording_hooks.h"
+#include "report_subsumed.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
