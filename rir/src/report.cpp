@@ -1314,7 +1314,7 @@ void loadSubsumedSlots() {
             assert(comma != std::string::npos);
 
             auto subsumedIdx = std::stoul(token.substr(0, dash));
-            auto subsumerName = token.substr(dash + 1, comma);
+            auto subsumerName = token.substr(dash + 1, comma - dash - 1);
             auto subsumerIdx = std::stoul(token.substr(comma + 1));
 
             if (subsumerName == parentFun) {
