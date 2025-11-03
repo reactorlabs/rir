@@ -1317,6 +1317,9 @@ void loadSubsumedSlots() {
             auto subsumerName = token.substr(dash + 1, comma);
             auto subsumerIdx = std::stoul(token.substr(comma + 1));
 
+            if (subsumerName == parentFun) {
+                subsumerName.clear();
+            }
             subsumers[subsumedIdx] = {subsumerName,
                                       static_cast<uint32_t>(subsumerIdx)};
         }
