@@ -220,7 +220,8 @@ class CompilerContext {
     MaybeBC recordType() {
         auto slotIdx = typeFeedbackBuilder.addType();
 
-        if (recordedUsedSlots.all || recordedUsedSlots.slots.count(slotIdx)) {
+        if (ObservedValues::RECORD &&
+            (recordedUsedSlots.all || recordedUsedSlots.slots.count(slotIdx))) {
             return MaybeBC::some(BC::recordType(slotIdx));
         }
 
