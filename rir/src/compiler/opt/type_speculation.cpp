@@ -33,7 +33,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
 
         if (i->type.isA(i->typeFeedback().type)) {
-            i->updateTypeFeedback(false).setSpeculationPhase(report::RunTypeObserved);
+            i->updateTypeFeedback(false).setSpeculationPhase(
+                report::RunTypeObserved);
             return;
         }
 
@@ -66,6 +67,10 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             guardPos = checkpoint.at(arg);
                             typecheckPos = arg->bb();
                             feedback.type = feedback.type.orPromiseWrapped();
+                        } else {
+                            i->updateTypeFeedback(false).setSpeculationPhase(
+                                report::RunLdVarHeuristicFailed);
+                            return;
                         }
                         break;
                     case Force::ArgumentKind::promise:
@@ -74,6 +79,10 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             guardPos = checkpoint.next(i, i, dom);
                             if (guardPos)
                                 typecheckPos = guardPos->nextBB();
+                        } else {
+                            i->updateTypeFeedback(false).setSpeculationPhase(
+                                report::RunLdVarHeuristicFailed);
+                            return;
                         }
                         break;
                     case Force::ArgumentKind::unknown:
@@ -96,7 +105,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
         } else {
-            i->updateTypeFeedback(false).setSpeculationPhase(report::RunEarlyTypecheckFail);
+            i->updateTypeFeedback(false).setSpeculationPhase(
+                report::RunEarlyTypecheckFail);
             return;
         }
 
@@ -107,9 +117,11 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
             if (speculateOn &&
                 (!guardPos || !typecheckPos || typecheckPos->isDeopt())) {
-                i->updateTypeFeedback(false).setSpeculationPhase(report::RunNoPlace);
+                i->updateTypeFeedback(false).setSpeculationPhase(
+                    report::RunNoPlace);
             } else {
-                i->updateTypeFeedback(false).setSpeculationPhase(report::RunNonTypeHeuristicFailed);
+                i->updateTypeFeedback(false).setSpeculationPhase(
+                    report::RunNonTypeHeuristicFailed);
             }
 
             return;
@@ -119,11 +131,13 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (auto ld = LdVar::Cast(speculateOn))
             if (auto mk = MkEnv::Cast(ld->env()))
                 if (mk->contains(ld->varName)) {
-                    i->updateTypeFeedback(false).setSpeculationPhase(report::RunNonTypeHeuristicFailed);
+                    i->updateTypeFeedback(false).setSpeculationPhase(
+                        report::RunLdVarHeuristicFailed);
                     return;
                 }
 
-        i->updateTypeFeedback(false).setSpeculationPhase(report::RunTypeObserved);
+        i->updateTypeFeedback(false).setSpeculationPhase(
+            report::RunTypeObserved);
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),

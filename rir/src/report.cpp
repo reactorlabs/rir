@@ -741,6 +741,9 @@ std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
     case RunNonTypeHeuristicFailed:
         os << "non-type heuristic fail";
         break;
+    case RunLdVarHeuristicFailed:
+        os << "ldvar heuristic fail";
+        break;
     case RunEarlyTypecheckFail:
         os << "early type-check fail";
         break;

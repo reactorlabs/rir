@@ -185,6 +185,9 @@ enum SpeculationPhase {
     // Some non-type related heuristics failed
     RunNonTypeHeuristicFailed,
 
+    // Some non-type related heuristics failed
+    RunLdVarHeuristicFailed,
+
     // The early typecheck in TypeSpeculation has failed
     RunEarlyTypecheckFail,
 };
