@@ -267,10 +267,18 @@ pir::PirType SlotUsed::expectedType() const {
     return makeExpectedType(*inferredType, *observedType);
 }
 
+pir::PirType SlotUsed::checkFor() const {
+    if (hoistedForce) {
+        return realCheckFor->notPromiseWrapped();
+    }
+
+    return *realCheckFor;
+}
+
 bool SlotUsed::widened() const {
     // The actual checkFor could be even more widened
     return isWidened(*inferredType, *observedType, false) ||
-           (*checkFor != expectedType());
+           (checkFor() != expectedType());
 }
 
 bool SlotUsed::narrowedWithStaticType() const {
@@ -582,6 +590,7 @@ void ClosureVersionStats::perSlotInfo(
                             res.slotUsedSource = streamToString(
                                 [&](std::ostream& os) { os << usage.source; });
                             res.speculation = usage.speculation;
+                            res.hoistedForce = usage.hoistedForce;
 
                             // Unused defaults
                             res.promiseInlined =
@@ -596,7 +605,7 @@ void ClosureVersionStats::perSlotInfo(
                             res.expectedT = typeToString(usage.expectedType());
 
                             // Used types
-                            res.checkForT = typeToString(*usage.checkFor);
+                            res.checkForT = typeToString(usage.checkFor());
                             res.requiredT = typeToString(*usage.requiredType);
 
                             // Instruction
@@ -786,7 +795,7 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     }
 
     // clang-format off
-    os << bold << "checkFor: " << clear << *slotUsed.checkFor << ", "
+    os << bold << "checkFor: " << clear << slotUsed.checkFor() << ", "
        << bold << "static: "   << clear << *slotUsed.inferredType << ", "
        << bold << "feedback: " << clear << *slotUsed.observedType << ", "
        << bold << "expected: " << clear << slotUsed.expectedType() << ", "

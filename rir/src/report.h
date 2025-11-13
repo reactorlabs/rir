@@ -95,6 +95,7 @@ struct SlotInfo {
     X(bool, narrowed, "narrowed")                                              \
     X(std::string, slotUsedSource, "slot used source")                         \
     X(bool, speculation, "used as speculation")                                \
+    X(bool, hoistedForce, "hoisted force")                                     \
                                                                                \
     /* Unused */                                                               \
     X(bool, notPresent, "not present")                                         \
@@ -145,11 +146,12 @@ struct SlotUsed {
     bool narrowedWithStaticType() const;
     bool exactMatch() const { return !widened() && !narrowedWithStaticType(); }
 
-    pir::PirType* checkFor = nullptr;
+    pir::PirType* realCheckFor = nullptr;
     pir::PirType* inferredType = nullptr;
     pir::PirType* observedType = nullptr;
     pir::PirType* requiredType = nullptr;
 
+    pir::PirType checkFor() const;
     pir::PirType expectedType() const;
 
     std::string speculatedOn;

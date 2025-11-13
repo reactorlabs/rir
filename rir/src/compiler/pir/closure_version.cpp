@@ -117,9 +117,9 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin,
     auto mkT = [](const pir::PirType& type) { return new pir::PirType(type); };
 
     if (cast) {
-        slotUsed.checkFor = mkT(cast->type);
+        slotUsed.realCheckFor = mkT(cast->type);
     } else {
-        slotUsed.checkFor = mkT(typeTest->typeTest);
+        slotUsed.realCheckFor = mkT(typeTest->typeTest);
     }
 
     slotUsed.inferredType = mkT(speculatedOn->type);
@@ -254,7 +254,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
 
         static auto any = pir::PirType::any();
 
-        slotUsed.checkFor = &any;
+        slotUsed.realCheckFor = &any;
         slotUsed.inferredType = &any;
         slotUsed.requiredType = &any;
 
