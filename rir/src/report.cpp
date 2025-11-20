@@ -444,6 +444,7 @@ void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
     }
 
     closureVersionStats.emplace_back(baseline, context, stats);
+    loweredFunctions.insert(baseline);
 }
 
 // ------------------------------------------------------------
@@ -514,12 +515,14 @@ FinalAggregate CompilationSession::getFinalAgg() {
     FinalAggregate res;
 
     for (auto i : COMPILATION_SESSIONS) {
+
+        res.compiledClosureVersions += i.loweredFunctions.size();
+        res.universe.insert(i.loweredFunctions.begin(),
+                            i.loweredFunctions.end());
+
         for (auto j : i.closureVersionStats) {
             auto agg = j.getAgg(i.functionsInfo);
 
-            res.universe.insert(agg.universe.begin(), agg.universe.end());
-
-            res.compiledClosureVersions++;
             if (agg.used > 0) {
                 res.benefitedClosureVersions++;
             }

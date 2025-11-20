@@ -59,6 +59,7 @@ struct Aggregate {
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
 
 struct FinalAggregate {
+    // The universe of all compiled functions
     Universe universe{};
 
     size_t compiledClosureVersions = 0;
@@ -302,6 +303,7 @@ struct CompilationSession {
 
     std::unordered_map<Function*, FunctionInfo> functionsInfo;
     std::vector<ClosureVersionStats> closureVersionStats;
+    Universe loweredFunctions;
 
     CompilationSession(Function* function, const Context& context)
         : function(function), context(context) {}
