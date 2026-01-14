@@ -204,8 +204,6 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
-
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 
     BC recordTest() { return BC::recordTest(typeFeedbackBuilder.addTest()); }
@@ -386,8 +384,6 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
            << BC::call(2, fullAst, assumptions);
         if (voidContext)
             cs << BC::pop();
-        else if (Compiler::profile)
-            cs << ctx.recordType();
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -395,11 +391,11 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // } else {
 
     // m' <- colonCastLhs(m')
-    cs << BC::swap() << BC::colonCastLhs() << ctx.recordType()
+    cs << BC::swap() << BC::colonCastLhs()
        << BC::ensureNamed() << BC::swap();
 
     // n' <- colonCastRhs(m', n')
-    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordType();
+    cs << BC::colonCastRhs() << BC::ensureNamed();
 
     // step <- if (m' <= n') 1L else -1L
     cs << BC::dup2() << BC::le();
@@ -547,8 +543,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (voidContext)
             cs << BC::pop();
-        else if (Compiler::profile)
-            cs << ctx.recordType();
 
         return true;
     }
@@ -802,9 +796,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::ldvarForUpdate(target);
             }
 
-            if (Compiler::profile)
-                cs << ctx.recordType();
-
             if (maybeChanges(target, *idx) ||
                 (dims > 1 && maybeChanges(target, *(idx + 1))) ||
                 (dims > 2 && maybeChanges(target, *(idx + 2))))
@@ -1025,9 +1016,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (!voidContext) {
                 // The return value, RHS, is TOS
                 cs << BC::invisible();
-                if (Compiler::profile) {
-                    cs << ctx.recordType();
-                }
             }
 
             return true;
@@ -1206,8 +1194,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
         cs.addSrc(ast);
         if (!voidContext) {
-            if (Compiler::profile)
-                cs << ctx.recordType();
             cs << BC::visible();
         } else {
             cs << BC::pop();
@@ -1923,8 +1909,6 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     if (voidContext)
         cs << BC::pop();
-    else if (Compiler::profile)
-        cs << ctx.recordType();
 }
 
 // Lookup
@@ -1941,8 +1925,6 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
         } else {
             cs << BC::ldvar(name);
         }
-        if (Compiler::profile)
-            cs << ctx.recordType();
     }
 }
 

@@ -183,34 +183,7 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
-        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
-
-        // Set attribs flag for every object even if the SEXP does  not
-        // have attributes. The assumption used to be that e having no
-        // attributes implies that it is not an object, but this is not
-        // the case in some very specific cases:
-        //     > df <- data.frame(x=ts(c(41,42,43)), y=c(61,62,63))
-        //     > mf <- model.frame(df)
-        //     > .Internal(inspect(mf[["x"]]))
-        //     @56546cb06390 14 REALSXP g0c3 [OBJ,NAM(2)] (len=3, tl=0) 41,42,43
-
-        notScalar = notScalar || (TYPEOF(e) != S4SXP && XLENGTH(e) != 1);
-        object = object || Rf_isObject(e);
-        attribs = attribs || object || ATTRIB(e) != R_NilValue;
-        notFastVecelt = notFastVecelt || !fastVeceltOk(e);
-
-        uint8_t type = TYPEOF(e);
-        if (numTypes < MaxTypes) {
-            int i = 0;
-            for (; i < numTypes; ++i) {
-                if (seen[i] == type)
-                    break;
-            }
-            if (i == numTypes)
-                seen[numTypes++] = type;
-        }
-
-        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
+        assert(false);
     }
 };
 
