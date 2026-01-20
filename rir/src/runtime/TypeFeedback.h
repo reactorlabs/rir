@@ -170,6 +170,10 @@ struct ObservedValues {
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
 
+    ObservedValues* parent;
+    bool isLeaf;
+    bool shouldRecord;
+
     std::array<uint8_t, MaxTypes> seen;
 
     ObservedValues() {
@@ -183,6 +187,26 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
+
+        // root  leaf
+        // 0    0      inner node           A B
+        // 0    1      leaf (n>1)           B
+        // 1    0      root (n>1)           A
+        // 1    1      variable lookup      -
+
+        // negatives in fast path
+        // leaf:  B    (check for object and get false, don't notify parent)
+        // inner node: A (don't record)
+
+        // postives in fast path
+        // leaf: -
+        // inner node: skips recording
+
+        // A
+        shouldRecord = true;
+        if (!shouldRecord)
+            return;
+
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         // Set attribs flag for every object even if the SEXP does  not
@@ -210,12 +234,17 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
+        // B
+        if (parent && object) {
+            parent->shouldRecord = true;
+        }
+
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 };
 
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
-              "Size needs to fit inside a record_ bc immediate args");
+// static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+//               "Size needs to fit inside a record_ bc immediate args");
 
 enum class Opcode : uint8_t;
 

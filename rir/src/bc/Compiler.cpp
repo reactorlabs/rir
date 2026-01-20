@@ -15,6 +15,7 @@
 #include "simple_instruction_list.h"
 #include "utils/Pool.h"
 
+#include <set>
 #include <stack>
 
 namespace rir {
@@ -140,6 +141,9 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
 
+    std::stack<std::vector<uint32_t>> slotsStack;
+    std::map<uint32_t, uint32_t> parents;
+
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -204,7 +208,57 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
+    void popNodeForSlotsIfEmpty() {
+        if (slotsStack.top().empty()) {
+            slotsStack.pop();
+        }
+    }
+
+    void pushNewNodeForSlots() { slotsStack.push(std::vector<uint32_t>()); }
+
+    void registerSlot(uint32_t slotIdx, bool isParent) {
+
+        std::cerr << "\n"
+                  << " slotsStack size: " << slotsStack.size() << "\n";
+
+        std::cerr << "\n"
+                  << " registerSlot " << slotIdx << "\n";
+
+        auto& currentSlots = slotsStack.top();
+        if (!isParent) {
+            currentSlots.push_back(slotIdx);
+        } else {
+            for (auto child : currentSlots) {
+                parents[child] = slotIdx;
+            }
+            slotsStack.pop();
+            slotsStack.top().push_back(slotIdx);
+        }
+    }
+
+    void setTypeFeedbackParents(TypeFeedback& tf) {
+        for (auto& kv : parents) {
+            tf.types(kv.first).parent = &tf.types(kv.second);
+        }
+
+        // determine leaves
+        std::set<int> values;
+        for (const auto& kv : parents) {
+            values.insert(kv.second);
+        }
+
+        for (size_t i = 0; i < tf.types_size(); i++) {
+            auto& slot = tf.types(i);
+            slot.isLeaf = values.find(i) == values.end();
+            slot.shouldRecord = slot.isLeaf;
+        }
+    }
+
+    BC recordType(bool isParent = false) {
+        auto slotIdx = typeFeedbackBuilder.addType();
+        registerSlot(slotIdx, isParent);
+        return BC::recordType(slotIdx);
+    }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 
@@ -548,7 +602,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << ctx.recordType();
+            cs << ctx.recordType(true);
 
         return true;
     }
@@ -1951,19 +2005,29 @@ void compileConst(CodeStream& cs, SEXP constant) {
     SET_NAMED(constant, 2);
     cs << BC::push(constant) << BC::visible();
 }
-
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
+
     // Dispatch on the current type of AST node
     switch (TYPEOF(exp)) {
         // Function application
     case LANGSXP: {
 
+        std::cerr << "pushing slot node for expr: \n";
+        Rf_PrintValue(exp);
+        std::cerr << "\n\n";
+
+        ctx.pushNewNodeForSlots();
+
         auto fun = CAR(exp);
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
+
+        ctx.popNodeForSlotsIfEmpty();
+
     } break;
         // Variable lookup
     case SYMSXP:
+
         compileGetvar(ctx, exp);
         if (voidContext)
             ctx.cs() << BC::pop();
@@ -2062,6 +2126,8 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
+    ctx.setTypeFeedbackParents(*feedback);
+
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
     UNPROTECT(1);

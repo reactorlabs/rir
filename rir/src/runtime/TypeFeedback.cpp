@@ -108,6 +108,7 @@ void DeoptReason::record(SEXP val) const {
 }
 
 void ObservedCallees::print(std::ostream& out, const Function* function) const {
+
     if (taken == ObservedCallees::CounterOverflow)
         out << "*, <";
     else
@@ -225,6 +226,12 @@ void ObservedValues::print(std::ostream& out) const {
     } else {
         out << "<?>";
     }
+
+    out << " @ " << this;
+    if (parent) {
+        out << " -> " << parent;
+    }
+    out << ", should record: " << shouldRecord;
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }
