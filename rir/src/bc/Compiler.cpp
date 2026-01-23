@@ -218,11 +218,11 @@ class CompilerContext {
 
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
-        std::cerr << "\n"
-                  << " slotsStack size: " << slotsStack.size() << "\n";
+        // std::cerr << "\n"
+        //           << " slotsStack size: " << slotsStack.size() << "\n";
 
-        std::cerr << "\n"
-                  << " registerSlot " << slotIdx << "\n";
+        // std::cerr << "\n"
+        //           << " registerSlot " << slotIdx << "\n";
 
         auto& currentSlots = slotsStack.top();
         if (!isParent) {

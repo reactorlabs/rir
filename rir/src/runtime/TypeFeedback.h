@@ -203,7 +203,7 @@ struct ObservedValues {
         // inner node: skips recording
 
         // A
-        shouldRecord = true;
+        // shouldRecord = true;
         if (!shouldRecord)
             return;
 
