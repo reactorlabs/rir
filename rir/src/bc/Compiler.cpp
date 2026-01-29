@@ -7,6 +7,7 @@
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
+#include "bc/CompilerCFG.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
@@ -15,6 +16,7 @@
 #include "simple_instruction_list.h"
 #include "utils/Pool.h"
 
+#include <iostream>
 #include <stack>
 
 namespace rir {
@@ -139,6 +141,7 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+    CompilerCFGBuilder cfgBuilder;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -206,6 +209,12 @@ class CompilerContext {
 
     BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
 
+    BC recordTypeAndTrack(SEXP name) {
+        auto slot_idx = typeFeedbackBuilder.addType();
+        cfgBuilder.onRecordType(name, slot_idx);
+        return BC::recordType(slot_idx);
+    }
+
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 
     BC recordTest() { return BC::recordTest(typeFeedbackBuilder.addTest()); }
@@ -267,14 +276,19 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     if (Compiler::loopPeelingEnabled && peelLoop) {
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
+        ctx.cfgBuilder.pushScope(); // Enter loop body
         compileBody();
+        ctx.cfgBuilder.popScope(); // Exit loop body
     }
 
     cs << nextBranch;
     compileCond();
     cs << BC::brfalse(breakBranch);
+    ctx.cfgBuilder.pushScope(); // Enter loop body
 
     compileBody();
+
+    ctx.cfgBuilder.popScope(); // Exit loop body
     cs << BC::br(nextBranch) << breakBranch;
 
     if (ctx.loopNeedsContext()) {
@@ -298,6 +312,7 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
  */
 bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                       SEXP body, bool voidContext) {
+
     if (TYPEOF(seq) != LANGSXP)
         return false;
 
@@ -428,6 +443,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
                 cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
             else
                 cs << BC::stvar(sym);
+            ctx.cfgBuilder.markParameterExcluded(sym);
             // i' <- i' + step
             cs << BC::pull(2) << BC::ensureNamed() << BC::add();
             cs.addSrc(R_NilValue);
@@ -685,6 +701,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
+                ctx.cfgBuilder.markParameterExcluded(lhs);
             }
             return true;
         }
@@ -844,6 +861,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(target));
                 else
                     cs << BC::stvar(target);
+                ctx.cfgBuilder.markParameterExcluded(target);
             }
 
             if (!voidContext)
@@ -1020,6 +1038,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(dest));
                 else
                     cs << BC::stvar(dest);
+                ctx.cfgBuilder.markParameterExcluded(dest);
             }
 
             if (!voidContext) {
@@ -1066,6 +1085,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         compileExpr(ctx, args[0]);
         cs << BC::asbool() << BC::brtrue(trueBranch);
+        ctx.cfgBuilder.pushScope(); // Enter else branch (fall-through)
 
         if (args.length() < 3) {
             if (!voidContext) {
@@ -1075,10 +1095,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else {
             compileExpr(ctx, args[2], voidContext);
         }
+
+        ctx.cfgBuilder.popScope(); // Exit else branch
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
+        ctx.cfgBuilder.pushScope(); // Enter then branch
         compileExpr(ctx, args[1], voidContext);
+        ctx.cfgBuilder.popScope(); // Exit then branch
 
         cs << nextBranch;
         return true;
@@ -1264,11 +1288,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+            ctx.cfgBuilder.pushScope();
             compileExpr(ctx, body, true);
+            ctx.cfgBuilder.popScope();
         }
 
         cs << nextBranch;
+        ctx.cfgBuilder.pushScope();
         compileExpr(ctx, body, true);
+        ctx.cfgBuilder.popScope();
         cs << BC::br(nextBranch) << breakBranch;
 
         if (ctx.loopNeedsContext()) {
@@ -1339,14 +1367,18 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             compileIndexOps(true);
+            ctx.cfgBuilder.pushScope();
             compileExpr(ctx, body, true);
+            ctx.cfgBuilder.popScope();
         }
 
         cs << nextBranch;
         compileIndexOps(false);
 
         // Compile the loop body
+        ctx.cfgBuilder.pushScope();
         compileExpr(ctx, body, true);
+        ctx.cfgBuilder.popScope();
         cs << BC::br(nextBranch) << breakBranch;
 
         if (ctx.loopNeedsContext()) {
@@ -1941,8 +1973,9 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
         } else {
             cs << BC::ldvar(name);
         }
-        if (Compiler::profile)
-            cs << ctx.recordType();
+        if (Compiler::profile) {
+            cs << ctx.recordTypeAndTrack(name);
+        }
     }
 }
 
@@ -2028,8 +2061,15 @@ SEXP Compiler::finalize() {
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
+    // Extract parameters for CFG analysis
+    std::unordered_set<SEXP> parameters;
+
     // Compile formals (if any) and create signature
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
+        if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP) {
+            parameters.insert(arg.tag());
+        }
+
         if (*arg == R_MissingArg) {
             function.addArgWithoutDefault();
         } else {
@@ -2038,6 +2078,58 @@ SEXP Compiler::finalize() {
         }
         signature.pushFormal(*arg, arg.tag());
     }
+
+    // Set parameters in CFG builder
+    ctx.cfgBuilder.setParameters(parameters);
+
+    // Scan AST to identify parameters that are assigned or shadowed
+    std::function<void(SEXP)> scanForExclusions = [&](SEXP e) {
+        if (!e || TYPEOF(e) != LANGSXP)
+            return;
+
+        SEXP fun = CAR(e);
+
+        // Check for assignments (assignment operators)
+        if (fun == symbol::Assign || fun == symbol::Assign2 ||
+            fun == symbol::SuperAssign) {
+            SEXP lhs = CADR(e);
+            if (TYPEOF(lhs) == SYMSXP && parameters.count(lhs)) {
+                ctx.cfgBuilder.markParameterExcluded(lhs);
+            }
+        }
+
+        // Check for nested functions
+        if (fun == symbol::Function) {
+            // Check if any nested function parameter shadows an outer parameter
+            SEXP innerFormals = CADR(e);
+            if (innerFormals != R_NilValue) {
+                for (RListIter arg = RList(innerFormals).begin();
+                     arg != RList::end(); ++arg) {
+                    SEXP innerParam = arg.tag();
+                    if (innerParam != R_NilValue &&
+                        TYPEOF(innerParam) == SYMSXP) {
+                        if (parameters.count(innerParam)) {
+                            // Inner function has parameter with same name -
+                            // exclude it
+                            ctx.cfgBuilder.markParameterExcluded(innerParam);
+                        }
+                    }
+                }
+            }
+            // Recursively scan the body of nested function for deeper nesting
+            if (CDR(e) != R_NilValue && CDDR(e) != R_NilValue) {
+                scanForExclusions(CADDR(e));
+            }
+            return;
+        }
+
+        // Recursively scan all sub-expressions
+        for (auto arg : RList(CDR(e))) {
+            scanForExclusions(arg);
+        }
+    };
+
+    scanForExclusions(exp);
 
     ctx.push(exp, closureEnv);
 
@@ -2061,6 +2153,11 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
+
+    // Finalize CFG and run minimal recording analysis
+    ctx.cfgBuilder.finalize();
+    auto decisions = ctx.cfgBuilder.computeMinimalRecordings();
+
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
@@ -2070,7 +2167,19 @@ SEXP Compiler::finalize() {
     CodeVerifier::verifyFunctionLayout(function.function()->container());
 #endif
 
-    return function.function()->container();
+    Function* newFunction = function.function();
+
+    // Debug output if requested
+    if (getenv("RIR_DEBUG_RECORDING")) {
+        ctx.cfgBuilder.printDecisions(decisions, std::cout, formals, exp,
+                                      newFunction);
+    }
+
+    // TODO: Use decisions to either:
+    // 1. Remove redundant record_type_ from bytecode, OR
+    // 2. Store copy mapping in TypeFeedback for runtime use
+
+    return newFunction->container();
 }
 
 bool Compiler::unsoundOpts =
