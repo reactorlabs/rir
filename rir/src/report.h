@@ -269,6 +269,25 @@ struct FeedbackStatsPerFunction {
     size_t timesInlined = 0;
 
     Aggregate getAgg(const FunctionInfo& info) const;
+
+    void onAttemptNewSlotUsed(FeedbackIndex index) {
+        bool newSlotUsedFinal = false;
+        bool newSlotUsedProto = false;
+
+        if (finalVersionSlotsUsed.count(index) == 0 ||
+            finalVersionSlotsUsed[index].size() == 0) {
+            newSlotUsedFinal = true;
+        }
+
+        if (protoSlotsUsed.count(index) == 0 ||
+            protoSlotsUsed[index].size() == 0) {
+            newSlotUsedProto = true;
+        }
+
+        if (newSlotUsedFinal && newSlotUsedProto) {
+            std::cerr << "new slot used " << index << "\n";
+        }
+    }
 };
 
 // ------------------------------------------------------------

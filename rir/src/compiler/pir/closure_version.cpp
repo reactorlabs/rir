@@ -164,6 +164,8 @@ void ClosureVersion::scanForSpeculation() {
         assert(this->owner()->rirFunction());
 
         auto& info = this->feedbackStatsFor(origin.function());
+
+        info.onAttemptNewSlotUsed(origin.index());
         info.finalVersionSlotsUsed[origin.index()].push_back(slotUsed);
     });
 }
@@ -268,6 +270,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     slotUsed.source = patch ? report::Patch : report::Proto;
 
     auto& info = this->feedbackStatsFor(origin.function());
+    info.onAttemptNewSlotUsed(origin.index());
     info.protoSlotsUsed[origin.index()].push_back(slotUsed);
 }
 
