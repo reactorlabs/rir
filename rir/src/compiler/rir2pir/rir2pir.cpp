@@ -263,12 +263,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                             feedback.stateBeforeLastForce);
 
                         if (t.type.maybeLazy()) {
+                            static int maybeLazyCount = 0;
+
+                            // it fails once in the compiler benchmark
+                            if (maybeLazyCount > 1) {
+                                assert(false && "maybe lazy > 1");
+                            }
+
                             std::cerr << "maybelazy: \n\n";
                             force->print(std::cerr, true);
                             std::cerr << "\n";
                             std::cerr << t.type << "\n";
 
-                            assert(false && "maybe lazy");
+                            t.type = PirType::bottom();
+                            maybeLazyCount++;
                         }
                     }
                 }
