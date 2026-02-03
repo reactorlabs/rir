@@ -4,6 +4,7 @@
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
+#include "stats_hook.h"
 #include "utils/Set.h"
 #include <numeric>
 #include <string>
@@ -21,6 +22,8 @@ namespace report {
 
 // Helpers
 std::string getClosureName(SEXP cls);
+
+#if STATS_COLLECT
 
 std::string streamToString(std::function<void(std::stringstream&)> f);
 std::string typeToString(const pir::PirType& t);
@@ -313,15 +316,21 @@ struct CompilationSession {
     static FinalAggregate getFinalAgg();
 };
 
+#endif // STATS_COLLECT
+
 size_t currentSessionId();
 
 // ------------------------------------------------------------
+
+#if STATS_COLLECT
 
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs);
 void reportCsv(std::ostream& os, const std::string& name,
                const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
+
+#endif // STATS_COLLECT
 
 // ------------------------------------------------------------
 
@@ -336,11 +345,6 @@ RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name);
 
 // Only use the names that are identifyable at RIR compile time
 struct UseRIRNames {
-    static const bool value;
-};
-
-// Collect all sorts of data
-struct CollectStats {
     static const bool value;
 };
 

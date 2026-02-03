@@ -149,6 +149,7 @@ struct TypeFeedback {
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
     bool defaultFeedback = false;
+#if STATS_COLLECT
     report::SpeculationPhase phase = report::NotRun;
 
     void setSpeculationPhase(report::SpeculationPhase newPhase) {
@@ -156,6 +157,7 @@ struct TypeFeedback {
             phase = newPhase;
         }
     }
+#endif
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;
@@ -233,27 +235,41 @@ class Instruction : public Value {
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
     bool hasCallFeedback() const { return callFeedback_.get(); }
 
+#if STATS_COLLECT
     void slotRead(TypeFeedback& tf) const;
+#endif
 
-    const TypeFeedback& typeFeedback(bool recordSlotRead = true) const {
+    const TypeFeedback& typeFeedback(
+#if STATS_COLLECT
+        bool recordSlotRead = true
+#endif
+    ) const {
         if (typeFeedback_.get()) {
+#if STATS_COLLECT
             if (recordSlotRead)
                 slotRead(*typeFeedback_);
+#endif
             return *typeFeedback_;
         }
 
         const static TypeFeedback none;
         return none;
     }
-    TypeFeedback& updateTypeFeedback(bool recordSlotRead = true) {
+    TypeFeedback& updateTypeFeedback(
+#if STATS_COLLECT
+        bool recordSlotRead = true
+#endif
+    ) {
         if (typeFeedback_.get()) {
+#if STATS_COLLECT
             if (recordSlotRead)
                 slotRead(*typeFeedback_);
+#endif
             return *typeFeedback_;
         }
 
         typeFeedback_.reset(new TypeFeedback());
-        return updateTypeFeedback(recordSlotRead);
+        return updateTypeFeedback(STATS_HOOK(recordSlotRead));
     }
 
     void typeFeedback(const TypeFeedback& feedback) {
@@ -261,19 +277,15 @@ class Instruction : public Value {
     }
 
     std::shared_ptr<CallFeedback> callFeedback_;
-    const CallFeedback& callFeedback(bool recordSlotRead = true) const {
+    const CallFeedback& callFeedback() const {
         if (callFeedback_.get()) {
-            // if (recordSlotRead)
-            //     slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
         }
         const static CallFeedback none;
         return none;
     }
-    CallFeedback& updateCallFeedback(bool recordSlotRead = true) {
+    CallFeedback& updateCallFeedback() {
         if (callFeedback_.get()) {
-            // if (recordSlotRead)
-            //     slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
         }
         callFeedback_.reset(new CallFeedback());

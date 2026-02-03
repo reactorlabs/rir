@@ -12,7 +12,9 @@
 
 extern "C" SEXP R_GetVarLocValue(R_varloc_t);
 
+#if STATS_COLLECT
 extern std::vector<rir::DispatchTable*> PreservedDispatchTables;
+#endif
 
 namespace rir {
 namespace report {
@@ -79,6 +81,8 @@ std::string getClosureName(SEXP cls) {
 
     return name;
 }
+
+#if STATS_COLLECT
 
 // ------------------------------------------------------------
 // TYPE HELPERS
@@ -1083,6 +1087,12 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
     }
 }
 
+#else // STATS_COLLECT
+
+size_t currentSessionId() { return 0; }
+
+#endif // STATS_COLLECT
+
 // ------------------------------------------------------------
 // PRECOMPUTED USED SLOTS
 // ------------------------------------------------------------
@@ -1148,10 +1158,6 @@ RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name) {
 const bool UseRIRNames::value =
     std::getenv("STATS_USE_RIR_NAMES") != nullptr &&
     std::string(std::getenv("STATS_USE_RIR_NAMES")) == "1";
-
-const bool CollectStats::value =
-    !(std::getenv("STATS_NO_USED") != nullptr &&
-      std::string(std::getenv("STATS_NO_USED")) == "1");
 
 } // namespace report
 } // namespace rir

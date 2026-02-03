@@ -74,6 +74,8 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 }
 
 bool finalizerSet = false;
+
+#if STATS_COLLECT
 std::vector<DispatchTable*> PreservedDispatchTables;
 
 class LockFile {
@@ -126,19 +128,16 @@ void myFinalizer(SEXP) {
     }
 }
 
-// The first time this is called, it is set to the actuall value that is wanted.
-// This is to avoid weird static members initialization orders
 std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
-    if (report::CollectStats::value) {
-        DispatchTable::onNewDt = [](SEXP sexpDT) {
-            R_PreserveObject(sexpDT);
-            PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
-        };
-        DispatchTable::onNewDt(sexpDT);
-    } else {
-        DispatchTable::onNewDt = [](SEXP) {};
-    }
+    assert(false && "stats collection on!");
+    DispatchTable::onNewDt = [](SEXP sexpDT) {
+        R_PreserveObject(sexpDT);
+        PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
+    };
+    DispatchTable::onNewDt(sexpDT);
 };
+
+#endif
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     return rirCompileWithName(what, env, R_NilValue);
@@ -154,7 +153,7 @@ REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name) {
         if (!finalizerSet) {
             finalizerSet = true;
 
-            if (report::CollectStats::value) {
+            STATS_HOOK(do {
                 // Call `loadNamespace("Base")`
                 SEXP baseStr = PROTECT(Rf_mkString("base"));
                 SEXP expr =
@@ -162,7 +161,7 @@ REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name) {
                 SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
                 R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
                 UNPROTECT(3);
-            }
+            } while (0));
         }
 
         // Change the input closure inplace
@@ -400,9 +399,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     PROTECT(what);
 
     REC_HOOK(recording::recordCompile(what, name, assumptions));
+#if STATS_COLLECT
     auto& compilationSession = report::CompilationSession::getNew(
         DispatchTable::unpack(BODY(what))->baseline(), assumptions,
         PreservedDispatchTables);
+#endif
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
@@ -426,13 +427,13 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             auto apply = [&](SEXP body, pir::ClosureVersion* c) {
                 // we have to make the call HERE.  Later, Assume instructions
                 // will be lowered and gone
-                c->computeFeedbackStats();
+                STATS_HOOK(c->computeFeedbackStats());
 
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
                 DispatchTable::unpack(body)->insert(fun);
 
-                compilationSession.addClosureVersion(c, fun);
+                STATS_HOOK(compilationSession.addClosureVersion(c, fun));
 
                 if (body == BODY(what))
                     done = fun;
@@ -481,6 +482,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     delete m;
     UNPROTECT(1);
 
+#if STATS_COLLECT
     auto& compilations = compilationSession.closureVersionStats;
     std::sort(
         compilations.begin(), compilations.end(),
@@ -491,6 +493,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                    std::make_pair(b.function->dispatchTable()->closureName,
                                   b.context);
         });
+#endif
 
     return what;
 }

@@ -7,6 +7,7 @@
 #include "RirRuntimeObject.h"
 #include "recording_hooks.h"
 #include "runtime/TypeFeedback.h"
+#include "stats_hook.h"
 
 #include <unordered_set>
 
@@ -114,11 +115,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         if (invocationCount_ < UINT_MAX)
             invocationCount_++;
     }
+#if STATS_COLLECT
     bool involvedInCompilation = false;
-
-
     std::unordered_set<FeedbackOrigin> slotsDeopted;
     unsigned allDeoptsCount = 0;
+#endif
 
     unsigned size; /// Size, in bytes, of the function and its data
 

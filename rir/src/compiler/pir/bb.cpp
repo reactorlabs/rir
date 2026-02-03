@@ -1,6 +1,7 @@
 #include "../../utils/escape_string.h"
 #include "../util/visitor.h"
 #include "pir_impl.h"
+#include "report.h"
 
 #include <iostream>
 #include <unordered_set>
@@ -131,7 +132,7 @@ void BB::append(Instruction* i) {
 }
 
 BB::Instrs::iterator BB::remove(Instrs::iterator it) {
-    if (report::CollectStats::value) {
+    STATS_HOOK(do {
         if (auto j = Assume::Cast(*it)) {
             auto reason = j->reason.reason;
             if (reason == DeoptReason::Typecheck ||
@@ -142,7 +143,7 @@ BB::Instrs::iterator BB::remove(Instrs::iterator it) {
                     .slotsAssumeRemoved.insert(origin.index());
             }
         }
-    }
+    } while (0));
     deleted.push_back(*it);
     (*it)->deleted = true;
     return instrs.erase(it);
@@ -184,7 +185,7 @@ BB* BB::cloneInstrs(BB* src, unsigned id, Code* target) {
 }
 
 void BB::replace(Instrs::iterator it, Instruction* i) {
-    if (report::CollectStats::value) {
+    STATS_HOOK(do {
         if (auto j = Assume::Cast(*it)) {
             auto reason = j->reason.reason;
             if (reason == DeoptReason::Typecheck ||
@@ -195,7 +196,7 @@ void BB::replace(Instrs::iterator it, Instruction* i) {
                     .slotsAssumeRemoved.insert(origin.index());
             }
         }
-    }
+    } while (0));
     deleted.push_back(*it);
     *it = i;
     i->bb_ = this;

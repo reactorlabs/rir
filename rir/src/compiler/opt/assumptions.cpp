@@ -386,8 +386,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     ip = bb->insert(ip, assume);
                     anyChange = true;
 
-                    code->getClosureVersion()->registerProtoSlotUsed(assume,
-                                                                     false);
+                    STATS_HOOK(code->getClosureVersion()->registerProtoSlotUsed(
+                        assume, false));
                 }
             }
             if (auto f = Force::Cast(*ip)) {
@@ -428,10 +428,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     newAssume->hoistedForce = true;
 
                     ip = bb->insert(ip, newAssume) + 1;
-                    code->getClosureVersion()->registerProtoSlotUsed(
-                        newAssume); ///////
-                    code->getClosureVersion()->registerProtoSlotUsed(
-                        f->typeFeedback().feedbackOrigin); ////////
+                    STATS_HOOK(code->getClosureVersion()->registerProtoSlotUsed(
+                        newAssume));
+                    STATS_HOOK(code->getClosureVersion()->registerProtoSlotUsed(
+                        f->typeFeedback().feedbackOrigin));
 
                     auto casted = new CastType(inp, CastType::Downcast,
                                                PirType::any(), newTT->typeTest);

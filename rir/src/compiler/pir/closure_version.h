@@ -56,6 +56,7 @@ class ClosureVersion : public Code {
 
     rir::Function* optFunction;
 
+#if STATS_COLLECT
     // FB
     std::unordered_map<Function*, report::FeedbackStatsPerFunction>
         feedbackStatsByFunction;
@@ -65,8 +66,6 @@ class ClosureVersion : public Code {
     }
 
     void promiseInlined(Promise* promise);
-
-    ClosureVersion* getClosureVersion() override { return this; }
 
   private:
     void registerProtoSlotUsed(Assume* assume, const FeedbackOrigin& origin,
@@ -81,6 +80,9 @@ class ClosureVersion : public Code {
                                      bool patch = true) {
         registerProtoSlotUsed(nullptr, origin, patch);
     }
+#endif
+
+    ClosureVersion* getClosureVersion() override { return this; }
 
   private:
     Closure* owner_;
@@ -98,10 +100,12 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+#if STATS_COLLECT
     void computeFeedbackStats();
     void scanForSpeculation();
     void scanForPreciseTypeSlots();
     void computeSlotsPresent();
+#endif
 
     ClosureVersion* clone(const Context& newContext);
 

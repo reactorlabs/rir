@@ -223,8 +223,8 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (!(*it)->typeFeedback().type.isVoid() &&
                 (*it)->typeFeedback().type.unboxable()) {
                 weight *= 0.9;
-                code->getClosureVersion()->registerProtoSlotUsed(
-                    (*it)->typeFeedback().feedbackOrigin);
+                STATS_HOOK(code->getClosureVersion()->registerProtoSlotUsed(
+                    (*it)->typeFeedback().feedbackOrigin));
             }
 
             // No recursive inlining
@@ -397,7 +397,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 inlineeCls->rirFunction()->flags.set(
                     rir::Function::NotInlineable);
             } else {
-                if (report::CollectStats::value) {
+                STATS_HOOK(do {
                     if (!report::UseRIRNames::value) {
                         auto& name = inlineeCls->rirFunction()
                                          ->dispatchTable()
@@ -418,7 +418,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     stats.slotsPromiseInlined.insert(
                         inlineeStats.slotsPromiseInlined.begin(),
                         inlineeStats.slotsPromiseInlined.end());
-                }
+                } while (0));
 
                 anyChange = true;
                 Checkpoint* cpAtCall = nullptr;

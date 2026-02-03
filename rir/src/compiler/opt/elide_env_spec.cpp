@@ -93,8 +93,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 suggested = required.noAttribsOrObject();
 
                         if (seenOrigin) {
-                            seenOrigin->updateTypeFeedback(false)
-                                .setSpeculationPhase(report::RunTypeObserved);
+                            STATS_HOOK(seenOrigin->updateTypeFeedback(false)
+                                           .setSpeculationPhase(
+                                               report::RunTypeObserved));
                         }
                         TypeTest::Create(
                             arg, seen, suggested, required,

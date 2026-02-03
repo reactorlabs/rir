@@ -206,7 +206,7 @@ void Instruction::print(std::ostream& out, bool tty) const {
     printEnv(out, tty);
 
     if (hasTypeFeedback() && tag != Tag::MkEnv) {
-        auto tf = typeFeedback(false);
+        auto tf = typeFeedback(STATS_HOOK(false));
         out << "   <";
         if (tf.value)
             tf.value->printRef(out);
@@ -1659,16 +1659,16 @@ PirType Colon::inferType(const GetType& getType) const {
     return t.orNotScalar();
 }
 
+#if STATS_COLLECT
 void Instruction::slotRead(TypeFeedback& tf) const {
-    if (report::CollectStats::value) {
-        if (tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type &&
-            tf.feedbackOrigin.hasSlot()) {
-            assert(bb_);
-            bb_->owner->getClosureVersion()
-                ->feedbackStatsFor(tf.feedbackOrigin.function())
-                .slotsRead.insert(tf.feedbackOrigin.index());
-        }
+    if (tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type &&
+        tf.feedbackOrigin.hasSlot()) {
+        assert(bb_);
+        bb_->owner->getClosureVersion()
+            ->feedbackStatsFor(tf.feedbackOrigin.function())
+            .slotsRead.insert(tf.feedbackOrigin.index());
     }
 }
+#endif
 } // namespace pir
 } // namespace rir

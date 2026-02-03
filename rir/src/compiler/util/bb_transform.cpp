@@ -276,7 +276,8 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
     position = bb->insert(position + 1, assume);
     position++;
 
-    bb->owner->getClosureVersion()->registerProtoSlotUsed(assume, false);
+    STATS_HOOK(
+        bb->owner->getClosureVersion()->registerProtoSlotUsed(assume, false));
 }
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,

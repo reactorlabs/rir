@@ -112,8 +112,9 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     anyChange = true;
                     given->typeFeedbackUsed = true;
-                    given->updateTypeFeedback(false).setSpeculationPhase(
-                        report::SpeculationPhase::ExternallySet);
+                    STATS_HOOK(
+                        given->updateTypeFeedback(false).setSpeculationPhase(
+                            report::SpeculationPhase::ExternallySet));
 
                     Value* callee = given;
                     if (fb.monomorphic) {
@@ -136,9 +137,10 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                         if (auto argi = Instruction::Cast(given)) {
                             argi->typeFeedbackUsed = true;
-                            argi->updateTypeFeedback(false).setSpeculationPhase(
-                                report::SpeculationPhase::
-                                    ExternallySet);
+                            STATS_HOOK(argi->updateTypeFeedback(false)
+                                           .setSpeculationPhase(
+                                               report::SpeculationPhase::
+                                                   ExternallySet));
                             auto cast = new CastType(argi, CastType::Downcast,
                                                      PirType::val(), type);
                             cast->effects.set(Effect::DependsOnAssume);

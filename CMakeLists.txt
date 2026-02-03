@@ -38,6 +38,12 @@ if(${RECORDING})
     add_definitions(-DRECORDING)
 endif()
 
+option(STATS_NO_USED_COMPILER "Disable stats collection at compile time" FALSE)
+if(${STATS_NO_USED_COMPILER})
+    message(STATUS "Stats collection disabled")
+    add_definitions(-DSTATS_NO_USED_COMPILER)
+endif()
+
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")

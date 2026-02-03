@@ -11,11 +11,9 @@
 
 namespace rir {
 namespace pir {
-void ClosureVersion::computeFeedbackStats() {
-    if (!report::CollectStats::value) {
-        return;
-    }
 
+#if STATS_COLLECT
+void ClosureVersion::computeFeedbackStats() {
     // fill in slotsOptimizedAway .  Slots that don't appear in the code and are
     // non-empty remove from slotsReadNotUsedStaticTypeReason and
     // slotsReadCandidateNotUsedReason  slots that were optimized away
@@ -27,16 +25,12 @@ void ClosureVersion::computeFeedbackStats() {
 }
 
 void ClosureVersion::scanForPreciseTypeSlots() {
-    if (!report::CollectStats::value) {
-        return;
-    }
-
     Visitor::run(this->entry, [&](Instruction* i) {
         if (!i->hasTypeFeedback()) {
             return;
         }
 
-        const auto& tf = i->typeFeedback(false);
+        const auto& tf = i->typeFeedback(STATS_HOOK(false));
         const auto& origin = tf.feedbackOrigin;
         if (origin.index().isUndefined() || tf.defaultFeedback ||
             origin.index().kind != FeedbackKind::Type) {
@@ -175,7 +169,7 @@ void ClosureVersion::computeSlotsPresent() {
                 return;
             }
 
-            const auto& tf = i->typeFeedback(false);
+            const auto& tf = i->typeFeedback(STATS_HOOK(false));
             const auto& origin = tf.feedbackOrigin;
             if (origin.index().isUndefined() || tf.defaultFeedback ||
                 origin.index().kind != FeedbackKind::Type) {
@@ -200,10 +194,6 @@ void ClosureVersion::computeSlotsPresent() {
 }
 
 void ClosureVersion::promiseInlined(Promise* promise) {
-    if (!report::CollectStats::value) {
-        return;
-    }
-
     auto newSlots = report::findAllSlots(promise->rirSrc());
 
     feedbackStatsFor(promise->rirSrc()->function())
@@ -221,10 +211,6 @@ const bool STATS_MINIMAL_PATCHES_USED =
 void ClosureVersion::registerProtoSlotUsed(Assume* assume,
                                            const FeedbackOrigin& origin,
                                            bool patch) {
-    if (!report::CollectStats::value) {
-        return;
-    }
-
     // Only collect minimal
     if (STATS_MINIMAL_USED) {
         return;
@@ -270,6 +256,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     auto& info = this->feedbackStatsFor(origin.function());
     info.protoSlotsUsed[origin.index()].push_back(slotUsed);
 }
+#endif // STATS_COLLECT
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {
     print(DebugStyle::Standard, out, tty, false);

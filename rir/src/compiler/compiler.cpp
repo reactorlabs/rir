@@ -413,10 +413,10 @@ void Compiler::optimizeModule() {
                                           translation->getName());
 
                 if (v->anyChangePreviousIter) {
-                    v->scanForPreciseTypeSlots();
+                    STATS_HOOK(v->scanForPreciseTypeSlots());
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
-                    v->scanForPreciseTypeSlots();
+                    STATS_HOOK(v->scanForPreciseTypeSlots());
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
                 }

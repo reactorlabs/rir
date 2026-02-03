@@ -183,7 +183,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
             log.warn("Failed to inline a promise");
             return nullptr;
         }
-        cls->promiseInlined(prom);
+        STATS_HOOK(cls->promiseInlined(prom));
     }
 
     if (eager) {
@@ -201,7 +201,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
 
-    srcCode->function()->involvedInCompilation = true;
+    STATS_HOOK(srcCode->function()->involvedInCompilation = true);
 
     Value* v;
     Value* x;
@@ -252,7 +252,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     break;
             }
             // TODO: deal with multiple locations
-            auto& t = i->updateTypeFeedback(false);
+            auto& t = i->updateTypeFeedback(STATS_HOOK(false));
             t.feedbackOrigin = feedbackOrigin;
             if (feedback.numTypes) {
 
@@ -458,14 +458,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto v = feedback.seen == ObservedTest::OnlyTrue
                              ? (Value*)True::instance()
                              : (Value*)False::instance();
-                if (!i->typeFeedback(false).value) {
-                    auto& t = i->updateTypeFeedback(false);
+                if (!i->typeFeedback(STATS_HOOK(false)).value) {
+                    auto& t = i->updateTypeFeedback(STATS_HOOK(false));
                     if (TRANSFER_FEEDBACK) {
                         t.value = v;
                     }
                     t.feedbackOrigin = FeedbackOrigin(srcCode->function(),
                                                       FeedbackIndex::test(idx));
-                } else if (i->typeFeedback(false).value != v) {
+                } else if (i->typeFeedback(STATS_HOOK(false)).value != v) {
                     assert(false && "aa");
                     i->updateTypeFeedback().value = nullptr;
                 }
@@ -474,7 +474,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // To communicate to the backend that feedback is missing that
             // should still be collected.
             if (auto i = Instruction::Cast(at(0)))
-                i->updateTypeFeedback(false);
+                i->updateTypeFeedback(STATS_HOOK(false));
         }
         break;
     }
@@ -527,7 +527,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // inliner. So currently it does not pay off to put any deopts
             // in there.
             //
-            auto& f = i->updateCallFeedback(false);
+            auto& f = i->updateCallFeedback();
             f.feedbackOrigin =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
 
@@ -629,7 +629,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 log.warn("Failed to inline a promise");
                 return false;
             }
-            cls->promiseInlined(prom);
+            STATS_HOOK(cls->promiseInlined(prom));
         }
         push(insert(new MkArg(prom, val, env)));
         break;
@@ -848,8 +848,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             if (auto calli = Instruction::Cast(callee)) {
                 calli->typeFeedbackUsed = true;
-                calli->updateTypeFeedback(false).setSpeculationPhase(
-                    report::SpeculationPhase::ExternallySet);
+                STATS_HOOK(calli->updateTypeFeedback(false).setSpeculationPhase(
+                    report::SpeculationPhase::ExternallySet));
             }
             popn(toPop);
             auto bt = insert(BuiltinCallFactory::New(
@@ -1013,8 +1013,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto apply = [&](ClosureVersion* f) {
                 if (auto calli = Instruction::Cast(callee)) {
                     calli->typeFeedbackUsed = true;
-                    calli->updateTypeFeedback(false).setSpeculationPhase(
-                        report::SpeculationPhase::ExternallySet);
+                    STATS_HOOK(
+                        calli->updateTypeFeedback(false).setSpeculationPhase(
+                            report::SpeculationPhase::ExternallySet));
                 }
                 popn(toPop);
                 assert(!inlining());
@@ -1585,11 +1586,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                                                         Instruction::Cast(e)) {
                                                     // In case the typefeedback
                                                     // is more precise than the
-                                                    insert.code
-                                                        ->getClosureVersion()
-                                                        ->registerProtoSlotUsed(
-                                                            j->typeFeedback()
-                                                                .feedbackOrigin);
+                                                    STATS_HOOK(
+                                                        insert.code
+                                                            ->getClosureVersion()
+                                                            ->registerProtoSlotUsed(
+                                                                j->typeFeedback()
+                                                                    .feedbackOrigin));
 
                                                     if (!j->typeFeedback()
                                                              .type.isVoid() &&

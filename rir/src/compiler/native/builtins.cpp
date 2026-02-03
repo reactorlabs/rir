@@ -835,11 +835,11 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
 
-    if (report::CollectStats::value) {
+    STATS_HOOK(do {
         auto baseline = c->function()->dispatchTable()->baseline();
         baseline->slotsDeopted.insert(deoptReason->origin);
         baseline->allDeoptsCount++;
-    }
+    } while (0));
 
     deoptReason->record(deoptTrigger);
 

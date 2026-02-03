@@ -128,8 +128,8 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
 
         // FIXME: (cf. #1260) what does this mean, we need both rirFun and we
         // need idx
-        mkenv->updateTypeFeedback(false).feedbackOrigin.function(
-            cnt->owner()->rirFunction());
+        mkenv->updateTypeFeedback(STATS_HOOK(false))
+            .feedbackOrigin.function(cnt->owner()->rirFunction());
         add(mkenv);
         this->env = mkenv;
     } else {
@@ -177,7 +177,8 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         mkenv->neverStub = true;
     // FIXME: (cf. #1260) what does this mean, we need both rirFun and we need
     // idx
-    mkenv->updateTypeFeedback(false).feedbackOrigin.function(rirFun);
+    mkenv->updateTypeFeedback(STATS_HOOK(false))
+        .feedbackOrigin.function(rirFun);
     add(mkenv);
     this->env = mkenv;
 }
