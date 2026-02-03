@@ -15,11 +15,10 @@ namespace rir {
 namespace pir {
 
 struct AAssumption {
-    AAssumption(Value* i, const PirType& t)
-        : yesNo(true), kind(Typecheck), origin(nullptr) {
+    AAssumption(Value* i, const PirType& t) : yesNo(true), kind(Typecheck) {
         c.typecheck = {i, t};
     }
-    explicit AAssumption(Assume* a) : yesNo(a->assumeTrue), origin(a) {
+    explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
         auto cond = a->condition();
         switch (a->reason.reason) {
         case DeoptReason::Unknown:
@@ -67,7 +66,6 @@ struct AAssumption {
     AAssumption& operator=(const AAssumption& o) {
         yesNo = o.yesNo;
         kind = o.kind;
-        origin = o.origin;
         switch (kind) {
         case IsEnvStub:
             c.env = o.c.env;
@@ -105,8 +103,6 @@ struct AAssumption {
         Value* misc;
     };
     Content c;
-
-    Assume* origin;
 
     bool operator==(const AAssumption& other) const {
         if (yesNo != other.yesNo)
