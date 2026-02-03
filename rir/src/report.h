@@ -236,8 +236,6 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> emptySlots;
     std::unordered_set<FeedbackIndex> nonEmptySlots;
 
-    std::unordered_set<FeedbackIndex> polymorphicSlots;
-
     std::unordered_set<FeedbackIndex> promiseSlots;
 
     // TODO: not used probably remove

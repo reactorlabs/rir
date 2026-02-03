@@ -176,8 +176,6 @@ struct ObservedValues {
 
     std::array<uint8_t, MaxTypes> seen;
 
-    bool isPolymorphic = false;
-
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
         memset(this, 0, sizeof(ObservedValues));
@@ -190,11 +188,14 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-    inline void record(SEXP e) {
+
+     inline void record(SEXP e) {
         if (!RECORD) {
             return;
         }
-        ObservedValues old = *this;
+
+        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
+
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -211,6 +212,7 @@ struct ObservedValues {
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
 
         uint8_t type = TYPEOF(e);
+
         if (type == PROMSXP) {
             std::cerr << "\n\n ************************** RECORDING A "
                          "PROMISE!! ***************** \n\n";
@@ -226,18 +228,11 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        // clang-format off
-        bool changed =  notScalar != old.notScalar ||
-                        object != old.object ||
-                        attribs != old.attribs ||
-                        notFastVecelt != old.notFastVecelt ||
-                        numTypes != old.numTypes;
-        // clang-format on
-        if (old.numTypes != 0) {
-            isPolymorphic = isPolymorphic || changed;
-        }
-        REC_HOOK(recording::recordSCChanged(changed));
+        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
+
+
+
 };
 
 // static_assert(sizeof(ObservedValues) == sizeof(uint32_t),

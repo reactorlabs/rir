@@ -388,9 +388,6 @@ void computeFunctionInfo(
             slotData.nonEmptySlots.insert(idx);
         }
 
-        if (tf.isPolymorphic) {
-            slotData.polymorphicSlots.insert(idx);
-        }
     }
 
     // Promise scan
