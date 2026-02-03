@@ -479,31 +479,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subsumed_type_: {
-        uint32_t idx = bc.immediate.i;
-
-        assert(typeFeedback->subsumedSlots.count(idx));
-        const auto& slotSubsumer = typeFeedback->subsumedSlots.at(idx);
-
-        if (slotSubsumer.name.empty()) {
-            std::cerr << "!!! Local slot [Type#" << slotSubsumer.idx << "]\n";
-            emitLocalFeedback(idx);
-        } else {
-            auto subsumer = report::getConcreteSubsumer(slotSubsumer);
-
-            if (std::get<0>(subsumer)) {
-                std::cerr << "!!! Found a slot " << slotSubsumer.name
-                          << " [Type#" << slotSubsumer.idx << "]\n";
-
-                emitFeedback(std::get<1>(subsumer), std::get<2>(subsumer));
-            } else {
-                std::cerr << "!!! Failed to find a slots for "
-                          << slotSubsumer.name << " [Type#" << slotSubsumer.idx
-                          << "]\n";
-            }
-        }
-        break;
-    }
     case Opcode::record_type_: {
         auto idx = bc.immediate.i;
         emitLocalFeedback(idx);

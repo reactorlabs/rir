@@ -27,11 +27,8 @@ class CodeStream {
     FunctionWriter& function;
     Preserve preserve;
 
-  public:
     unsigned missingSlots = 0;
-    const report::SubsumedSlots& subsumedSlots;
 
-  private:
     SEXP ast;
 
     unsigned nextLabel = 0;
@@ -74,9 +71,8 @@ class CodeStream {
         insert((BC::Jmp)-1);
     }
 
-    CodeStream(FunctionWriter& function, SEXP ast,
-               const report::SubsumedSlots& subsumedSlots)
-        : function(function), subsumedSlots(subsumedSlots), ast(ast) {
+    CodeStream(FunctionWriter& function, SEXP ast)
+        : function(function), ast(ast) {
         code = new std::vector<char>(1024);
     }
 
@@ -94,20 +90,12 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const MaybeBC& b) {
-        if (b.hasValue) {
-            return (*this) << b.value;
-        }
-
-        assert(b.value.bc == Opcode::record_type_);
-
-        auto slot = b.value.immediate.i;
-        if (subsumedSlots.count(slot)) {
-            *this << BC::subsumedType(slot);
-        } else {
+        if (!b.hasValue) {
             this->missingSlots++;
+            return *this;
         }
 
-        return *this;
+        return (*this) << b.value;
     }
 
     CodeStream& operator<<(BC::Label label) {

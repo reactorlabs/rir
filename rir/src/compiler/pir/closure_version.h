@@ -82,8 +82,6 @@ class ClosureVersion : public Code {
         registerProtoSlotUsed(nullptr, origin, patch);
     }
 
-    void registerSubsumedAssumption(Assume* assume, const std::vector<Assume*>& subsumedBy);
-
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;

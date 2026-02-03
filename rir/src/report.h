@@ -1,7 +1,6 @@
 #ifndef REPORT_H
 #define REPORT_H
 
-#include "report_subsumed.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
@@ -259,8 +258,6 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
     std::unordered_set<FeedbackIndex> slotsPromiseInlined;
 
-    std::unordered_map<FeedbackIndex, SmallSet<FeedbackOrigin>> slotSubsumedBy;
-
     // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;
 
@@ -325,13 +322,6 @@ void report(std::ostream& os, bool breakdownInfo,
 void reportCsv(std::ostream& os, const std::string& name,
                const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
-void reportSubsumedSlots(std::ostream& os);
-
-// ------------------------------------------------------------
-
-const SubsumedSlots& getSubsumedSlots(const std::string& name);
-std::tuple<bool, ObservedValues&, FeedbackOrigin>
-getConcreteSubsumer(const SlotSubsumer& subsumer);
 
 // ------------------------------------------------------------
 

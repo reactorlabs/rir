@@ -6,7 +6,6 @@
 #include "common.h"
 #include "interpreter/profiler.h"
 #include "recording_hooks.h"
-#include "report_subsumed.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
@@ -336,11 +335,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     friend Function;
 
     Function* owner_;
-
-  public:
-    const report::SubsumedSlots& subsumedSlots;
-
-  private:
     size_t callees_size_;
     size_t tests_size_;
     size_t types_size_;
@@ -354,14 +348,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
-                          const std::vector<ObservedValues>& types,
-                          const report::SubsumedSlots& subsumedSlots);
+                          const std::vector<ObservedValues>& types);
 
   public:
     static TypeFeedback* create(const std::vector<ObservedCallees>& callees,
                                 const std::vector<ObservedTest>& tests,
-                                const std::vector<ObservedValues>& types,
-                                const report::SubsumedSlots& subsumedSlots);
+                                const std::vector<ObservedValues>& types);
 
     static TypeFeedback* empty();
     static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
@@ -375,7 +367,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         uint32_t addCallee();
         uint32_t addTest();
         uint32_t addType();
-        TypeFeedback* build(const report::SubsumedSlots& subsumedSlots);
+        TypeFeedback* build();
     };
 
     ObservedCallees& callees(uint32_t idx);

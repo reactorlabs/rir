@@ -79,7 +79,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::pull_:
     case Opcode::is_:
     case Opcode::put_:
-    case Opcode::subsumed_type_:
     case Opcode::record_call_:
     case Opcode::record_test_:
     case Opcode::record_type_:
@@ -162,7 +161,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                 Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::record_call_:
-        case Opcode::subsumed_type_:
         case Opcode::record_type_:
         case Opcode::record_test_:
         case Opcode::mk_promise_:
@@ -254,7 +252,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
             break;
         case Opcode::record_call_:
-        case Opcode::subsumed_type_:
         case Opcode::record_type_:
         case Opcode::record_test_:
         case Opcode::mk_promise_:
@@ -389,7 +386,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
         out << (BC::RirTypecheck)immediate.i;
         break;
-    case Opcode::subsumed_type_:
     case Opcode::record_test_:
     case Opcode::record_type_:
     case Opcode::record_call_:

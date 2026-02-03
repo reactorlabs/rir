@@ -35,12 +35,6 @@ BC BC::recordType(uint32_t idx) {
     return BC(Opcode::record_type_, i);
 }
 
-BC BC::subsumedType(uint32_t idx) {
-    ImmediateArguments i;
-    i.i = idx;
-    return BC(Opcode::subsumed_type_, i);
-}
-
 BC BC::recordTest(uint32_t idx) {
     ImmediateArguments i;
     i.i = idx;

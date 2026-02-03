@@ -260,32 +260,19 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
             auto assumptionsIncludes = [&](AAssumption a) {
                 auto as = assumptions.at(instr);
-                std::vector<Assume*> subsumers;
                 for (const auto& e : as) {
                     if (e == a) {
-                        subsumers.push_back(e.origin);
+                        return true;
                     }
                     if (e.kind == AAssumption::Typecheck &&
                         a.kind == AAssumption::Typecheck)
                         if (a.c.typecheck.first == e.c.typecheck.first &&
                             e.c.typecheck.second.isA(a.c.typecheck.second)) {
-                            subsumers.push_back(e.origin);
+                            return true;
                         }
                 }
 
-                if (subsumers.empty()) {
-                    return false;
-                }
-
-                subsumers.erase(
-                    std::remove(subsumers.begin(), subsumers.end(), nullptr),
-                    subsumers.end());
-
-                assert(a.origin);
-                code->getClosureVersion()->registerSubsumedAssumption(
-                    a.origin, subsumers);
-
-                return true;
+                return false;
             };
 
             if (auto assume = Assume::Cast(instr)) {

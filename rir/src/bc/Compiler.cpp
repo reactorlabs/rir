@@ -80,9 +80,8 @@ class CompilerContext {
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
 
-        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p,
-                    const report::SubsumedSlots& subsumedSlots)
-            : cs(fun, ast, subsumedSlots), parent(p) {}
+        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
+            : cs(fun, ast), parent(p) {}
         virtual ~CodeContext() {}
         bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
         BC::Label loopNext() {
@@ -121,9 +120,8 @@ class CompilerContext {
     class PromiseContext : public CodeContext {
 
       public:
-        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p,
-                       const report::SubsumedSlots& subsumedSlots)
-            : CodeContext(ast, fun, p, subsumedSlots) {}
+        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
+            : CodeContext(ast, fun, p) {}
         bool loopIsLocal() override {
             if (loops.empty()) {
                 parent->setContextNeeded();
@@ -148,13 +146,10 @@ class CompilerContext {
     TypeFeedback::Builder typeFeedbackBuilder;
 
     report::RecordedUsedSlots recordedUsedSlots;
-    const report::SubsumedSlots& subsumedSlots;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve,
-                    const report::RecordedUsedSlots& recordedUsedSlots,
-                    const report::SubsumedSlots& subsumedSlots)
-        : fun(fun), preserve(preserve), recordedUsedSlots(recordedUsedSlots),
-          subsumedSlots(subsumedSlots) {}
+                    const report::RecordedUsedSlots& recordedUsedSlots)
+        : fun(fun), preserve(preserve), recordedUsedSlots(recordedUsedSlots) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
@@ -185,8 +180,8 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
-                                  subsumedSlots));
+        code.push(
+            new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
     bool isInPromise() { return pushedPromiseContexts > 0; }
@@ -194,8 +189,8 @@ class CompilerContext {
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
 
-        code.push(new PromiseContext(
-            ast, fun, code.empty() ? nullptr : code.top(), subsumedSlots));
+        code.push(
+            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
     Code* pop() {
@@ -2054,8 +2049,7 @@ SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
     FunctionWriter function;
 
     const auto& slots = report::getUsedSlotsFor(this_name);
-    const auto& subsumed = report::getSubsumedSlots(this_name);
-    CompilerContext ctx(function, preserve, slots, subsumed);
+    CompilerContext ctx(function, preserve, slots);
 
     // Allocate the correct name
     size_t local_index = 0;
@@ -2102,7 +2096,7 @@ SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    TypeFeedback* feedback = ctx.typeFeedbackBuilder.build(subsumed);
+    TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
     UNPROTECT(1);
