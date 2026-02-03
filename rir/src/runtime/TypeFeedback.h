@@ -188,14 +188,12 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-
-     inline void record(SEXP e) {
+    inline void record(SEXP e) {
         if (!RECORD) {
             return;
         }
 
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
-
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -230,9 +228,6 @@ struct ObservedValues {
 
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
-
-
-
 };
 
 // static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
