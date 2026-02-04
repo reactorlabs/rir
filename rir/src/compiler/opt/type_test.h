@@ -84,16 +84,6 @@ class TypeTest {
             assert(!expected.maybeObj());
             assert(!expected.maybeHasAttrs());
 
-            if (!feedback.defaultFeedback) {
-                // std::cerr << "WIDENED notLazy notAttribOrObj "
-                //              "*************************************************"
-                //              "**************"
-                //           << "\n";
-                // std::cerr << "type: " << i->type << " - expected: " <<
-                // expected
-                //           << "\n"
-                //           << "checkFor: " << checkFor << "\n\n\n";
-            }
 #if STATS_COLLECT
             auto requiredPtr = new PirType(required);
 #endif
@@ -113,16 +103,6 @@ class TypeTest {
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
 
-            if (!feedback.defaultFeedback) {
-                // std::cerr << "WIDENED notLazy notObj "
-                //              "*************************************************"
-                //              "**************"
-                //           << "\n";
-                // std::cerr << "type: " << i->type << " - expected: " <<
-                // expected
-                //           << "\n"
-                //           << "checkFor: " << checkFor << "\n\n\n";
-            }
 #if STATS_COLLECT
             auto requiredPtr = new PirType(required);
 #endif

@@ -286,7 +286,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
                 if (DEFAULT_SPECULATION) {
                     t.type = PirType::val().notObject().fastVecelt();
-                    t.defaultFeedback = true;
+                    STATS_HOOK(t.defaultFeedback = true);
                 }
             }
         }

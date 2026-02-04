@@ -148,8 +148,8 @@ struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
-    bool defaultFeedback = false;
 #if STATS_COLLECT
+    bool defaultFeedback = false;
     report::SpeculationPhase phase = report::NotRun;
 
     void setSpeculationPhase(report::SpeculationPhase newPhase) {
