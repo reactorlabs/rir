@@ -2824,6 +2824,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     // const
     DeoptReason reason;
 
+#if STATS_COLLECT
     bool defaultFeedback = false;
     PirType* required = nullptr;
     bool hoistedForce = false;
@@ -2832,6 +2833,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
         this->required = other.required;
         this->hoistedForce = other.hoistedForce;
     }
+#endif
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)

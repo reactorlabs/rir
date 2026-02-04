@@ -14,6 +14,7 @@ class TypeTest {
         bool expectation;
         FeedbackOrigin feedbackOrigin;
 
+#if STATS_COLLECT
         bool defaultFeedback;
         PirType* required = nullptr;
 
@@ -21,6 +22,7 @@ class TypeTest {
             assume.defaultFeedback = defaultFeedback;
             assume.required = required;
         }
+#endif
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
@@ -55,11 +57,18 @@ class TypeTest {
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
 
+#if STATS_COLLECT
             auto requiredPtr = new PirType(required);
+#endif
 
-            return action({expected, new IsType(expected, i, feedback.feedbackOrigin), true,
-                           feedback.feedbackOrigin, feedback.defaultFeedback,
-                           requiredPtr});
+            return action({
+                expected, new IsType(expected, i, feedback.feedbackOrigin),
+                    true, feedback.feedbackOrigin
+#if STATS_COLLECT
+                    ,
+                    feedback.defaultFeedback, requiredPtr
+#endif
+            });
         }
 
         // Second try to test for object-ness, or attribute-ness.
@@ -85,12 +94,18 @@ class TypeTest {
                 //           << "\n"
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
-
+#if STATS_COLLECT
             auto requiredPtr = new PirType(required);
+#endif
 
-            return action({checkFor, new IsType(checkFor, i, feedback.feedbackOrigin), true,
-                           feedback.feedbackOrigin, feedback.defaultFeedback,
-                           requiredPtr});
+            return action({
+                checkFor, new IsType(checkFor, i, feedback.feedbackOrigin),
+                    true, feedback.feedbackOrigin
+#if STATS_COLLECT
+                    ,
+                    feedback.defaultFeedback, requiredPtr
+#endif
+            });
         }
 
         checkFor = i->type.notLazy().notObject();
@@ -108,12 +123,18 @@ class TypeTest {
                 //           << "\n"
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
-
+#if STATS_COLLECT
             auto requiredPtr = new PirType(required);
+#endif
 
-            return action({checkFor, new IsType(checkFor, i, feedback.feedbackOrigin), true,
-                           feedback.feedbackOrigin, feedback.defaultFeedback,
-                           requiredPtr});
+            return action({
+                checkFor, new IsType(checkFor, i, feedback.feedbackOrigin),
+                    true, feedback.feedbackOrigin
+#if STATS_COLLECT
+                    ,
+                    feedback.defaultFeedback, requiredPtr
+#endif
+            });
         }
 
         if (i->type.isA(required))

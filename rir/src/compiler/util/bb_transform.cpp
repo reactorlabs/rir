@@ -269,9 +269,11 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
     auto assume =
         new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
 
+#if STATS_COLLECT
     if (info) {
         info->updateAssume(*assume);
     }
+#endif
 
     position = bb->insert(position + 1, assume);
     position++;

@@ -210,10 +210,10 @@ struct ObservedValues {
 
         uint8_t type = TYPEOF(e);
 
-        if (type == PROMSXP) {
-            std::cerr << "\n\n ************************** RECORDING A "
-                         "PROMISE!! ***************** \n\n";
-        }
+        // if (type == PROMSXP) {
+        //     std::cerr << "\n\n ************************** RECORDING A "
+        //                  "PROMISE!! ***************** \n\n";
+        // }
 
         if (numTypes < MaxTypes) {
             int i = 0;
