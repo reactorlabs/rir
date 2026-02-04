@@ -130,10 +130,15 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                                       ? PirType::builtin()
                                                       : PirType::special()));
 
-                        BBTransform::insertAssume(
-                            new IsType(type, given, FeedbackOrigin()), true, cp,
-                            fb.feedbackOrigin, DeoptReason::ForceAndCall, bb,
-                            ip, nullptr);
+                        BBTransform::insertAssume(new IsType(type, given
+#if STATS_COLLECT
+                                                             ,
+                                                             FeedbackOrigin()
+#endif
+                                                                 ),
+                                                  true, cp, fb.feedbackOrigin,
+                                                  DeoptReason::ForceAndCall, bb,
+                                                  ip, nullptr);
 
                         if (auto argi = Instruction::Cast(given)) {
                             argi->typeFeedbackUsed = true;

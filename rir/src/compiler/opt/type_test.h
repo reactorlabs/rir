@@ -62,7 +62,13 @@ class TypeTest {
 #endif
 
             return action({
-                expected, new IsType(expected, i, feedback.feedbackOrigin),
+                expected,
+                    new IsType(expected, i
+#if STATS_COLLECT
+                               ,
+                               feedback.feedbackOrigin
+#endif
+                               ),
                     true, feedback.feedbackOrigin
 #if STATS_COLLECT
                     ,
@@ -89,7 +95,13 @@ class TypeTest {
 #endif
 
             return action({
-                checkFor, new IsType(checkFor, i, feedback.feedbackOrigin),
+                checkFor,
+                    new IsType(checkFor, i
+#if STATS_COLLECT
+                               ,
+                               feedback.feedbackOrigin
+#endif
+                               ),
                     true, feedback.feedbackOrigin
 #if STATS_COLLECT
                     ,
@@ -108,7 +120,13 @@ class TypeTest {
 #endif
 
             return action({
-                checkFor, new IsType(checkFor, i, feedback.feedbackOrigin),
+                checkFor,
+                    new IsType(checkFor, i
+#if STATS_COLLECT
+                               ,
+                               feedback.feedbackOrigin
+#endif
+                               ),
                     true, feedback.feedbackOrigin
 #if STATS_COLLECT
                     ,

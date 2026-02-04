@@ -1296,8 +1296,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::is_:
         if (bc.immediate.typecheck == BC::RirTypecheck::isNonObject) {
-            push(insert(new IsType(PirType::val().notMissing().notObject(),
-                                   pop(), FeedbackOrigin())));
+            push(
+                insert(new IsType(PirType::val().notMissing().notObject(), pop()
+#if STATS_COLLECT
+                                                                               ,
+                                  FeedbackOrigin()
+#endif
+                                      )));
         } else if (bc.immediate.typecheck == BC::RirTypecheck::isVector) {
             std::vector<Instruction*> tests;
             for (auto type : BC::isVectorTypes) {

@@ -1878,10 +1878,22 @@ class FLI(Is, 1, Effects::None()) {
 class FLI(IsType, 1, Effects::None()) {
   public:
     const PirType typeTest;
+#if STATS_COLLECT
     const FeedbackOrigin origin;
-    IsType(PirType type, Value* v, const FeedbackOrigin& origin)
+#endif
+    IsType(PirType type, Value* v
+#if STATS_COLLECT
+           ,
+           const FeedbackOrigin& origin
+#endif
+           )
         : FixedLenInstruction(PirType::test(), {{PirType::any()}}, {{v}}),
-          typeTest(type), origin(origin) {
+          typeTest(type)
+#if STATS_COLLECT
+          ,
+          origin(origin)
+#endif
+    {
         if (v->type.maybeNAOrNaN() && !type.maybeNAOrNaN())
             assert(type.isSimpleScalar());
     }

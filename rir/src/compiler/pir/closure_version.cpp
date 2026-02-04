@@ -70,8 +70,6 @@ slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin,
         return {false, {}};
     }
 
-    // assert(typeTest->origin == fo);
-
     // Instruction we speculated on
     pir::Instruction* speculatedOn =
         Instruction::Cast(typeTest->arg<0>().val());
