@@ -188,9 +188,7 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
-        if (!RECORD) {
-            return;
-        }
+        assert(RECORD && "calling TypeFeedback::record() when it shouldnt ");
 
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
