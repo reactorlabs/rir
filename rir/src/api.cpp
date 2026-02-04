@@ -129,7 +129,6 @@ void myFinalizer(SEXP) {
 }
 
 std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
-    assert(false && "stats collection on!");
     DispatchTable::onNewDt = [](SEXP sexpDT) {
         R_PreserveObject(sexpDT);
         PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
