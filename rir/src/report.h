@@ -348,6 +348,14 @@ struct UseRIRNames {
     static const bool value;
 };
 
+// ------------------------------------------------------------
+
+#if STATS_COLLECT
+
+void saturationInfo(int iteration);
+
+#endif
+
 } // namespace report
 } // namespace rir
 

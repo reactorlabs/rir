@@ -391,7 +391,6 @@ void computeFunctionInfo(
         } else {
             slotData.nonEmptySlots.insert(idx);
         }
-
     }
 
     // Promise scan
@@ -1158,6 +1157,54 @@ RecordedUsedSlots getUsedSlotsFor(const std::string& closure_name) {
 const bool UseRIRNames::value =
     std::getenv("STATS_USE_RIR_NAMES") != nullptr &&
     std::string(std::getenv("STATS_USE_RIR_NAMES")) == "1";
+
+// ------------------------------------------------------------
+// SATURATION EXPERIMENT
+// ------------------------------------------------------------
+
+void saturationInfo(int iteration) {
+    auto doReport = [&](std::ostream& os) {
+        std::unordered_set<Function*> functions;
+        std::unordered_set<FeedbackOrigin> finalUsed;
+        std::unordered_set<FeedbackOrigin> protoUsed;
+
+        for (const auto& cs : COMPILATION_SESSIONS) {
+            for (const auto& cvs : cs.closureVersionStats) {
+                for (const auto& fs : cvs.feedbackStats) {
+                    const auto& function = fs.first;
+                    const auto& stats = fs.second;
+
+                    functions.insert(function);
+
+                    for (const auto& i : stats.finalVersionSlotsUsed) {
+                        finalUsed.insert(FeedbackOrigin(function, i.first));
+                        protoUsed.insert(FeedbackOrigin(function, i.first));
+                    }
+
+                    for (const auto& i : stats.protoSlotsUsed) {
+                        protoUsed.insert(FeedbackOrigin(function, i.first));
+                    }
+                }
+            }
+        }
+
+        os << iteration << "," << finalUsed.size() << "," << protoUsed.size()
+           << "," << functions.size() << "\n";
+    };
+
+    if (std::getenv("STATS_SATURATION_OUT") != nullptr) {
+        std::ofstream ofs{std::getenv("STATS_SATURATION_OUT"), std::ios::out | std::ios::app};
+
+        ofs.seekp(0, std::ios::end);
+        if (ofs.tellp() == 0) {
+            ofs << "iteration,final used,used,closures\n";
+        }
+
+        doReport(ofs);
+    } else {
+        doReport(std::cerr);
+    }
+}
 
 } // namespace report
 } // namespace rir

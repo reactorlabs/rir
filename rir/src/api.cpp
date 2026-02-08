@@ -762,6 +762,18 @@ REXPORT SEXP compile_c1(SEXP what) {
     return R_NilValue;
 }
 
+REXPORT SEXP saturationInfo(SEXP iteration) {
+    if (TYPEOF(iteration) != INTSXP || LENGTH(iteration) != 1) {
+        Rf_error("saturationInfo takes a single integer");
+    }
+
+#if STATS_COLLECT
+    rir::report::saturationInfo(INTEGER(iteration)[0]);
+#endif
+
+    return R_NilValue;
+}
+
 bool startup() {
     initializeRuntime();
     return true;

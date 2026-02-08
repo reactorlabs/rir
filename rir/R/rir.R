@@ -217,6 +217,10 @@ rir.annotateDepromised <- function(closure) {
     copy
 }
 
+rir.saturationInfo <- function(iteration) {
+    invisible(.Call("saturationInfo", iteration))
+}
+
 # Only define recording functions if the recordings have been compiled
 if (.Call("isRecordingsDefined")) {
     recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE) {

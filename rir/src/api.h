@@ -36,4 +36,6 @@ REXPORT SEXP playground(SEXP what);
 
 REXPORT SEXP compile_c1(SEXP what);
 
+REXPORT SEXP saturationInfo(SEXP iteration);
+
 #endif // API_H_
