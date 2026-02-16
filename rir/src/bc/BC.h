@@ -41,6 +41,12 @@ BC BC::recordTest(uint32_t idx) {
     return BC(Opcode::record_test_, i);
 }
 
+BC BC::recordTypeOnce(uint32_t idx) {
+    ImmediateArguments i;
+    i.i = idx;
+    return BC(Opcode::record_type_once_, i);
+}
+
 BC BC::asSwitchIdx() { return BC(Opcode::as_switch_idx_); }
 
 BC BC::popn(unsigned n) {

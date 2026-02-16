@@ -274,7 +274,10 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     out << " ] Test#";
                 } else {
                     typeFeedback->types(bc.immediate.i).print(out);
-                    out << " ] Type#";
+                    out << " ]";
+                    if (bc.bc == Opcode::record_type_once_)
+                        out << "1";
+                    out << " Type#";
                 }
                 out << bc.immediate.i << "\n";
             } else {

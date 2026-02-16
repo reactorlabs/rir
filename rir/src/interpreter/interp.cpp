@@ -1976,7 +1976,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = initialPC;
     } else {
         R_Visible = TRUE;
-        pc = c->code();
+        if (c->flags.includes(Code::NeedsBytecodeCopy)) {
+            // Code contains record_type_once_ instructions that self-mutate.
+            // Make a mutable copy so the original bytecode stays pristine.
+            Opcode* copy = (Opcode*)alloca(c->codeSize);
+            memcpy(copy, c->code(), c->codeSize);
+            pc = copy;
+        } else {
+            pc = c->code();
+        }
     }
 
     // This is used in loads for recording if the loaded value was a promise
@@ -1984,7 +1992,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // marks how this load behaved.
     auto recordForceBehavior = [&](SEXP s) {
         // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_)
+        if (*pc != Opcode::record_type_ && *pc != Opcode::record_type_once_)
             return;
 
         ObservedValues::StateBeforeLastForce state =
@@ -2020,6 +2028,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(invalid_) assert(false && "wrong or unimplemented opcode");
 
         INSTRUCTION(nop_) NEXT();
+
+        INSTRUCTION(nop_wide_) {
+            // if (getenv("RIR_DEBUG_RECORD_ONCE"))
+            //     std::cout << "nop_wide\n";
+            advanceImmediate();
+            NEXT();
+        }
 
         INSTRUCTION(clear_binding_cache_) {
             size_t start = readImmediate();
@@ -2339,6 +2354,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            SEXP t = ostack_top();
+            typeFeedback->record_type(idx, t);
+            // Self-mutate: overwrite opcode byte to nop_wide_
+            *(pc - 1 - sizeof(Immediate)) = Opcode::nop_wide_;
+            // if (getenv("RIR_DEBUG_RECORD_ONCE"))
+            //     std::cout << "record_type_once_ #" << idx
+            //               << " mutated to nop_wide\n";
             NEXT();
         }
 

@@ -446,6 +446,13 @@ DEF_INSTR(ret_, 0, 1, 0)
 DEF_INSTR(record_call_, 1, 1, 1)
 DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
+DEF_INSTR(record_type_once_, 1, 1, 1)
+
+/**
+ * nop_wide_:: like nop_ but 5 bytes (1 immediate). Used to replace
+ * record_type_once_ after it fires.
+ */
+DEF_INSTR(nop_wide_, 1, 0, 0)
 
 DEF_INSTR(int3_, 0, 0, 0)
 

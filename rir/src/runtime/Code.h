@@ -124,9 +124,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     enum Flag {
         NoReflection,
+        NeedsBytecodeCopy,
 
         FIRST = NoReflection,
-        LAST = NoReflection
+        LAST = NeedsBytecodeCopy
     };
 
     EnumSet<Flag> flags;
