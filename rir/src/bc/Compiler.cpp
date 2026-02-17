@@ -2111,7 +2111,10 @@ bool Compiler::profile =
 
 bool Compiler::loopPeelingEnabled = true;
 
-bool Compiler::recordOnce =
-    getenv("RIR_RECORD_ONCE") && std::string(getenv("RIR_RECORD_ONCE")) != "0";
+// bool Compiler::recordOnce =
+//     getenv("RIR_RECORD_ONCE") && std::string(getenv("RIR_RECORD_ONCE")) !=
+//     "0";
+
+bool Compiler::recordOnce = true;
 
 } // namespace rir
