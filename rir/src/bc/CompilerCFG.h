@@ -21,9 +21,14 @@ class CompilerCFGBuilder {
 
     void scanForExclusions(SEXP e);
 
+    bool hasLoop_ = false;
+
   public:
     // Extract parameters from formals and scan body for exclusions
-    void scanParameters(SEXP formals, SEXP body);
+    void configure(SEXP formals, SEXP body);
+
+    // Returns true if the function body contains any loops
+    bool shouldRecordOnceInFunction() const { return hasLoop_; }
 
     // Mark a parameter as excluded from optimization
     void markParameterExcluded(SEXP var);

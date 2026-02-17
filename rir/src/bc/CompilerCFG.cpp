@@ -1,15 +1,19 @@
 #include "CompilerCFG.h"
+#include "AstUtils.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 
 namespace rir {
 
-void CompilerCFGBuilder::scanParameters(SEXP formals, SEXP body) {
+void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
     // Extract parameters from formals
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
             parameters_.insert(arg.tag());
     }
+
+    // Check if function body contains loops
+    hasLoop_ = containsLoop(body);
 
     // Scan body AST for exclusions
     scanForExclusions(body);

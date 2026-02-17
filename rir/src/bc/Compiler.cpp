@@ -4,6 +4,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "Rinternals.h"
+#include "bc/AstUtils.h"
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
@@ -33,31 +34,6 @@ static bool isConstant(SEXP exp) {
     default:
         return true;
     }
-}
-
-static bool containsLoop(SEXP exp) {
-    if (TYPEOF(exp) != LANGSXP)
-        return false;
-
-    auto fun = CAR(exp);
-    auto args_ = CDR(exp);
-
-    if (TYPEOF(fun) != SYMSXP) {
-        return false;
-    } else if (fun == symbol::Repeat) {
-        return true;
-    } else if (fun == symbol::While) {
-        return true;
-    } else if (fun == symbol::For) {
-        return true;
-    }
-
-    RList args(args_);
-    bool res = false;
-    for (RListIter e = args.begin(); e != args.end(); ++e) {
-        res = res || containsLoop(*e);
-    }
-    return res;
 }
 
 class CompilerContext {
@@ -142,6 +118,7 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
+    bool recordTypeOnceEmitted = false;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -211,8 +188,11 @@ class CompilerContext {
 
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
-        if (Compiler::recordOnce && cfgBuilder.isSupportedParameter(name))
+        if (Compiler::recordOnce && cfgBuilder.shouldRecordOnceInFunction() &&
+            cfgBuilder.isSupportedParameter(name)) {
+            recordTypeOnceEmitted = true;
             return BC::recordTypeOnce(slot_idx);
+        }
         return BC::recordType(slot_idx);
     }
 
@@ -2060,7 +2040,7 @@ SEXP Compiler::finalize() {
 
     // Scan parameters and exclusions for record_type_once_ optimization
     if (Compiler::recordOnce)
-        ctx.cfgBuilder.scanParameters(formals, exp);
+        ctx.cfgBuilder.configure(formals, exp);
 
     ctx.push(exp, closureEnv);
 
@@ -2086,7 +2066,7 @@ SEXP Compiler::finalize() {
     Code* body = ctx.pop();
 
     // Mark if bytecode contains record_type_once_ (needs copy at runtime)
-    if (Compiler::recordOnce && ctx.cfgBuilder.hasSupportedParameters())
+    if (Compiler::recordOnce && ctx.recordTypeOnceEmitted)
         body->flags.set(Code::NeedsBytecodeCopy);
 
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
