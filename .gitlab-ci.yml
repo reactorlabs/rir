@@ -108,8 +108,6 @@ report_results:
 benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
-  needs:
-    - test_benchmarks
   variables:
     GIT_STRATEGY: none
   tags:
