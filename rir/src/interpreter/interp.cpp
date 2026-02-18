@@ -1973,19 +1973,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     Opcode* pc;
 
-    if (initialPC) {
-        pc = initialPC;
-    } else {
+    if (!initialPC)
         R_Visible = TRUE;
-        if (c->flags.includes(Code::NeedsBytecodeCopy)) {
-            // Code contains record_type_once_ instructions that self-mutate.
-            // Make a mutable copy so the original bytecode stays pristine.
-            Opcode* copy = (Opcode*)alloca(c->codeSize);
-            memcpy(copy, c->code(), c->codeSize);
-            pc = copy;
-        } else {
-            pc = c->code();
-        }
+
+    if (c->flags.includes(Code::NeedsBytecodeCopy)) {
+        // Code contains record_type_once_ instructions that self-mutate.
+        // Make a mutable copy so the original bytecode stays pristine.
+        // Always copy even when resuming (deopt/loop) since initialPC points
+        // into the original bytecode and mutations would corrupt it.
+        Opcode* copy = (Opcode*)alloca(c->codeSize);
+        memcpy(copy, c->code(), c->codeSize);
+        pc = initialPC ? copy + (initialPC - c->code()) : copy;
+    } else {
+        pc = initialPC ? initialPC : c->code();
     }
 
     // This is used in loads for recording if the loaded value was a promise
