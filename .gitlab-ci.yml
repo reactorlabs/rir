@@ -470,7 +470,7 @@ benchmark_fastr:
     expire_in: 6 month
 
 update_containers:
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
+  image: docker.io/library/docker:dind
   stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
