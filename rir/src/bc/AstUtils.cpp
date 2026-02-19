@@ -29,4 +29,14 @@ bool containsLoop(SEXP exp) {
     return res;
 }
 
+int countNodes(SEXP exp, int limit) {
+    if (limit <= 0 || !exp || TYPEOF(exp) != LANGSXP)
+        return 0;
+    int count = 1;
+    for (SEXP arg = CDR(exp); arg != R_NilValue && count < limit;
+         arg = CDR(arg))
+        count += countNodes(CAR(arg), limit - count);
+    return count;
+}
+
 } // namespace rir

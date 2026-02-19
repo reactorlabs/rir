@@ -19,26 +19,27 @@ class CompilerCFGBuilder {
     // functions)
     std::unordered_set<SEXP> excluded_parameters_;
 
-    void scanForExclusions(SEXP e);
+    // Parameters that are referenced within at least one loop body
+    std::unordered_set<SEXP> parameters_used_in_loops_;
 
-    bool hasLoop_ = false;
+    void scanBody(SEXP e, bool inLoop);
 
   public:
-    // Extract parameters from formals and scan body for exclusions
+    // Extract parameters from formals and scan body for loop usage/exclusions
     void configure(SEXP formals, SEXP body);
 
-    // Returns true if the function body contains any loops
-    bool shouldRecordOnceInFunction() const { return hasLoop_; }
+    // Returns true if any parameters are used inside loops
+    bool shouldRecordOnceInFunction() const {
+        return !parameters_used_in_loops_.empty();
+    }
 
     // Mark a parameter as excluded from optimization
     void markParameterExcluded(SEXP var);
 
-    // Check if a variable is a non-excluded parameter (eligible for
-    // record_type_once_)
+    // Check if a variable is a parameter used in a loop and not excluded
     bool isSupportedParameter(SEXP var) const;
 
-    // Check if any supported parameters exist (i.e., record_type_once_ was
-    // emitted)
+    // Check if any supported parameters exist
     bool hasSupportedParameters() const;
 };
 
