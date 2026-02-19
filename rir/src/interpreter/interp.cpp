@@ -87,20 +87,21 @@ static void printInterp(Opcode* pc, Code* c) {
 static void printLastop() { std::cout << "> lastop\n"; }
 #endif
 
-static SEXP getSrcAt(Code* c, Opcode* pc) {
-    unsigned sidx = c->getSrcIdxAt(pc, true);
+static Opcode* normalizedPc(Code* c, Opcode* pc, Opcode* codeBase) {
+    return c->code() + (pc - (codeBase ? codeBase : c->code()));
+}
+
+static SEXP getSrcAt(Code* c, Opcode* pc, Opcode* codeBase) {
+    unsigned sidx = c->getSrcIdxAt(normalizedPc(c, pc, codeBase), true);
     if (sidx == 0)
         return src_pool_at(c->src);
     return src_pool_at(sidx);
 }
 
-static SEXP getSrcForCall(Code* c, Opcode* pc) {
-    unsigned sidx = c->getSrcIdxAt(pc, false);
+static SEXP getSrcForCall(Code* c, Opcode* pc, Opcode* codeBase) {
+    unsigned sidx = c->getSrcIdxAt(normalizedPc(c, pc, codeBase), false);
     return src_pool_at(sidx);
 }
-
-#define PC_BOUNDSCHECK(pc, c)                                                  \
-    SLOWASSERT((pc) >= (c)->code() && (pc) < (c)->endCode());
 
 #ifdef THREADED_CODE
 #define BEGIN_MACHINE NEXT();
@@ -1229,7 +1230,7 @@ enum class Unop { PLUSOP, MINUSOP };
     do {                                                                       \
         if (naflag) {                                                          \
             PROTECT(ans);                                                      \
-            SEXP call = getSrcForCall(c, pc - 1);                              \
+            SEXP call = getSrcForCallAtLivePc(pc - 1);                         \
             Rf_warningcall(call, INTEGER_OVERFLOW_WARNING);                    \
             UNPROTECT(1);                                                      \
         }                                                                      \
@@ -1248,7 +1249,7 @@ enum class Unop { PLUSOP, MINUSOP };
                                                                                \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        SEXP call = getSrcForCall(c, pc - 1);                                  \
+        SEXP call = getSrcForCallAtLivePc(pc - 1);                             \
                                                                                \
         SEXP arglist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                 \
         ostack_push(arglist);                                                  \
@@ -1390,7 +1391,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
-        SEXP call = getSrcForCall(c, pc - 1);                                  \
+        SEXP call = getSrcForCallAtLivePc(pc - 1);                             \
         SEXP arglist = CONS_NR(val, R_NilValue);                               \
         ostack_push(arglist);                                                  \
         if (flag < 2)                                                          \
@@ -1496,11 +1497,12 @@ SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
+bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc,
+               Opcode* codeBase) {
     SEXP val = R_findVarLocInFrame(environment, symbol).cell;
     if (val == nullptr) {
         if (code)
-            Rf_errorcall(getSrcAt(code, pc - 1),
+            Rf_errorcall(getSrcAt(code, pc - 1, codeBase),
                          "'missing' can only be used for arguments");
         else
             Rf_errorcall(R_NilValue,
@@ -1972,6 +1974,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     ostack_ensureSize(c->stackLength + 5);
 
     Opcode* pc;
+    Opcode* codeBase; // start of the buffer pc lives in (copy or original)
 
     if (!initialPC)
         R_Visible = TRUE;
@@ -1983,10 +1986,25 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // into the original bytecode and mutations would corrupt it.
         Opcode* copy = (Opcode*)alloca(c->codeSize);
         memcpy(copy, c->code(), c->codeSize);
+        codeBase = copy;
         pc = initialPC ? copy + (initialPC - c->code()) : copy;
     } else {
+        codeBase = c->code();
         pc = initialPC ? initialPC : c->code();
     }
+
+// pc may point into an alloca copy when NeedsBytecodeCopy is set; codeBase
+// is the start of the buffer pc lives in (defined above).
+#define PC_BOUNDSCHECK(pc, c)                                                  \
+    SLOWASSERT((pc) >= codeBase && (pc) < codeBase + (c)->codeSize);
+
+    auto getSrcAtLivePc = [&](Opcode* p) { return getSrcAt(c, p, codeBase); };
+    auto getSrcForCallAtLivePc = [&](Opcode* p) {
+        return getSrcForCall(c, p, codeBase);
+    };
+    auto isMissingAtLivePc = [&](SEXP symbol, SEXP environment, Opcode* p) {
+        return isMissing(symbol, environment, c, p, codeBase);
+    };
 
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
@@ -2396,7 +2414,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c,
+                                   normalizedPc(c, pc, codeBase))) {
                     return res;
                 }
             }
@@ -2430,7 +2449,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c,
+                                   normalizedPc(c, pc, codeBase))) {
                     return res;
                 }
             }
@@ -2483,7 +2503,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(ttt == R_PPStackTop);
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c,
+                                   normalizedPc(c, pc, codeBase))) {
                     return res;
                 }
             }
@@ -3080,7 +3101,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             //    which boolean operation it was. To achieve the exact behavior,
             //    one could potentially compile this check in `ir/Compiler.cpp`
             if (!Rf_isNumber(val)) {
-                SEXP call = getSrcAt(c, pc - 1);
+                SEXP call = getSrcAtLivePc(pc - 1);
                 Rf_errorcall(call, "argument has the wrong type for && or ||");
             }
             int x1 = Rf_asLogical(val);
@@ -3096,7 +3117,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             int cond = NA_LOGICAL;
             if (XLENGTH(val) > 1)
                 Rf_warningcall(
-                    getSrcAt(c, pc - 1),
+                    getSrcAtLivePc(pc - 1),
                     "the condition has length > 1 and only the first "
                     "element will be used");
 
@@ -3121,7 +3142,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
                         : ("argument is of length zero");
-                Rf_errorcall(getSrcAt(c, pc - 1), msg);
+                Rf_errorcall(getSrcAtLivePc(pc - 1), msg);
             }
 
             ostack_pop();
@@ -3204,8 +3225,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SLOWASSERT(!DDVAL(sym));
             assert(env);
-            ostack_push(isMissing(sym, env, c, pc) ? R_TrueValue
-                                                   : R_FalseValue);
+            ostack_push(isMissingAtLivePc(sym, env, pc) ? R_TrueValue
+                                                        : R_FalseValue);
             NEXT();
         }
 
@@ -3243,7 +3264,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     REC_HOOK(recording::recordOsrTriggerLoop(loopCounter));
                     loopCounter = 0;
-                    if (auto res = osr(callCtxt, basePtr, env, c, pc))
+                    if (auto res = osr(callCtxt, basePtr, env, c,
+                                       normalizedPc(c, pc, codeBase)))
                         return res;
                     REC_HOOK(recording::recordReasonsClear());
                 }
@@ -3260,7 +3282,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             SEXP res = nullptr;
             if (Rf_isObject(val)) {
-                SEXP call = getSrcForCall(c, pc - 1);
+                SEXP call = getSrcForCallAtLivePc(pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
                     forceAll(args);
@@ -3288,7 +3310,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             SEXP res = nullptr;
             if (Rf_isObject(val)) {
-                SEXP call = getSrcForCall(c, pc - 1);
+                SEXP call = getSrcForCallAtLivePc(pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
                     forceAll(args);
@@ -3318,7 +3340,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             SEXP res = nullptr;
             if (Rf_isObject(val)) {
-                SEXP call = getSrcForCall(c, pc - 1);
+                SEXP call = getSrcForCallAtLivePc(pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
                     forceAll(args);
@@ -3406,7 +3428,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(args);
             if (Rf_isObject(val)) {
-                SEXP call = getSrcAt(c, pc - 1);
+                SEXP call = getSrcAtLivePc(pc - 1);
                 res =
                     dispatchApply(call, val, args, symbol::DoubleBracket, env);
                 if (!res) {
@@ -3436,7 +3458,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             SEXP res = nullptr;
             if (Rf_isObject(val)) {
-                SEXP call = getSrcForCall(c, pc - 1);
+                SEXP call = getSrcForCallAtLivePc(pc - 1);
                 res =
                     dispatchApply(call, val, args, symbol::DoubleBracket, env);
                 if (!res) {
@@ -3472,7 +3494,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SET_TAG(CDDR(args), symbol::value);
             PROTECT(args);
 
-            SEXP call = getSrcForCall(c, pc - 1);
+            SEXP call = getSrcForCallAtLivePc(pc - 1);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
@@ -3514,7 +3536,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SET_TAG(CDDDR(args), symbol::value);
             PROTECT(args);
 
-            SEXP call = getSrcForCall(c, pc - 1);
+            SEXP call = getSrcForCallAtLivePc(pc - 1);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
@@ -3560,7 +3582,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SET_TAG(CDDDR(args), symbol::value);
             PROTECT(args);
 
-            SEXP call = getSrcForCall(c, pc - 1);
+            SEXP call = getSrcForCallAtLivePc(pc - 1);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
@@ -3679,7 +3701,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SET_TAG(CDDR(args), symbol::value);
             PROTECT(args);
 
-            SEXP call = getSrcForCall(c, pc - 1);
+            SEXP call = getSrcForCallAtLivePc(pc - 1);
 
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
@@ -3794,7 +3816,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SET_TAG(CDDDR(args), symbol::value);
             PROTECT(args);
 
-            SEXP call = getSrcForCall(c, pc - 1);
+            SEXP call = getSrcForCallAtLivePc(pc - 1);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignDoubleBracket);
@@ -3942,6 +3964,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
 eval_done:
     return ostack_pop();
+#undef PC_BOUNDSCHECK
 }
 
 #pragma GCC diagnostic pop

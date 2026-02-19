@@ -28,7 +28,8 @@ extern "C" void __asan_unpoison_memory_region(void const volatile* addr,
 namespace rir {
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv);
-bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* op);
+bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc,
+               Opcode* codeBase = nullptr);
 
 inline RCNTXT* getFunctionContext(size_t pos = 0,
                                   RCNTXT* cptr = (RCNTXT*)R_GlobalContext) {
