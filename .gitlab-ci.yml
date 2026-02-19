@@ -28,7 +28,7 @@ rir_container:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
       alias: docker
   before_script:
     - docker info
@@ -49,7 +49,7 @@ benchmark_container:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
       alias: docker
   before_script:
     - docker info
@@ -378,7 +378,7 @@ deploy:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
       alias: docker
   before_script:
     - docker info
