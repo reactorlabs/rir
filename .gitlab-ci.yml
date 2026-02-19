@@ -23,7 +23,7 @@ variables:
 
 rir_container:
   stage: Build container
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
@@ -44,7 +44,7 @@ benchmark_container:
   stage: Build benchmark container
   needs:
     - rir_container
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
@@ -373,7 +373,7 @@ deploy:
   stage: Deploy
   except:
     - schedules
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
@@ -470,7 +470,7 @@ benchmark_fastr:
     expire_in: 6 month
 
 update_containers:
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
   stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
@@ -486,13 +486,13 @@ update_containers:
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - docker pull docker.io/library/docker:19.03.0-dind
-    - docker pull docker.io/library/docker:stable
+    - docker pull docker.io/library/docker:dind
     - docker pull docker.io/library/ubuntu:20.04
     - docker tag docker.io/library/docker:19.03.0-dind registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
-    - docker tag docker.io/library/docker:stable registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker tag docker.io/library/docker:dind registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
     - docker tag docker.io/library/ubuntu:20.04 registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
     - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
-    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
     - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
     - cd container/benchmark-baseline && sh update.sh
   tags:
