@@ -469,8 +469,9 @@ benchmark_fastr:
     - memory.data
     expire_in: 6 month
 
+# Do not use the dind from Gitlab - no need to bootstrap
 update_containers:
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
+  image: docker:dind
   stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
