@@ -5,7 +5,7 @@
 
 namespace rir {
 
-static constexpr int kMaxLinesForRecordOnce = 30;
+static constexpr int kMaxLinesForRecordOnce = 20;
 
 void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
     if (countNodes(body, kMaxLinesForRecordOnce) >= kMaxLinesForRecordOnce)

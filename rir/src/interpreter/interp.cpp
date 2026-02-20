@@ -1990,6 +1990,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // std::cout << "[record_once] copying bytecode (" << c->codeSize
         //           << " bytes):\n";
         // c->disassemble(std::cout);
+
         Opcode* copy = (Opcode*)alloca(c->codeSize);
         memcpy(copy, c->code(), c->codeSize);
         codeBase = copy;
