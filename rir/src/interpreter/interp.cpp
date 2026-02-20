@@ -1982,11 +1982,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     if (!initialPC)
         R_Visible = TRUE;
 
-    if (c->flags.includes(Code::NeedsBytecodeCopy)) {
+    if (false && c->flags.includes(Code::NeedsBytecodeCopy)) {
         // Code contains record_type_once_ instructions that self-mutate.
         // Make a mutable copy so the original bytecode stays pristine.
         // Always copy even when resuming (deopt/loop) since initialPC points
         // into the original bytecode and mutations would corrupt it.
+
         // std::cout << "[record_once] copying bytecode (" << c->codeSize
         //           << " bytes):\n";
         // c->disassemble(std::cout);
