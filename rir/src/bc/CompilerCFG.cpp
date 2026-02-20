@@ -1,15 +1,15 @@
 #include "CompilerCFG.h"
-#include "AstUtils.h"
+// #include "AstUtils.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 
 namespace rir {
 
-static constexpr int kMaxLinesForRecordOnce = 10000000;
+// static constexpr int kMaxLinesForRecordOnce = 20;
 
 void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
-    if (countNodes(body, kMaxLinesForRecordOnce) >= kMaxLinesForRecordOnce)
-        return;
+    // if (countNodes(body, kMaxLinesForRecordOnce) >= kMaxLinesForRecordOnce)
+    //     return;
 
     // Extract parameters from formals
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
@@ -17,18 +17,17 @@ void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
             parameters_.insert(arg.tag());
     }
 
-    // Scan body: detect loop usage and exclusions
-    scanBody(body, false);
+    // Scan body for exclusions
+    scanBody(body);
 }
 
-void CompilerCFGBuilder::scanBody(SEXP e, bool inLoop) {
+void CompilerCFGBuilder::scanBody(SEXP e) {
     if (!e || e == R_NilValue)
         return;
 
-    // A bare symbol reference: if inside a loop, mark the parameter
     if (TYPEOF(e) == SYMSXP) {
-        if (inLoop && parameters_.count(e))
-            parameters_used_in_loops_.insert(e);
+        // if (inLoop && parameters_.count(e))
+        //     parameters_used_in_loops_.insert(e);
         return;
     }
 
@@ -43,28 +42,25 @@ void CompilerCFGBuilder::scanBody(SEXP e, bool inLoop) {
         SEXP lhs = CADR(e);
         if (TYPEOF(lhs) == SYMSXP && parameters_.count(lhs))
             markParameterExcluded(lhs);
-        scanBody(CADDR(e), inLoop);
+        scanBody(CADDR(e));
         return;
     }
 
-    // Loop constructs: scan body with inLoop=true
-    if (fun == symbol::For) {
-        // for(var in seq) body — seq evaluated once, body on every iteration
-        scanBody(CADDR(e), inLoop); // seq: not in loop
-        scanBody(CADDDR(e), true);  // body: in loop
-        return;
-    }
-    if (fun == symbol::While) {
-        // while(cond) body — both cond and body re-evaluated each iteration
-        scanBody(CADR(e), true);  // cond: in loop
-        scanBody(CADDR(e), true); // body: in loop
-        return;
-    }
-    if (fun == symbol::Repeat) {
-        // repeat body
-        scanBody(CADR(e), true); // body: in loop
-        return;
-    }
+    // Loop constructs
+    // if (fun == symbol::For) {
+    //     scanBody(CADDR(e), inLoop);
+    //     scanBody(CADDDR(e), true);
+    //     return;
+    // }
+    // if (fun == symbol::While) {
+    //     scanBody(CADR(e), true);
+    //     scanBody(CADDR(e), true);
+    //     return;
+    // }
+    // if (fun == symbol::Repeat) {
+    //     scanBody(CADR(e), true);
+    //     return;
+    // }
 
     // Nested functions: exclude shadowed parameters, don't scan body
     if (fun == symbol::Function) {
@@ -83,7 +79,7 @@ void CompilerCFGBuilder::scanBody(SEXP e, bool inLoop) {
 
     // Recursively scan all arguments
     for (SEXP arg = CDR(e); arg != R_NilValue; arg = CDR(arg))
-        scanBody(CAR(arg), inLoop);
+        scanBody(CAR(arg));
 }
 
 void CompilerCFGBuilder::markParameterExcluded(SEXP var) {
@@ -92,12 +88,11 @@ void CompilerCFGBuilder::markParameterExcluded(SEXP var) {
 }
 
 bool CompilerCFGBuilder::isSupportedParameter(SEXP var) const {
-    return var && parameters_used_in_loops_.count(var) &&
-           !excluded_parameters_.count(var);
+    return var && parameters_.count(var) && !excluded_parameters_.count(var);
 }
 
 bool CompilerCFGBuilder::hasSupportedParameters() const {
-    for (SEXP p : parameters_used_in_loops_) {
+    for (SEXP p : parameters_) {
         if (!excluded_parameters_.count(p))
             return true;
     }
