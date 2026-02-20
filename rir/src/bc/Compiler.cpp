@@ -2095,6 +2095,6 @@ bool Compiler::loopPeelingEnabled = true;
 //     getenv("RIR_RECORD_ONCE") && std::string(getenv("RIR_RECORD_ONCE")) !=
 //     "0";
 
-bool Compiler::recordOnce = false;
+bool Compiler::recordOnce = true;
 
 } // namespace rir
