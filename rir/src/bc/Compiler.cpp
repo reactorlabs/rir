@@ -213,7 +213,7 @@ struct LoadArgsResult {
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
 Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
-// If we are in a void context, then compile expression will not leave a value
+//  If we are in a void context, then compile expression will not leave a value
 // on the stack. For example in `{a; b}` the expression `a` is in a void
 // context, but `b` is not. In `while(...) {...}` all loop body expressions are
 // in a void context, since the loop as an expression is always nil.
