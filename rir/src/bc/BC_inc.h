@@ -314,7 +314,7 @@ class BC {
     inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
-    inline static BC recordTypeOnce(uint32_t idx);
+    inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);

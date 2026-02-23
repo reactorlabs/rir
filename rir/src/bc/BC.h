@@ -41,9 +41,11 @@ BC BC::recordTest(uint32_t idx) {
     return BC(Opcode::record_test_, i);
 }
 
-BC BC::recordTypeOnce(uint32_t idx) {
+BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
+    assert(slotIdx <= 0xFFFFFF && "TypeFeedback slot index too large");
+    assert(bitIdx <= 63 && "Bitmap index out of range");
     ImmediateArguments i;
-    i.i = idx;
+    i.i = (bitIdx << 24) | slotIdx;
     return BC(Opcode::record_type_once_, i);
 }
 

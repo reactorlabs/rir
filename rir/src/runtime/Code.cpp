@@ -273,7 +273,10 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     typeFeedback->test(bc.immediate.i).print(out);
                     out << " ] Test#";
                 } else {
-                    typeFeedback->types(bc.immediate.i).print(out);
+                    uint32_t slotIdx = (bc.bc == Opcode::record_type_once_)
+                                           ? (bc.immediate.i & 0xFFFFFF)
+                                           : bc.immediate.i;
+                    typeFeedback->types(slotIdx).print(out);
                     out << " ]";
                     if (bc.bc == Opcode::record_type_once_)
                         out << "1";

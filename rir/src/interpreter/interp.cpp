@@ -1977,29 +1977,16 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     ostack_ensureSize(c->stackLength + 5);
 
     Opcode* pc;
-    Opcode* codeBase; // start of the buffer pc lives in (copy or original)
+    Opcode* codeBase = c->code();
+
+    // Per-call bitmap tracking which record_type_once_ slots have already
+    // fired. Bit i is set after slot i records. Supports up to 64 slots.
+    uint64_t fired = 0;
 
     if (!initialPC)
         R_Visible = TRUE;
 
-    if (false && c->flags.includes(Code::NeedsBytecodeCopy)) {
-        // Code contains record_type_once_ instructions that self-mutate.
-        // Make a mutable copy so the original bytecode stays pristine.
-        // Always copy even when resuming (deopt/loop) since initialPC points
-        // into the original bytecode and mutations would corrupt it.
-
-        // std::cout << "[record_once] copying bytecode (" << c->codeSize
-        //           << " bytes):\n";
-        // c->disassemble(std::cout);
-
-        Opcode* copy = (Opcode*)alloca(c->codeSize);
-        memcpy(copy, c->code(), c->codeSize);
-        codeBase = copy;
-        pc = initialPC ? copy + (initialPC - c->code()) : copy;
-    } else {
-        codeBase = c->code();
-        pc = initialPC ? initialPC : c->code();
-    }
+    pc = initialPC ? initialPC : c->code();
 
 // pc may point into an alloca copy when NeedsBytecodeCopy is set; codeBase
 // is the start of the buffer pc lives in (defined above).
@@ -2037,7 +2024,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        auto idx = *(Immediate*)(pc + 1);
+        Immediate raw = *(Immediate*)(pc + 1);
+        // For record_type_once_, the immediate encodes (bitIdx << 24) | slotIdx
+        uint32_t idx =
+            (*pc == Opcode::record_type_once_) ? (raw & 0xFFFFFF) : raw;
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2385,15 +2375,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_type_once_) {
-            Immediate idx = readImmediate();
+            Immediate raw = readImmediate();
             advanceImmediate();
-            SEXP t = ostack_top();
-            typeFeedback->record_type(idx, t);
-            // Self-mutate: overwrite opcode byte to nop_wide_
-            *(pc - 1 - sizeof(Immediate)) = Opcode::nop_wide_;
-            // if (getenv("RIR_DEBUG_RECORD_ONCE"))
-            //     std::cout << "record_type_once_ #" << idx
-            //               << " mutated to nop_wide\n";
+            uint32_t slotIdx = raw & 0xFFFFFF;
+            uint32_t bitIdx = raw >> 24;
+            uint64_t bit = (uint64_t)1 << bitIdx;
+            if (!(fired & bit)) {
+                typeFeedback->record_type(slotIdx, ostack_top());
+                fired |= bit;
+            }
             NEXT();
         }
 

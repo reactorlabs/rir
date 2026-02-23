@@ -118,7 +118,7 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
-    bool recordTypeOnceEmitted = false;
+    uint32_t recordTypeOnceCount = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -190,8 +190,7 @@ class CompilerContext {
         auto slot_idx = typeFeedbackBuilder.addType();
         if (Compiler::recordOnce && cfgBuilder.shouldRecordOnceInFunction() &&
             cfgBuilder.isSupportedParameter(name)) {
-            recordTypeOnceEmitted = true;
-            return BC::recordTypeOnce(slot_idx);
+            return BC::recordTypeOnce(slot_idx, recordTypeOnceCount++);
         }
         return BC::recordType(slot_idx);
     }
@@ -2066,8 +2065,9 @@ SEXP Compiler::finalize() {
     Code* body = ctx.pop();
 
     // Mark if bytecode contains record_type_once_ (needs copy at runtime)
-    if (Compiler::recordOnce && ctx.recordTypeOnceEmitted)
-        body->flags.set(Code::NeedsBytecodeCopy);
+    // Not needed with the bitmap approach (Option A)
+    // if (Compiler::recordOnce && ctx.recordTypeOnceEmitted)
+    //     body->flags.set(Code::NeedsBytecodeCopy);
 
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
