@@ -57,8 +57,6 @@ class CompilerContext {
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
 
-        uint32_t recordTypeOnceCount = 0;
-
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), parent(p) {}
         virtual ~CodeContext() {}
@@ -120,6 +118,7 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
+    uint32_t recordTypeOnceBitmapSize = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -167,9 +166,7 @@ class CompilerContext {
     }
 
     Code* pop() {
-        uint32_t cnt = code.top()->recordTypeOnceCount;
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
-        res->recordTypeOnceCount = cnt;
         if (code.top()->isPromiseContext())
             pushedPromiseContexts--;
         delete code.top();
@@ -192,12 +189,14 @@ class CompilerContext {
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
         if (Compiler::recordOnce && cfgBuilder.shouldRecordOnceInFunction() &&
-            cfgBuilder.isSupportedParameter(name)) {
+            cfgBuilder.isSupportedParameter(name) &&
+            !code.top()->isPromiseContext()) {
             // std::cerr << "paramter once: ";
             // Rf_PrintValue(name);
             // std::cerr <<  "\n";
-            return BC::recordTypeOnce(slot_idx,
-                                      code.top()->recordTypeOnceCount++);
+            recordTypeOnceBitmapSize =
+                std::max(recordTypeOnceBitmapSize, slot_idx + 1);
+            return BC::recordTypeOnce(slot_idx);
         }
         return BC::recordType(slot_idx);
     }
@@ -2070,6 +2069,7 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
+    body->recordTypeOnceCount = ctx.recordTypeOnceBitmapSize;
 
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
