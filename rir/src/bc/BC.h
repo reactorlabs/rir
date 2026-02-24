@@ -41,9 +41,10 @@ BC BC::recordTest(uint32_t idx) {
     return BC(Opcode::record_test_, i);
 }
 
-BC BC::recordTypeOnce(uint32_t slotIdx) {
+BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
+    assert(slotIdx <= 0xFFFF && bitIdx <= 0xFFFF);
     ImmediateArguments i;
-    i.i = slotIdx;
+    i.i = (bitIdx << 16) | slotIdx;
     return BC(Opcode::record_type_once_, i);
 }
 

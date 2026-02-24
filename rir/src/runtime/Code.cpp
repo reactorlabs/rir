@@ -267,7 +267,9 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 formatLabel(targets[BC::jmpTarget(pc)]);
                 out << "\n";
             } else if (bc.isRecord()) {
-                uint32_t slotIdx = bc.immediate.i;
+                uint32_t slotIdx = (bc.bc == Opcode::record_type_once_)
+                                       ? (bc.immediate.i & 0xFFFF)
+                                       : bc.immediate.i;
                 out << "   "
                     << "[ ";
                 if (bc.bc == Opcode::record_call_) {

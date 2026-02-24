@@ -1985,8 +1985,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // recordTypeOnceCount == 0).
     bool* fired = nullptr;
     if (c->recordTypeOnceCount > 0) {
-        fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
-        memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
+        size_t size = c->recordTypeOnceCount * sizeof(bool);
+        fired = (bool*)alloca(size);
+        memset(fired, 0, size);
+        // std::cerr << "alloca : " << size << "\n";
     }
 
     if (!initialPC)
@@ -2030,7 +2032,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        uint32_t idx = *(Immediate*)(pc + 1);
+        Immediate raw = *(Immediate*)(pc + 1);
+        uint32_t idx =
+            (*pc == Opcode::record_type_once_) ? (raw & 0xFFFF) : raw;
+
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2380,11 +2385,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t slotIdx = raw;
-            assert(fired);
-            if (!fired[slotIdx]) {
+            uint32_t bitIdx = raw >> 16;
+
+            SLOWASSERT(fired);
+            if (!fired[bitIdx]) {
+                uint32_t slotIdx = raw & 0xFFFF;
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired[slotIdx] = true;
+                fired[bitIdx] = true;
             }
             NEXT();
         }

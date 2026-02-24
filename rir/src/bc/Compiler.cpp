@@ -194,9 +194,7 @@ class CompilerContext {
             // std::cerr << "paramter once: ";
             // Rf_PrintValue(name);
             // std::cerr <<  "\n";
-            recordTypeOnceBitmapSize =
-                std::max(recordTypeOnceBitmapSize, slot_idx + 1);
-            return BC::recordTypeOnce(slot_idx);
+            return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
         }
         return BC::recordType(slot_idx);
     }
