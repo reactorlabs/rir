@@ -1979,15 +1979,14 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     Opcode* pc;
     Opcode* codeBase = c->code();
 
-    // Per-invocation bitmap: bit slotIdx is set once a record_type_once_ slot
-    // has been recorded. Allocated whenever the Code has such instructions
+    // Per-invocation array: fired[slotIdx] is set true once a record_type_once_
+    // slot has been recorded. Allocated whenever the Code has such instructions
     // (main function body only; promises emit record_type_ instead and have
     // recordTypeOnceCount == 0).
-    uint64_t* fired = nullptr;
+    bool* fired = nullptr;
     if (c->recordTypeOnceCount > 0) {
-        size_t firedWords = ((size_t)c->recordTypeOnceCount + 63) >> 6;
-        fired = (uint64_t*)alloca(firedWords * sizeof(uint64_t));
-        memset(fired, 0, firedWords * sizeof(uint64_t));
+        fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
+        memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
     }
 
     if (!initialPC)
@@ -2382,12 +2381,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate raw = readImmediate();
             advanceImmediate();
             uint32_t slotIdx = raw;
-            // assert(fired);
-            uint64_t* word = &fired[slotIdx >> 6];
-            uint64_t bit = (uint64_t)1 << (slotIdx & 63);
-            if (!(*word & bit)) {
+            assert(fired);
+            if (!fired[slotIdx]) {
                 typeFeedback->record_type(slotIdx, ostack_top());
-                *word |= bit;
+                fired[slotIdx] = true;
             }
             NEXT();
         }
