@@ -1980,8 +1980,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     Opcode* codeBase = c->code();
 
     // Per-call bitmap tracking which record_type_once_ slots have already
-    // fired. Bit i is set after slot i records. Supports up to 64 slots.
-    uint64_t fired = 0;
+    // fired. Indexed by bitIdx: word = fired[bitIdx >> 6], bit = 1 << (bitIdx &
+    // 63).
+    size_t firedWords = ((size_t)c->recordTypeOnceCount + 63) >> 6;
+    uint64_t* fired =
+        firedWords ? (uint64_t*)alloca(firedWords * sizeof(uint64_t)) : nullptr;
+    if (fired)
+        memset(fired, 0, firedWords * sizeof(uint64_t));
+    // std::cerr << "alloca + memset " << firedWords * sizeof(uint64_t)  << "
+    // bytes \n";
 
     if (!initialPC)
         R_Visible = TRUE;
@@ -2025,9 +2032,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         Immediate raw = *(Immediate*)(pc + 1);
-        // For record_type_once_, the immediate encodes (bitIdx << 24) | slotIdx
+        // For record_type_once_, the immediate encodes (bitIdx << 16) | slotIdx
         uint32_t idx =
-            (*pc == Opcode::record_type_once_) ? (raw & 0xFFFFFF) : raw;
+            (*pc == Opcode::record_type_once_) ? (raw & 0xFFFF) : raw;
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2377,12 +2384,14 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t slotIdx = raw & 0xFFFFFF;
-            uint32_t bitIdx = raw >> 24;
-            uint64_t bit = (uint64_t)1 << bitIdx;
-            if (!(fired & bit)) {
+            uint32_t slotIdx = raw & 0xFFFF;
+            uint32_t bitIdx = raw >> 16;
+            SLOWASSERT(fired);
+            uint64_t* word = &fired[bitIdx >> 6];
+            uint64_t bit = (uint64_t)1 << (bitIdx & 63);
+            if (!(*word & bit)) {
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired |= bit;
+                *word |= bit;
             }
             NEXT();
         }

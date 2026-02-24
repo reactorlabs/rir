@@ -57,6 +57,8 @@ class CompilerContext {
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
 
+        uint32_t recordTypeOnceCount = 0;
+
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), parent(p) {}
         virtual ~CodeContext() {}
@@ -118,7 +120,6 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
-    uint32_t recordTypeOnceCount = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -166,7 +167,9 @@ class CompilerContext {
     }
 
     Code* pop() {
+        uint32_t cnt = code.top()->recordTypeOnceCount;
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
+        res->recordTypeOnceCount = cnt;
         if (code.top()->isPromiseContext())
             pushedPromiseContexts--;
         delete code.top();
@@ -190,7 +193,11 @@ class CompilerContext {
         auto slot_idx = typeFeedbackBuilder.addType();
         if (Compiler::recordOnce && cfgBuilder.shouldRecordOnceInFunction() &&
             cfgBuilder.isSupportedParameter(name)) {
-            return BC::recordTypeOnce(slot_idx, recordTypeOnceCount++);
+            // std::cerr << "paramter once: ";
+            // Rf_PrintValue(name);
+            // std::cerr <<  "\n";
+            return BC::recordTypeOnce(slot_idx,
+                                      code.top()->recordTypeOnceCount++);
         }
         return BC::recordType(slot_idx);
     }
@@ -2063,11 +2070,6 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-
-    // Mark if bytecode contains record_type_once_ (needs copy at runtime)
-    // Not needed with the bitmap approach (Option A)
-    // if (Compiler::recordOnce && ctx.recordTypeOnceEmitted)
-    //     body->flags.set(Code::NeedsBytecodeCopy);
 
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());

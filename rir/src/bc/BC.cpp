@@ -400,7 +400,7 @@ void BC::print(std::ostream& out) const {
         out << "#" << immediate.i;
         break;
     case Opcode::record_type_once_:
-        out << "#" << (immediate.i & 0xFFFFFF) << "[" << (immediate.i >> 24)
+        out << "#" << (immediate.i & 0xFFFF) << "[" << (immediate.i >> 16)
             << "]";
         break;
     case Opcode::nop_wide_:

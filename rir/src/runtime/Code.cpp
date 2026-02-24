@@ -28,7 +28,8 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           NumLocals),
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
       stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      codeSize(cs), recordTypeOnceCount(0), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
@@ -121,6 +122,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
+    code->recordTypeOnceCount = (uint16_t)InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
     SEXP extraPool = ReadItem(refTable, inp);
@@ -168,6 +170,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, localsCount);
     OutInteger(out, bindingCacheSize);
     OutInteger(out, codeSize);
+    OutInteger(out, recordTypeOnceCount);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
     WriteItem(getEntry(0), refTable, out);
@@ -264,6 +267,9 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 formatLabel(targets[BC::jmpTarget(pc)]);
                 out << "\n";
             } else if (bc.isRecord()) {
+                uint32_t slotIdx = (bc.bc == Opcode::record_type_once_)
+                                       ? (bc.immediate.i & 0xFFFF)
+                                       : bc.immediate.i;
                 out << "   "
                     << "[ ";
                 if (bc.bc == Opcode::record_call_) {
@@ -273,16 +279,13 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     typeFeedback->test(bc.immediate.i).print(out);
                     out << " ] Test#";
                 } else {
-                    uint32_t slotIdx = (bc.bc == Opcode::record_type_once_)
-                                           ? (bc.immediate.i & 0xFFFFFF)
-                                           : bc.immediate.i;
                     typeFeedback->types(slotIdx).print(out);
                     out << " ]";
                     if (bc.bc == Opcode::record_type_once_)
                         out << "1";
                     out << " Type#";
                 }
-                out << bc.immediate.i << "\n";
+                out << slotIdx << "\n";
             } else {
                 bc.print(out);
             }
