@@ -21,13 +21,13 @@ void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
     scanBody(body);
 }
 
-void CompilerCFGBuilder::scanBody(SEXP e) {
+void CompilerCFGBuilder::scanBody(SEXP e, bool inLoop) {
     if (!e || e == R_NilValue)
         return;
 
     if (TYPEOF(e) == SYMSXP) {
-        // if (inLoop && parameters_.count(e))
-        //     parameters_used_in_loops_.insert(e);
+        if (inLoop && parameters_.count(e))
+            parameters_used_in_loops_.insert(e);
         return;
     }
 
@@ -42,25 +42,25 @@ void CompilerCFGBuilder::scanBody(SEXP e) {
         SEXP lhs = CADR(e);
         if (TYPEOF(lhs) == SYMSXP && parameters_.count(lhs))
             markParameterExcluded(lhs);
-        scanBody(CADDR(e));
+        scanBody(CADDR(e), inLoop);
         return;
     }
 
     // Loop constructs
-    // if (fun == symbol::For) {
-    //     scanBody(CADDR(e), inLoop);
-    //     scanBody(CADDDR(e), true);
-    //     return;
-    // }
-    // if (fun == symbol::While) {
-    //     scanBody(CADR(e), true);
-    //     scanBody(CADDR(e), true);
-    //     return;
-    // }
-    // if (fun == symbol::Repeat) {
-    //     scanBody(CADR(e), true);
-    //     return;
-    // }
+    if (fun == symbol::For) {
+        scanBody(CADDR(e), inLoop);
+        scanBody(CADDDR(e), true);
+        return;
+    }
+    if (fun == symbol::While) {
+        scanBody(CADR(e), true);
+        scanBody(CADDR(e), true);
+        return;
+    }
+    if (fun == symbol::Repeat) {
+        scanBody(CADR(e), true);
+        return;
+    }
 
     // Nested functions: exclude shadowed parameters, don't scan body
     if (fun == symbol::Function) {
@@ -79,7 +79,7 @@ void CompilerCFGBuilder::scanBody(SEXP e) {
 
     // Recursively scan all arguments
     for (SEXP arg = CDR(e); arg != R_NilValue; arg = CDR(arg))
-        scanBody(CAR(arg));
+        scanBody(CAR(arg), inLoop);
 }
 
 void CompilerCFGBuilder::markParameterExcluded(SEXP var) {
@@ -88,11 +88,12 @@ void CompilerCFGBuilder::markParameterExcluded(SEXP var) {
 }
 
 bool CompilerCFGBuilder::isSupportedParameter(SEXP var) const {
-    return var && parameters_.count(var) && !excluded_parameters_.count(var);
+    return var && parameters_used_in_loops_.count(var) &&
+           !excluded_parameters_.count(var);
 }
 
 bool CompilerCFGBuilder::hasSupportedParameters() const {
-    for (SEXP p : parameters_) {
+    for (SEXP p : parameters_used_in_loops_) {
         if (!excluded_parameters_.count(p))
             return true;
     }
