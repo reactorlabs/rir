@@ -2014,8 +2014,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // marks how this load behaved.
     auto recordForceBehavior = [&](SEXP s) {
         // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_ && *pc != Opcode::record_type_once_)
-            return;
+        Immediate raw = *(Immediate*)(pc + 1);
+        if (*pc != Opcode::record_type_) {
+            size_t bitIdx = raw >> 16;
+            if (*pc != Opcode::record_type_once_ || fired[bitIdx])
+                return;
+        }
 
         ObservedValues::StateBeforeLastForce state =
             ObservedValues::StateBeforeLastForce::unknown;
@@ -2032,7 +2036,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        Immediate raw = *(Immediate*)(pc + 1);
         uint32_t idx =
             (*pc == Opcode::record_type_once_) ? (raw & 0xFFFF) : raw;
 
