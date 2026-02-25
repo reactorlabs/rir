@@ -119,6 +119,8 @@ class CompilerContext {
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
     uint32_t recordTypeOnceBitmapSize = 0;
+    int peelDepth = 0;
+    bool inPeel() const { return peelDepth > 0; }
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -188,7 +190,7 @@ class CompilerContext {
 
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
-        if (Compiler::recordOnce && inLoop() &&
+        if (Compiler::recordOnce && inLoop() && !inPeel() &&
             cfgBuilder.isSupportedParameter(name) &&
             !code.top()->isPromiseContext()) {
             // std::cerr << "paramter once: ";
@@ -258,10 +260,12 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
+        ctx.peelDepth++;
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
 
         compileBody();
+        ctx.peelDepth--;
     }
 
     cs << nextBranch;
@@ -1265,7 +1269,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+            ctx.peelDepth++;
             compileExpr(ctx, body, true);
+            ctx.peelDepth--;
         }
 
         cs << nextBranch;
@@ -1339,8 +1345,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+            ctx.peelDepth++;
             compileIndexOps(true);
             compileExpr(ctx, body, true);
+            ctx.peelDepth--;
         }
 
         cs << nextBranch;
