@@ -188,7 +188,7 @@ class CompilerContext {
 
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
-        if (Compiler::recordOnce && cfgBuilder.shouldRecordOnceInFunction() &&
+        if (Compiler::recordOnce && inLoop() &&
             cfgBuilder.isSupportedParameter(name) &&
             !code.top()->isPromiseContext()) {
             // std::cerr << "paramter once: ";

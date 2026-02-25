@@ -1988,7 +1988,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         size_t size = c->recordTypeOnceCount * sizeof(bool);
         fired = (bool*)alloca(size);
         memset(fired, 0, size);
-        // std::cerr << "alloca : " << size << "\n";
+
+        // std::string fname = "?";
+        // if (callCtxt) {
+        //     SEXP callerSym = CAR(callCtxt->ast);
+        //     if (TYPEOF(callerSym) == SYMSXP)
+        //         fname = CHAR(PRINTNAME(callerSym));
+        // }
+        // std::cerr << "alloca : " << size << " [" << fname << "]\n";
+        // c->disassemble(std::cerr);
     }
 
     if (!initialPC)
