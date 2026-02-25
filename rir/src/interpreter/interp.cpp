@@ -2023,9 +2023,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto recordForceBehavior = [&](SEXP s) {
         // Bail if this load not recorded or we are in already optimized code
         Immediate raw = *(Immediate*)(pc + 1);
+
         if (*pc != Opcode::record_type_) {
-            size_t bitIdx = raw >> 16;
-            if (*pc != Opcode::record_type_once_ || fired[bitIdx])
+            if (*pc != Opcode::record_type_once_ || fired[raw >> 16])
                 return;
         }
 
