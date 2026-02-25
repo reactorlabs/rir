@@ -17,8 +17,13 @@ void CompilerCFGBuilder::configure(SEXP formals, SEXP body) {
             parameters_.insert(arg.tag());
     }
 
-    // Scan body for exclusions
+    // Scan body for loop usage and exclusions
     scanBody(body);
+
+    // Precompute supported parameters: used in loops and not excluded
+    for (SEXP p : parameters_used_in_loops_)
+        if (!excluded_parameters_.count(p))
+            supported_parameters_.insert(p);
 }
 
 void CompilerCFGBuilder::scanBody(SEXP e, bool inLoop) {
@@ -88,16 +93,11 @@ void CompilerCFGBuilder::markParameterExcluded(SEXP var) {
 }
 
 bool CompilerCFGBuilder::isSupportedParameter(SEXP var) const {
-    return var && parameters_used_in_loops_.count(var) &&
-           !excluded_parameters_.count(var);
+    return supported_parameters_.count(var);
 }
 
-bool CompilerCFGBuilder::hasSupportedParameters() const {
-    for (SEXP p : parameters_used_in_loops_) {
-        if (!excluded_parameters_.count(p))
-            return true;
-    }
-    return false;
-}
+// bool CompilerCFGBuilder::hasSupportedParameters() const {
+//     return !supported_parameters_.empty();
+// }
 
 } // namespace rir
