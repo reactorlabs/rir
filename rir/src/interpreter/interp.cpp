@@ -2385,12 +2385,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_type_once_) {
-            Immediate idx = readImmediate();
+            // Immediate idx = readImmediate();
             advanceImmediate();
-            SEXP t = ostack_top();
-            typeFeedback->record_type(idx, t);
+            // SEXP t = ostack_top();
+            // typeFeedback->record_type(idx, t);
             // Self-mutate: overwrite opcode byte to nop_wide_
             *(pc - 1 - sizeof(Immediate)) = Opcode::nop_wide_;
+
             // if (getenv("RIR_DEBUG_RECORD_ONCE"))
             //     std::cout << "record_type_once_ #" << idx
             //               << " mutated to nop_wide\n";
