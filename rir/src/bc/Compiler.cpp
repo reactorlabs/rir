@@ -192,12 +192,15 @@ class CompilerContext {
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
         if (Compiler::recordOnce && cfgBuilder.isSupportedParameter(name)) {
-            if (!code.top()->isPromiseContext() && inLoop() && !inPeel()) {
-                return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
-            } else if (code.top()->isPromiseContext() &&
-                       recordTypeOncePromiseBitmapSize < 64) {
-                return BC::recordTypeOncePromise(
-                    slot_idx, recordTypeOncePromiseBitmapSize++);
+            if (inLoop() && !inPeel()) {
+                if (!code.top()->isPromiseContext()) {
+                    return BC::recordTypeOnce(slot_idx,
+                                              recordTypeOnceBitmapSize++);
+                } else if (code.top()->isPromiseContext() &&
+                           recordTypeOncePromiseBitmapSize < 64) {
+                    return BC::recordTypeOncePromise(
+                        slot_idx, recordTypeOncePromiseBitmapSize++);
+                }
             }
         }
         return BC::recordType(slot_idx);
