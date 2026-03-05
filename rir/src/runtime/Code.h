@@ -145,6 +145,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned codeSize; /// bytes of code (not padded)
 
     uint16_t recordTypeOnceCount; /// number of record_type_once_ instructions
+    uint16_t recordTypeOncePromiseCount; /// number of record_type_once_promise_
+                                         /// instructions across all promises
 
     unsigned srcLength; /// number of sources attached
 

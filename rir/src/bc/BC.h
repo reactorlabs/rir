@@ -48,6 +48,13 @@ BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
     return BC(Opcode::record_type_once_, i);
 }
 
+BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t promiseIdx) {
+    assert(slotIdx <= 0xFFFF && promiseIdx <= 0xFFFF);
+    ImmediateArguments i;
+    i.i = (promiseIdx << 16) | slotIdx;
+    return BC(Opcode::record_type_once_promise_, i);
+}
+
 BC BC::asSwitchIdx() { return BC(Opcode::as_switch_idx_); }
 
 BC BC::popn(unsigned n) {

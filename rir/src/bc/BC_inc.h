@@ -266,7 +266,8 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_ || bc == Opcode::record_type_once_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_ ||
+               bc == Opcode::record_type_once_promise_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -315,6 +316,8 @@ class BC {
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
     inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
+    inline static BC recordTypeOncePromise(uint32_t slotIdx,
+                                           uint32_t promiseIdx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -568,6 +571,7 @@ class BC {
         case Opcode::record_test_:
         case Opcode::record_type_:
         case Opcode::record_type_once_:
+        case Opcode::record_type_once_promise_:
         case Opcode::nop_wide_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;

@@ -400,6 +400,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::record_type_once_promise_:
     case Opcode::record_type_once_:
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;

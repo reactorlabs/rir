@@ -1979,15 +1979,21 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     Opcode* pc;
     Opcode* codeBase = c->code();
 
-    // Per-invocation array: fired[slotIdx] is set true once a record_type_once_
-    // slot has been recorded. Allocated whenever the Code has such instructions
-    // (main function body only; promises emit record_type_ instead and have
-    // recordTypeOnceCount == 0).
+    // Per-invocation array: fired[bitIdx] is set true once a record_type_once_
+    // slot has been recorded. Allocated for the main function body only;
+    // promises use a 64-bit bitmap in the environment instead.
     bool* fired = nullptr;
     if (c->recordTypeOnceCount > 0) {
         size_t size = c->recordTypeOnceCount * sizeof(bool);
         fired = (bool*)alloca(size);
         memset(fired, 0, size);
+    }
+
+    // Zero the promise bitmap in the environment at function-call start.
+    // callCtxt != nullptr means this is a true function invocation (not a
+    // promise or deopt resume), so env is the fresh call environment.
+    if (callCtxt && c->recordTypeOncePromiseCount > 0) {
+        env->u.envsxp.recordTypeOnceBitmap = 0;
 
         // std::string fname = "?";
         // if (callCtxt) {
@@ -2025,8 +2031,16 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         Immediate raw = *(Immediate*)(pc + 1);
 
         if (*pc != Opcode::record_type_) {
-            if (*pc != Opcode::record_type_once_ || fired[raw >> 16])
+            if (*pc == Opcode::record_type_once_) {
+                if (fired[raw >> 16])
+                    return;
+            } else if (*pc == Opcode::record_type_once_promise_) {
+                uint64_t bit = (uint64_t)1 << (raw >> 16);
+                if (env->u.envsxp.recordTypeOnceBitmap & bit)
+                    return;
+            } else {
                 return;
+            }
         }
 
         ObservedValues::StateBeforeLastForce state =
@@ -2044,8 +2058,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        uint32_t idx =
-            (*pc == Opcode::record_type_once_) ? (raw & 0xFFFF) : raw;
+        uint32_t idx = (*pc == Opcode::record_type_) ? raw : (raw & 0xFFFF);
 
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
@@ -2403,6 +2416,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 uint32_t slotIdx = raw & 0xFFFF;
                 typeFeedback->record_type(slotIdx, ostack_top());
                 fired[bitIdx] = true;
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_promise_) {
+            Immediate raw = readImmediate();
+            advanceImmediate();
+            uint32_t promiseIdx = raw >> 16;
+            uint64_t bit = (uint64_t)1 << promiseIdx;
+            if (!(env->u.envsxp.recordTypeOnceBitmap & bit)) {
+                uint32_t slotIdx = raw & 0xFFFF;
+                typeFeedback->record_type(slotIdx, ostack_top());
+                env->u.envsxp.recordTypeOnceBitmap |= bit;
             }
             NEXT();
         }

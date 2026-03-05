@@ -119,6 +119,7 @@ class CompilerContext {
     TypeFeedback::Builder typeFeedbackBuilder;
     CompilerCFGBuilder cfgBuilder;
     uint32_t recordTypeOnceBitmapSize = 0;
+    uint32_t recordTypeOncePromiseBitmapSize = 0;
     int peelDepth = 0;
     bool inPeel() const { return peelDepth > 0; }
 
@@ -190,13 +191,14 @@ class CompilerContext {
 
     BC recordTypeAndTrack(SEXP name) {
         auto slot_idx = typeFeedbackBuilder.addType();
-        if (Compiler::recordOnce && inLoop() && !inPeel() &&
-            cfgBuilder.isSupportedParameter(name) &&
-            !code.top()->isPromiseContext()) {
-            // std::cerr << "paramter once: ";
-            // Rf_PrintValue(name);
-            // std::cerr <<  "\n";
-            return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
+        if (Compiler::recordOnce && cfgBuilder.isSupportedParameter(name)) {
+            if (!code.top()->isPromiseContext() && inLoop() && !inPeel()) {
+                return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
+            } else if (code.top()->isPromiseContext() &&
+                       recordTypeOncePromiseBitmapSize < 64) {
+                return BC::recordTypeOncePromise(
+                    slot_idx, recordTypeOncePromiseBitmapSize++);
+            }
         }
         return BC::recordType(slot_idx);
     }
@@ -2076,6 +2078,7 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     body->recordTypeOnceCount = ctx.recordTypeOnceBitmapSize;
+    body->recordTypeOncePromiseCount = ctx.recordTypeOncePromiseBitmapSize;
 
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
