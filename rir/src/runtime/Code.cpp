@@ -287,7 +287,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     if (bc.bc == Opcode::record_type_once_)
                         out << "1";
                     else if (bc.bc == Opcode::record_type_once_promise_)
-                        out << "1p";
+                        out << "1p (iidx " << (bc.immediate.i >> 16) << ")";
                     out << " Type#";
                 }
                 out << slotIdx << "\n";
