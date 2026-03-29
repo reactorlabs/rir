@@ -31,6 +31,18 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+// Global boolean vector used to track record_type_once_ fired state across
+// all active interpreter frames. Each invocation of evalRirCode claims a
+// contiguous slice [localVecOffset, localVecOffset + recordTypeOnceCount).
+// VecProtect shrinks the vector back on frame exit (RAII).
+static std::vector<bool> firedVec;
+
+struct VecProtect {
+    size_t size;
+    VecProtect(size_t size) : size(size) {}
+    ~VecProtect() { firedVec.resize(size); }
+};
+
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
@@ -1979,15 +1991,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     Opcode* pc;
     Opcode* codeBase = c->code();
 
-    // Per-invocation array: fired[bitIdx] is set true once a record_type_once_
-    // slot has been recorded. Allocated for the main function body only;
-    // promises use a 64-bit bitmap in the environment instead.
-    bool* fired = nullptr;
-    if (c->recordTypeOnceCount > 0) {
-        size_t size = c->recordTypeOnceCount * sizeof(bool);
-        fired = (bool*)alloca(size);
-        memset(fired, 0, size);
-    }
+    // Claim a slice of the global firedVec for this invocation's
+    // record_type_once_ bits. VecProtect restores the size on exit.
+    size_t localVecOffset = firedVec.size();
+    VecProtect firedVecProtect{localVecOffset};
+    if (c->recordTypeOnceCount > 0)
+        firedVec.resize(localVecOffset + c->recordTypeOnceCount, false);
 
     // Zero the promise bitmap in the environment at function-call start.
     // callCtxt != nullptr means this is a true function invocation (not a
@@ -2032,7 +2041,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                if (fired[RECORD_TYPE_ONCE_IIDX(raw)])
+                if (firedVec[localVecOffset + RECORD_TYPE_ONCE_IIDX(raw)])
                     return;
             } else if (*pc == Opcode::record_type_once_promise_) {
                 if (env->u.envsxp.recordTypeOnceBitmap &
@@ -2411,13 +2420,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
+            uint32_t iidx = RECORD_TYPE_ONCE_IIDX(raw);
 
-            SLOWASSERT(fired);
-            if (!fired[bitIdx]) {
+            auto global_iidx = localVecOffset + iidx;
+            if (!firedVec[global_iidx]) {
                 uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired[bitIdx] = true;
+                firedVec[global_iidx] = true;
             }
             NEXT();
         }
