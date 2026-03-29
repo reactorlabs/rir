@@ -196,7 +196,9 @@ class CompilerContext {
             if (!code.top()->isPromiseContext() && inLoop()) {
                 return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
             } else if (code.top()->isPromiseContext() &&
-                       recordTypeOncePromiseBitmapSize < 64 && inLoop()) {
+                       recordTypeOncePromiseBitmapSize <
+                           RECORD_TYPE_ONCE_MAX_PROMISE_BITMAP &&
+                       inLoop()) {
                 // assert(false);
                 return BC::recordTypeOncePromise(
                     slot_idx, recordTypeOncePromiseBitmapSize++);

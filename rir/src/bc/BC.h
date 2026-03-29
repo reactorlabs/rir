@@ -42,16 +42,18 @@ BC BC::recordTest(uint32_t idx) {
 }
 
 BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
-    assert(slotIdx <= 0xFFFF && bitIdx <= 0xFFFF);
+    assert(RECORD_TYPE_ONCE_VALID_SLOT_IDX(slotIdx) &&
+           RECORD_TYPE_ONCE_VALID_IIDX(bitIdx));
     ImmediateArguments i;
-    i.i = (bitIdx << 16) | slotIdx;
+    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, bitIdx);
     return BC(Opcode::record_type_once_, i);
 }
 
 BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t promiseIdx) {
-    assert(slotIdx <= 0xFFFF && promiseIdx <= 0xFFFF);
+    assert(RECORD_TYPE_ONCE_VALID_SLOT_IDX(slotIdx) &&
+           RECORD_TYPE_ONCE_VALID_IIDX(promiseIdx));
     ImmediateArguments i;
-    i.i = (promiseIdx << 16) | slotIdx;
+    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, promiseIdx);
     return BC(Opcode::record_type_once_promise_, i);
 }
 

@@ -2032,11 +2032,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                if (fired[raw >> 16])
+                if (fired[RECORD_TYPE_ONCE_IIDX(raw)])
                     return;
             } else if (*pc == Opcode::record_type_once_promise_) {
-                uint64_t bit = (uint64_t)1 << (raw >> 16);
-                if (env->u.envsxp.recordTypeOnceBitmap & bit)
+                if (env->u.envsxp.recordTypeOnceBitmap &
+                    RECORD_TYPE_ONCE_BIT(raw))
                     return;
             } else {
                 return;
@@ -2058,7 +2058,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        uint32_t idx = (*pc == Opcode::record_type_) ? raw : (raw & 0xFFFF);
+        uint32_t idx = (*pc == Opcode::record_type_)
+                           ? raw
+                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
 
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
@@ -2409,11 +2411,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t bitIdx = raw >> 16;
+            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
 
             SLOWASSERT(fired);
             if (!fired[bitIdx]) {
-                uint32_t slotIdx = raw & 0xFFFF;
+                uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
                 fired[bitIdx] = true;
             }
@@ -2423,10 +2425,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_promise_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t promiseIdx = raw >> 16;
-            uint64_t bit = (uint64_t)1 << promiseIdx;
+            uint64_t bit = RECORD_TYPE_ONCE_BIT(raw);
             if (!(env->u.envsxp.recordTypeOnceBitmap & bit)) {
-                uint32_t slotIdx = raw & 0xFFFF;
+                uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
                 env->u.envsxp.recordTypeOnceBitmap |= bit;
             }

@@ -269,10 +269,11 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 formatLabel(targets[BC::jmpTarget(pc)]);
                 out << "\n";
             } else if (bc.isRecord()) {
-                uint32_t slotIdx = (bc.bc == Opcode::record_type_once_ ||
-                                    bc.bc == Opcode::record_type_once_promise_)
-                                       ? (bc.immediate.i & 0xFFFF)
-                                       : bc.immediate.i;
+                uint32_t slotIdx =
+                    (bc.bc == Opcode::record_type_once_ ||
+                     bc.bc == Opcode::record_type_once_promise_)
+                        ? RECORD_TYPE_ONCE_SLOT_IDX(bc.immediate.i)
+                        : bc.immediate.i;
                 out << "   "
                     << "[ ";
                 if (bc.bc == Opcode::record_call_) {
@@ -285,9 +286,11 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     typeFeedback->types(slotIdx).print(out);
                     out << " ]";
                     if (bc.bc == Opcode::record_type_once_)
-                        out << "1 (iidx " << (bc.immediate.i >> 16) << ")";
+                        out << "1 (iidx "
+                            << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";
                     else if (bc.bc == Opcode::record_type_once_promise_)
-                        out << "1p (iidx " << (bc.immediate.i >> 16) << ")";
+                        out << "1p (iidx "
+                            << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";
                     out << " Type#";
                 }
                 out << slotIdx << "\n";

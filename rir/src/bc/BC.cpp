@@ -403,12 +403,12 @@ void BC::print(std::ostream& out) const {
         out << "#" << immediate.i;
         break;
     case Opcode::record_type_once_:
-        out << "#" << (immediate.i & 0xFFFF) << "[" << (immediate.i >> 16)
-            << "]";
+        out << "#" << RECORD_TYPE_ONCE_SLOT_IDX(immediate.i) << "["
+            << RECORD_TYPE_ONCE_IIDX(immediate.i) << "]";
         break;
     case Opcode::record_type_once_promise_:
-        out << "#" << (immediate.i & 0xFFFF) << "[" << (immediate.i >> 16)
-            << "]p";
+        out << "#" << RECORD_TYPE_ONCE_SLOT_IDX(immediate.i) << "["
+            << RECORD_TYPE_ONCE_IIDX(immediate.i) << "]p";
         break;
     case Opcode::nop_wide_:
         break;
