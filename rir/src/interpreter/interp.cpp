@@ -1982,10 +1982,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // Per-invocation array: fired[bitIdx] is set true once a record_type_once_
     // slot has been recorded. Allocated for the main function body only;
     // promises use a 64-bit bitmap in the environment instead.
-    bool* fired = nullptr;
+    uint64_t* fired = nullptr;
     if (c->recordTypeOnceCount > 0) {
-        size_t size = c->recordTypeOnceCount * sizeof(bool);
-        fired = (bool*)alloca(size);
+        size_t size = RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
+                      sizeof(uint64_t);
+        fired = (uint64_t*)alloca(size);
         memset(fired, 0, size);
     }
 
@@ -2032,7 +2033,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                if (fired[RECORD_TYPE_ONCE_IIDX(raw)])
+                if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
+                                                 RECORD_TYPE_ONCE_IIDX(raw)))
                     return;
             } else if (*pc == Opcode::record_type_once_promise_) {
                 if (env->u.envsxp.recordTypeOnceBitmap &
@@ -2414,10 +2416,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
 
             SLOWASSERT(fired);
-            if (!fired[bitIdx]) {
+            if (!RECORD_TYPE_ONCE_BITMAP_TEST(fired, bitIdx)) {
                 uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired[bitIdx] = true;
+                RECORD_TYPE_ONCE_BITMAP_SET(fired, bitIdx);
             }
             NEXT();
         }
