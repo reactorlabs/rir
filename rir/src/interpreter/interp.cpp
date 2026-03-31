@@ -1995,11 +1995,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // record_type_once_ bits. VecProtect restores the size on exit.
     size_t localVecOffset = firedVec.size();
     VecProtect firedVecProtect{localVecOffset};
-    uint8_t* fired = nullptr;
-    if (c->recordTypeOnceCount > 0) {
+    if (c->recordTypeOnceCount > 0)
         firedVec.resize(localVecOffset + c->recordTypeOnceCount, 0);
-        fired = firedVec.data() + localVecOffset;
-    }
 
     // Zero the promise bitmap in the environment at function-call start.
     // callCtxt != nullptr means this is a true function invocation (not a
@@ -2044,7 +2041,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                if (fired[RECORD_TYPE_ONCE_IIDX(raw)])
+                if (firedVec[localVecOffset + RECORD_TYPE_ONCE_IIDX(raw)])
                     return;
             } else if (*pc == Opcode::record_type_once_promise_) {
                 if (env->u.envsxp.recordTypeOnceBitmap &
@@ -2425,10 +2422,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             uint32_t iidx = RECORD_TYPE_ONCE_IIDX(raw);
 
-            if (!fired[iidx]) {
+            auto global_iidx = localVecOffset + iidx;
+            if (!firedVec[global_iidx]) {
                 uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired[iidx] = 1;
+                firedVec[global_iidx] = 1;
             }
             NEXT();
         }
