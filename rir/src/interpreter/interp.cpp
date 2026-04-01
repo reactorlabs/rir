@@ -1979,15 +1979,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     Opcode* pc;
     Opcode* codeBase = c->code();
 
-    // Per-invocation array: fired[bitIdx] is set true once a record_type_once_
-    // slot has been recorded. Allocated for the main function body only;
-    // promises use a 64-bit bitmap in the environment instead.
-    bool* fired = nullptr;
-    if (c->recordTypeOnceCount > 0) {
-        size_t size = c->recordTypeOnceCount * sizeof(bool);
-        fired = (bool*)alloca(size);
-        memset(fired, 0, size);
-    }
+    // 64-bit bitmap: bit iidx is set once a record_type_once_ slot has fired.
+    // Promises use the same strategy via recordTypeOnceBitmap in the env.
+    uint64_t firedBitmap = 0;
 
     // Zero the promise bitmap in the environment at function-call start.
     // callCtxt != nullptr means this is a true function invocation (not a
@@ -2032,7 +2026,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                if (fired[RECORD_TYPE_ONCE_IIDX(raw)])
+                if (firedBitmap & RECORD_TYPE_ONCE_BIT(raw))
                     return;
             } else if (*pc == Opcode::record_type_once_promise_) {
                 if (env->u.envsxp.recordTypeOnceBitmap &
@@ -2411,13 +2405,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_once_) {
             Immediate raw = readImmediate();
             advanceImmediate();
-            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
-
-            SLOWASSERT(fired);
-            if (!fired[bitIdx]) {
+            uint64_t bit = RECORD_TYPE_ONCE_BIT(raw);
+            if (!(firedBitmap & bit)) {
                 uint32_t slotIdx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
                 typeFeedback->record_type(slotIdx, ostack_top());
-                fired[bitIdx] = true;
+                firedBitmap |= bit;
             }
             NEXT();
         }

@@ -22,7 +22,7 @@ typedef uint32_t Immediate;
 // Macros for packing/unpacking the immediate of record_type_once_ and
 // record_type_once_promise_: low 16 bits = slotIdx, high 16 bits = iidx
 // (bitIdx for record_type_once_, promiseIdx for record_type_once_promise_).
-#define RECORD_TYPE_ONCE_MAX_PROMISE_BITMAP 64
+#define RECORD_TYPE_ONCE_MAX_BITMAP 64
 #define RECORD_TYPE_ONCE_VALID_SLOT_IDX(idx) ((idx) <= 0xFFFF)
 #define RECORD_TYPE_ONCE_VALID_IIDX(idx) ((idx) <= 0xFFFF)
 #define RECORD_TYPE_ONCE_SLOT_IDX(imm) ((imm)&0xFFFF)

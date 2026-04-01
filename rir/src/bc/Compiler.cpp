@@ -193,11 +193,13 @@ class CompilerContext {
         auto slot_idx = typeFeedbackBuilder.addType();
         if (Compiler::recordOnce && cfgBuilder.isSupportedParameter(name)) {
 
-            if (!code.top()->isPromiseContext() && inLoop()) {
+            if (!code.top()->isPromiseContext() &&
+                recordTypeOnceBitmapSize < RECORD_TYPE_ONCE_MAX_BITMAP &&
+                inLoop()) {
                 return BC::recordTypeOnce(slot_idx, recordTypeOnceBitmapSize++);
             } else if (code.top()->isPromiseContext() &&
                        recordTypeOncePromiseBitmapSize <
-                           RECORD_TYPE_ONCE_MAX_PROMISE_BITMAP &&
+                           RECORD_TYPE_ONCE_MAX_BITMAP &&
                        inLoop()) {
                 // assert(false);
                 return BC::recordTypeOncePromise(
