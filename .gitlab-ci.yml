@@ -23,12 +23,12 @@ variables:
 
 rir_container:
   stage: Build container
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
       alias: docker
   before_script:
     - docker info
@@ -44,12 +44,12 @@ benchmark_container:
   stage: Build benchmark container
   needs:
     - rir_container
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
       alias: docker
   before_script:
     - docker info
@@ -373,12 +373,12 @@ deploy:
   stage: Deploy
   except:
     - schedules
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
       alias: docker
   before_script:
     - docker info
@@ -469,8 +469,9 @@ benchmark_fastr:
     - memory.data
     expire_in: 6 month
 
+# Do not use the dind from Gitlab - no need to bootstrap
 update_containers:
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  image: docker:dind
   stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
@@ -485,14 +486,11 @@ update_containers:
       - schedules
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
-    - docker pull docker.io/library/docker:19.03.0-dind
-    - docker pull docker.io/library/docker:stable
+    - docker pull docker.io/library/docker:29.2.1-dind
     - docker pull docker.io/library/ubuntu:20.04
-    - docker tag docker.io/library/docker:19.03.0-dind registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
-    - docker tag docker.io/library/docker:stable registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker tag docker.io/library/docker:29.2.1-dind registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
     - docker tag docker.io/library/ubuntu:20.04 registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
-    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
-    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:29.2.1-dind
     - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
     - cd container/benchmark-baseline && sh update.sh
   tags:
