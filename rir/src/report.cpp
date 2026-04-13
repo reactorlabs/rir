@@ -1162,6 +1162,8 @@ const bool UseRIRNames::value =
 // SATURATION EXPERIMENT
 // ------------------------------------------------------------
 
+#if STATS_COLLECT
+
 void saturationInfo(int iteration) {
     auto doReport = [&](std::ostream& os) {
         std::unordered_set<Function*> functions;
@@ -1193,7 +1195,8 @@ void saturationInfo(int iteration) {
     };
 
     if (std::getenv("STATS_SATURATION_OUT") != nullptr) {
-        std::ofstream ofs{std::getenv("STATS_SATURATION_OUT"), std::ios::out | std::ios::app};
+        std::ofstream ofs{std::getenv("STATS_SATURATION_OUT"),
+                          std::ios::out | std::ios::app};
 
         ofs.seekp(0, std::ios::end);
         if (ofs.tellp() == 0) {
@@ -1205,6 +1208,8 @@ void saturationInfo(int iteration) {
         doReport(std::cerr);
     }
 }
+
+#endif // STATS_COLLECT
 
 } // namespace report
 } // namespace rir
