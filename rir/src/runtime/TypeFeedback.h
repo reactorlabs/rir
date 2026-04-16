@@ -312,6 +312,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
     friend Function;
 
+    // Sentinel: typeDeps_[i] == NoDep means slot i records directly (no
+    // source).
+    static constexpr uint32_t NoDep = UINT32_MAX;
+
     Function* owner_;
     size_t callees_size_;
     size_t tests_size_;
@@ -319,19 +323,24 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedCallees* callees_;
     ObservedTest* tests_;
     ObservedValues* types_;
-    // All the data are stored in this array: callees, tests and types in this
-    // order. The constructors sets the above pointers to point at the
-    // appropriate locations.
+    // Parallel to types_: typeDeps_[i] is NoDep or the source slot index whose
+    // recorded type should be copied into slot i before JIT compilation.
+    uint32_t* typeDeps_;
+    // All the data are stored in this array: callees, tests, types, and
+    // typeDeps in this order. The constructor sets the above pointers to point
+    // at the appropriate locations.
     uint8_t slots_[];
 
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
-                          const std::vector<ObservedValues>& types);
+                          const std::vector<ObservedValues>& types,
+                          const std::vector<uint32_t>& typeDeps);
 
   public:
     static TypeFeedback* create(const std::vector<ObservedCallees>& callees,
                                 const std::vector<ObservedTest>& tests,
-                                const std::vector<ObservedValues>& types);
+                                const std::vector<ObservedValues>& types,
+                                const std::vector<uint32_t>& typeDeps = {});
 
     static TypeFeedback* empty();
     static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
@@ -340,11 +349,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         unsigned ncallees_ = 0;
         unsigned ntests_ = 0;
         unsigned ntypes_ = 0;
+        std::vector<uint32_t> typeDeps_;
 
       public:
+        unsigned typeCount() const { return ntypes_; }
         uint32_t addCallee();
         uint32_t addTest();
         uint32_t addType();
+        // Record that the type slot `slot` should be populated from `source`
+        // before JIT compilation rather than being recorded at runtime.
+        void setTypeDep(uint32_t slot, uint32_t source);
         TypeFeedback* build();
     };
 
@@ -376,6 +390,14 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     size_t callees_size() { return callees_size_; }
     size_t tests_size() { return tests_size_; }
     size_t types_size() { return types_size_; }
+
+    // Returns the source slot for slot `idx`, or NoDep if it records directly.
+    uint32_t typeDep(uint32_t idx) const { return typeDeps_[idx]; }
+
+    // For each type slot that has a dependency, copy the source slot's
+    // ObservedValues into it. Call this before JIT compilation so that
+    // unrecorded slots have the same type info as their source.
+    void propagateDeps();
 
     void print(std::ostream& out) const;
 

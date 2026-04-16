@@ -47,6 +47,7 @@ class DefUseAnalysis {
 
     struct DefsSnapshot {
         std::unordered_map<SEXP, std::vector<Def>> defs;
+        std::unordered_map<SEXP, Def> useDefs;
         int closedReturnCount;
         std::vector<int> closedLoopExitByDepth;
     };
@@ -66,6 +67,7 @@ class DefUseAnalysis {
     // ---- data ----
 
     std::unordered_map<SEXP, std::vector<Def>> defs_;
+    std::unordered_map<SEXP, Def> useDefs_;
     int loopDepth_ = 0;
     std::vector<BranchEntry> branchStack_;
     int nextBranchId_ = 1;
@@ -76,6 +78,7 @@ class DefUseAnalysis {
     // ---- compile-time state updates ----
 
     void trackDef(SEXP name, int feedbackSlot = -1) {
+        useDefs_.erase(name);
         int loopExitCount = (loopDepth_ < (int)closedLoopExitByDepth_.size())
                                 ? closedLoopExitByDepth_[loopDepth_]
                                 : 0;
@@ -83,6 +86,15 @@ class DefUseAnalysis {
             {loopDepth_,
              branchStack_.empty() ? 0 : branchStack_.back().branchId,
              closedReturnCount_, loopExitCount, feedbackSlot});
+    }
+
+    void trackUseDef(SEXP name, int slot) {
+        int loopExitCount = (loopDepth_ < (int)closedLoopExitByDepth_.size())
+                                ? closedLoopExitByDepth_[loopDepth_]
+                                : 0;
+        useDefs_[name] = {
+            loopDepth_, branchStack_.empty() ? 0 : branchStack_.back().branchId,
+            closedReturnCount_, loopExitCount, slot};
     }
 
     void enterBranch() {
@@ -126,10 +138,11 @@ class DefUseAnalysis {
     // ---- save / restore for loop peeling ----
 
     DefsSnapshot saveState() const {
-        return {defs_, closedReturnCount_, closedLoopExitByDepth_};
+        return {defs_, useDefs_, closedReturnCount_, closedLoopExitByDepth_};
     }
     void restoreState(DefsSnapshot&& s) {
         defs_ = std::move(s.defs);
+        useDefs_ = std::move(s.useDefs);
         closedReturnCount_ = s.closedReturnCount;
         closedLoopExitByDepth_ = std::move(s.closedLoopExitByDepth);
     }
@@ -138,6 +151,20 @@ class DefUseAnalysis {
 
     // Classify the use of `name` at the current compilation point.
     UseClassification classifyUse(SEXP name) const {
+        // Check use-defs first: a previously recorded use of `name` that
+        // dominates this point and is post-dominated by it can serve as the
+        // type-info source, avoiding another recording.
+        if (!hasUnseenLoopDef(name)) {
+            auto udIt = useDefs_.find(name);
+            if (udIt != useDefs_.end()) {
+                const Def& ud = udIt->second;
+                if (isVisibleDef(ud)) {
+                    if (postDominates(ud))
+                        return {UseKind::NoRecord, ud.feedbackSlot};
+                }
+            }
+        }
+
         const Def* d = findReachingDef(name);
         if (!d)
             return {UseKind::RecordAlways, -1};
@@ -172,6 +199,21 @@ class DefUseAnalysis {
     }
 
   private:
+    // Returns true if `d` dominates the current compilation point: d was
+    // unconditional (branchId == 0) or its branch is still open, and it was
+    // defined at a loop depth reachable from here.
+    bool isVisibleDef(const Def& d) const {
+        if (d.loopDepth > loopDepth_)
+            return false;
+        if (d.branchId == 0)
+            return true;
+        for (const auto& entry : branchStack_) {
+            if (entry.branchId == d.branchId)
+                return true;
+        }
+        return false;
+    }
+
     // Returns a pointer to the unique dominating def of `name` at the current
     // compilation point, or nullptr if none exists.
     //

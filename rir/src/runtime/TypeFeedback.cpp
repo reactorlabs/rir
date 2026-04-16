@@ -12,6 +12,8 @@
 
 namespace rir {
 
+constexpr uint32_t TypeFeedback::NoDep;
+
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     REC_HOOK(bool isSuccesful = false);
@@ -171,9 +173,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         types.push_back(std::move(tmp));
     }
 
-    auto res = TypeFeedback::create(callees, tests, types);
-
-    return res;
+    return TypeFeedback::create(callees, tests, types);
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -233,14 +233,22 @@ uint32_t TypeFeedback::Builder::addCallee() { return ncallees_++; }
 
 uint32_t TypeFeedback::Builder::addTest() { return ntests_++; }
 
-uint32_t TypeFeedback::Builder::addType() { return ntypes_++; }
+uint32_t TypeFeedback::Builder::addType() {
+    typeDeps_.push_back(NoDep);
+    return ntypes_++;
+}
+
+void TypeFeedback::Builder::setTypeDep(uint32_t slot, uint32_t source) {
+    assert(slot < typeDeps_.size());
+    typeDeps_[slot] = source;
+}
 
 TypeFeedback* TypeFeedback::Builder::build() {
     std::vector<ObservedCallees> callees(ncallees_, ObservedCallees{});
     std::vector<ObservedTest> tests(ntests_, ObservedTest{});
     std::vector<ObservedValues> types(ntypes_, ObservedValues{});
 
-    return TypeFeedback::create(callees, tests, types);
+    return TypeFeedback::create(callees, tests, types, typeDeps_);
 }
 
 TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
@@ -264,24 +272,27 @@ bool TypeFeedback::isValid(const FeedbackIndex& index) const {
 
 TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
                                    const std::vector<ObservedTest>& tests,
-                                   const std::vector<ObservedValues>& types) {
+                                   const std::vector<ObservedValues>& types,
+                                   const std::vector<uint32_t>& typeDeps) {
     size_t dataSize = callees.size() * sizeof(ObservedCallees) +
                       tests.size() * sizeof(ObservedTest) +
-                      types.size() * sizeof(ObservedValues);
+                      types.size() * sizeof(ObservedValues) +
+                      types.size() * sizeof(uint32_t);
 
     size_t objSize = sizeof(TypeFeedback) + dataSize;
 
     SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
 
     TypeFeedback* res =
-        new (INTEGER(store)) TypeFeedback(callees, tests, types);
+        new (INTEGER(store)) TypeFeedback(callees, tests, types, typeDeps);
 
     return res;
 }
 
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
-                           const std::vector<ObservedValues>& types)
+                           const std::vector<ObservedValues>& types,
+                           const std::vector<uint32_t>& typeDeps)
     : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
       tests_size_(tests.size()), types_size_(types.size()) {
 
@@ -292,6 +303,8 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     callees_ = (ObservedCallees*)slots_;
     tests_ = (ObservedTest*)(slots_ + callees_mem_size);
     types_ = (ObservedValues*)(slots_ + callees_mem_size + tests_mem_size);
+    typeDeps_ = (uint32_t*)(slots_ + callees_mem_size + tests_mem_size +
+                            types_mem_size);
 
     if (callees_size_) {
         memcpy(callees_, callees.data(), callees_mem_size);
@@ -303,6 +316,20 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
 
     if (types_size_) {
         memcpy(types_, types.data(), types_mem_size);
+        if (!typeDeps.empty()) {
+            assert(typeDeps.size() == types_size_);
+            memcpy(typeDeps_, typeDeps.data(), types_size_ * sizeof(uint32_t));
+        } else {
+            std::fill(typeDeps_, typeDeps_ + types_size_, NoDep);
+        }
+    }
+}
+
+void TypeFeedback::propagateDeps() {
+    for (size_t i = 0; i < types_size_; ++i) {
+        if (typeDeps_[i] != NoDep) {
+            types_[i] = types_[typeDeps_[i]];
+        }
     }
 }
 const char* FeedbackIndex::name() const {
