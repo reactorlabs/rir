@@ -30,7 +30,8 @@ class DefUseAnalysis {
 
     struct Def {
         int loopDepth;
-        int branchId;            // 0 = unconditional, >0 = branch ID
+        int loopId;   // ID of the innermost loop at def time; 0 = top-level
+        int branchId; // 0 = unconditional, >0 = branch ID
         int closedReturnCount;   // snapshot of closedReturnCount_ at def time
         int closedLoopExitCount; // snapshot of
                                  // closedLoopExitByDepth_[loopDepth] at def
@@ -45,15 +46,22 @@ class DefUseAnalysis {
         int defSlot; // valid when kind == NoRecord; -1 otherwise
     };
 
+    struct LoopEntry {
+        int loopId;
+        bool hasReturn = false;
+    };
+
     struct DefsSnapshot {
         std::unordered_map<SEXP, std::vector<Def>> defs;
         std::unordered_map<SEXP, Def> useDefs;
         int closedReturnCount;
         std::vector<int> closedLoopExitByDepth;
+        std::vector<LoopEntry> loopStack;
     };
 
     struct LoopBodyInfo {
         int loopDepth;
+        int loopId;
         std::unordered_map<SEXP, int> defCounts;
     };
 
@@ -69,6 +77,8 @@ class DefUseAnalysis {
     std::unordered_map<SEXP, std::vector<Def>> defs_;
     std::unordered_map<SEXP, Def> useDefs_;
     int loopDepth_ = 0;
+    std::vector<LoopEntry> loopStack_;
+    int nextLoopId_ = 1;
     std::vector<BranchEntry> branchStack_;
     int nextBranchId_ = 1;
     std::vector<LoopBodyInfo> loopBodyDefs_;
@@ -83,7 +93,7 @@ class DefUseAnalysis {
                                 ? closedLoopExitByDepth_[loopDepth_]
                                 : 0;
         defs_[name].push_back(
-            {loopDepth_,
+            {loopDepth_, loopStack_.empty() ? 0 : loopStack_.back().loopId,
              branchStack_.empty() ? 0 : branchStack_.back().branchId,
              closedReturnCount_, loopExitCount, feedbackSlot});
     }
@@ -92,9 +102,13 @@ class DefUseAnalysis {
         int loopExitCount = (loopDepth_ < (int)closedLoopExitByDepth_.size())
                                 ? closedLoopExitByDepth_[loopDepth_]
                                 : 0;
-        useDefs_[name] = {
-            loopDepth_, branchStack_.empty() ? 0 : branchStack_.back().branchId,
-            closedReturnCount_, loopExitCount, slot};
+        useDefs_[name] = {loopDepth_,
+                          loopStack_.empty() ? 0 : loopStack_.back().loopId,
+                          branchStack_.empty() ? 0
+                                               : branchStack_.back().branchId,
+                          closedReturnCount_,
+                          loopExitCount,
+                          slot};
     }
 
     void enterBranch() {
@@ -113,12 +127,28 @@ class DefUseAnalysis {
         branchStack_.pop_back();
     }
 
-    void enterLoop() { loopDepth_++; }
-    void exitLoop() { loopDepth_--; }
+    void enterLoop() {
+        loopStack_.push_back({nextLoopId_++, false});
+        loopDepth_++;
+    }
+    void exitLoop() {
+        const auto& entry = loopStack_.back();
+        if (entry.hasReturn)
+            ++closedReturnCount_;
+        loopDepth_--;
+        loopStack_.pop_back();
+    }
 
+    // A `return` marks the innermost open scope so that when that scope
+    // closes, `closedReturnCount_` is incremented, signalling to downstream
+    // code that some path bypassed it. Branches take priority; if no branch
+    // is open but a loop is, mark the loop (the return still escapes through
+    // the loop body).
     void markReturn() {
         if (!branchStack_.empty())
             branchStack_.back().hasReturn = true;
+        else if (!loopStack_.empty())
+            loopStack_.back().hasReturn = true;
     }
 
     void markLoopExit() {
@@ -131,20 +161,24 @@ class DefUseAnalysis {
     }
 
     void setLoopBodyDefs(std::unordered_map<SEXP, int> counts) {
-        loopBodyDefs_.push_back({loopDepth_, std::move(counts)});
+        loopBodyDefs_.push_back(
+            {loopDepth_, loopStack_.empty() ? 0 : loopStack_.back().loopId,
+             std::move(counts)});
     }
     void clearLoopBodyDefs() { loopBodyDefs_.pop_back(); }
 
     // ---- save / restore for loop peeling ----
 
     DefsSnapshot saveState() const {
-        return {defs_, useDefs_, closedReturnCount_, closedLoopExitByDepth_};
+        return {defs_, useDefs_, closedReturnCount_, closedLoopExitByDepth_,
+                loopStack_};
     }
     void restoreState(DefsSnapshot&& s) {
         defs_ = std::move(s.defs);
         useDefs_ = std::move(s.useDefs);
         closedReturnCount_ = s.closedReturnCount;
         closedLoopExitByDepth_ = std::move(s.closedLoopExitByDepth);
+        loopStack_ = std::move(s.loopStack);
     }
 
     // ---- query ----
@@ -158,7 +192,7 @@ class DefUseAnalysis {
             auto udIt = useDefs_.find(name);
             if (udIt != useDefs_.end()) {
                 const Def& ud = udIt->second;
-                if (isVisibleDef(ud)) {
+                if (dominates(ud)) {
                     if (postDominates(ud))
                         return {UseKind::NoRecord, ud.feedbackSlot};
                 }
@@ -199,12 +233,22 @@ class DefUseAnalysis {
     }
 
   private:
-    // Returns true if `d` dominates the current compilation point: d was
-    // unconditional (branchId == 0) or its branch is still open, and it was
-    // defined at a loop depth reachable from here.
-    bool isVisibleDef(const Def& d) const {
+    // Returns true when D dominates the current compilation point — every path
+    // from function entry to here passes through D.
+    bool dominates(const Def& d) const {
         if (d.loopDepth > loopDepth_)
             return false;
+        if (d.loopId != 0) {
+            bool loopOpen = false;
+            for (const auto& entry : loopStack_) {
+                if (entry.loopId == d.loopId) {
+                    loopOpen = true;
+                    break;
+                }
+            }
+            if (!loopOpen)
+                return false;
+        }
         if (d.branchId == 0)
             return true;
         for (const auto& entry : branchStack_) {
@@ -217,10 +261,9 @@ class DefUseAnalysis {
     // Returns a pointer to the unique dominating def of `name` at the current
     // compilation point, or nullptr if none exists.
     //
-    // A def D is "dominating" if D's branch is still open (i.e. D's branchId
-    // is 0 or currently in branchStack_) and D's loop depth does not exceed
-    // the current loop depth.  "Unique" means it is the last def overall —
-    // no later def (conditional or not) could have overwritten the variable.
+    // A def D is "dominating" if its loop is still open, its branch is still
+    // open, and it is the last def overall (no later def could have
+    // overwritten the variable).
     const Def* findReachingDef(SEXP name) const {
         auto it = defs_.find(name);
         if (it == defs_.end())
@@ -233,7 +276,7 @@ class DefUseAnalysis {
         const Def* lastDefinite = nullptr;
         const Def* last = &ds.back();
         for (const auto& d : ds) {
-            if (d.loopDepth > loopDepth_)
+            if (!dominates(d))
                 continue;
             if (d.branchId == 0) {
                 lastDefinite = &d;
@@ -260,8 +303,7 @@ class DefUseAnalysis {
     // exit passes through U.
     //
     // Approximation (sound — no false positives):
-    //   (1) same loop depth: a def from a shallower scope does not post-
-    //       dominate a use inside a loop (loop might not execute).
+    //   (1) same loop: a def from a different loop does not post-dominate.
     //   (2) branch check: U must not be inside a branch that D is not in.
     //   (3) no return() in a closed branch between D and U.
     //   (4) no break/next at the current loop depth in a closed branch
@@ -297,7 +339,7 @@ class DefUseAnalysis {
             auto defsIt = defs_.find(name);
             if (defsIt != defs_.end()) {
                 for (const auto& d : defsIt->second) {
-                    if (d.loopDepth == info.loopDepth)
+                    if (d.loopId == info.loopId)
                         seen++;
                 }
             }
