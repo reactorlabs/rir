@@ -207,11 +207,11 @@ class DefUseAnalysis {
         }
 
         const Def* d = findReachingDef(name);
-        if (!d)
-            return {UseKind::RecordAlways, kNoSlot};
-        if (postDominates(*d))
+        if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
-        return {UseKind::RecordOnce, kNoSlot};
+        if (loopDepth_ > 0 && !assignedInEnclosingLoop(name))
+            return {UseKind::RecordOnce, kNoSlot};
+        return {UseKind::RecordAlways, kNoSlot};
     }
 
     // ---- AST pre-scan ----
@@ -316,6 +316,18 @@ class DefUseAnalysis {
             auto seenIt = info.seen.find(name);
             int seen = (seenIt != info.seen.end()) ? seenIt->second : 0;
             if (seen < expIt->second)
+                return true;
+        }
+        return false;
+    }
+
+    // True when `name` is assigned in the body of any currently-open loop.
+    // Such a variable can change type between iterations, so one recording
+    // per invocation is not representative — RecordOnce is unsafe.
+    bool assignedInEnclosingLoop(SEXP name) const {
+        for (const auto& info : loopBodyDefs_) {
+            auto it = info.expected.find(name);
+            if (it != info.expected.end() && it->second > 0)
                 return true;
         }
         return false;
