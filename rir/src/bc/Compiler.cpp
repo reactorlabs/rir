@@ -116,7 +116,7 @@ class CompilerContext {
         virtual bool loopIsLocal() { return !loops.empty(); }
         virtual bool isPromiseContext() { return false; }
 
-        DefUseAnalysis defUse;
+        DefUseAnalysis defUseAnalysis;
     };
 
     class PromiseContext : public CodeContext {
@@ -138,10 +138,15 @@ class CompilerContext {
     std::stack<CodeContext*> code;
 
     CodeStream& cs() { return code.top()->cs; }
+    DefUseAnalysis& defUseAnalysis() { return code.top()->defUseAnalysis; }
+    const DefUseAnalysis& defUseAnalysis() const {
+        return code.top()->defUseAnalysis;
+    }
 
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+    uint32_t recordTypeOnceBitmapSize = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -151,7 +156,7 @@ class CompilerContext {
     bool inLoop() const { return code.top()->inLoop(); }
 
     DefUseAnalysis::UseClassification classifyUse(SEXP name) const {
-        return code.top()->defUse.classifyUse(name);
+        return defUseAnalysis().classifyUse(name);
     }
 
     LoopContext& loop() { return code.top()->loops.top(); }
@@ -215,7 +220,7 @@ class CompilerContext {
 
     BC recordTypeTracked(SEXP name) {
         int slot = typeFeedbackBuilder.addType();
-        code.top()->defUse.trackUseDef(name, slot);
+        defUseAnalysis().trackUseDef(name, slot);
         return BC::recordType(slot);
     }
 
@@ -289,21 +294,21 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     cs << BC::beginloop(breakBranch);
 
     if (Compiler::profile) {
-        ctx.code.top()->defUse.enterLoop();
+        ctx.defUseAnalysis().enterLoop();
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
-        ctx.code.top()->defUse.setLoopBodyDefs(std::move(bodyDefs));
+        ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
     }
 
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
-        auto savedDefs = Compiler::profile ? ctx.code.top()->defUse.saveState()
+        auto savedDefs = Compiler::profile ? ctx.defUseAnalysis().saveState()
                                            : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
         compileBody();
         if (Compiler::profile)
-            ctx.code.top()->defUse.restoreState(std::move(savedDefs));
+            ctx.defUseAnalysis().restoreState(std::move(savedDefs));
     }
 
     cs << nextBranch;
@@ -312,8 +317,8 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     compileBody();
     if (Compiler::profile) {
-        ctx.code.top()->defUse.clearLoopBodyDefs();
-        ctx.code.top()->defUse.exitLoop();
+        ctx.defUseAnalysis().clearLoopBodyDefs();
+        ctx.defUseAnalysis().exitLoop();
     }
     cs << BC::br(nextBranch) << breakBranch;
 
@@ -733,7 +738,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     int defSlot = (ctx.typeSlotCount() > typesBefore)
                                       ? (int)ctx.typeSlotCount() - 1
                                       : -1;
-                    ctx.code.top()->defUse.trackDef(lhs, defSlot);
+                    ctx.defUseAnalysis().trackDef(lhs, defSlot);
                 }
             }
             return true;
@@ -1123,19 +1128,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         } else {
             if (Compiler::profile)
-                ctx.code.top()->defUse.enterBranch();
+                ctx.defUseAnalysis().enterBranch();
             compileExpr(ctx, args[2], voidContext);
             if (Compiler::profile)
-                ctx.code.top()->defUse.exitBranch();
+                ctx.defUseAnalysis().exitBranch();
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
         if (Compiler::profile)
-            ctx.code.top()->defUse.enterBranch();
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1], voidContext);
         if (Compiler::profile)
-            ctx.code.top()->defUse.exitBranch();
+            ctx.defUseAnalysis().exitBranch();
 
         cs << nextBranch;
         return true;
@@ -1164,7 +1169,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             compileExpr(ctx, args[0]);
 
         if (Compiler::profile)
-            ctx.code.top()->defUse.markReturn();
+            ctx.defUseAnalysis().markReturn();
         if (ctx.inLoop() || ctx.isInPromise())
             cs << BC::return_();
         else
@@ -1322,27 +1327,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::beginloop(breakBranch);
 
         if (Compiler::profile) {
-            ctx.code.top()->defUse.enterLoop();
+            ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
-            ctx.code.top()->defUse.setLoopBodyDefs(std::move(bodyDefs));
+            ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         }
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             auto savedDefs = Compiler::profile
-                                 ? ctx.code.top()->defUse.saveState()
+                                 ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileExpr(ctx, body, true);
             if (Compiler::profile)
-                ctx.code.top()->defUse.restoreState(std::move(savedDefs));
+                ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
         if (Compiler::profile) {
-            ctx.code.top()->defUse.clearLoopBodyDefs();
-            ctx.code.top()->defUse.exitLoop();
+            ctx.defUseAnalysis().clearLoopBodyDefs();
+            ctx.defUseAnalysis().exitLoop();
         }
         cs << BC::br(nextBranch) << breakBranch;
 
@@ -1411,24 +1416,24 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::beginloop(breakBranch);
 
         if (Compiler::profile) {
-            ctx.code.top()->defUse.enterLoop();
+            ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
             // The for loop also assigns sym on each iteration
             bodyDefs[sym]++;
-            ctx.code.top()->defUse.setLoopBodyDefs(std::move(bodyDefs));
+            ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         }
 
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             auto savedDefs = Compiler::profile
-                                 ? ctx.code.top()->defUse.saveState()
+                                 ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
             compileExpr(ctx, body, true);
             if (Compiler::profile)
-                ctx.code.top()->defUse.restoreState(std::move(savedDefs));
+                ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
@@ -1437,8 +1442,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // Compile the loop body
         compileExpr(ctx, body, true);
         if (Compiler::profile) {
-            ctx.code.top()->defUse.clearLoopBodyDefs();
-            ctx.code.top()->defUse.exitLoop();
+            ctx.defUseAnalysis().clearLoopBodyDefs();
+            ctx.defUseAnalysis().exitLoop();
         }
         cs << BC::br(nextBranch) << breakBranch;
 
@@ -1469,7 +1474,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
             if (Compiler::profile)
-                ctx.code.top()->defUse.markLoopExit();
+                ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
         }
@@ -1486,7 +1491,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
             if (Compiler::profile)
-                ctx.code.top()->defUse.markLoopExit();
+                ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
         }
@@ -2045,10 +2050,15 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             case UseKind::NoRecord:
                 ctx.registerNoRecordDep(uc.defSlot);
                 break;
-            case UseKind::RecordOnce:
-                // TODO: emit record-once guard
-                cs << ctx.recordTypeTracked(name);
+            case UseKind::RecordOnce: {
+                int slot = ctx.typeFeedbackBuilder.addType();
+                ctx.defUseAnalysis().trackUseDef(name, slot);
+                if (slot < RECORD_TYPE_ONCE_MAX_SLOT)
+                    cs << BC::recordTypeOnce(slot);
+                else
+                    cs << BC::recordType(slot);
                 break;
+            }
             case UseKind::RecordAlways:
                 cs << ctx.recordTypeTracked(name);
                 break;

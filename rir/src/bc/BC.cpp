@@ -82,6 +82,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::record_call_:
     case Opcode::record_test_:
     case Opcode::record_type_:
+    case Opcode::record_type_once_:
         cs.insert(immediate.i);
         return;
 
@@ -162,6 +163,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
         case Opcode::record_test_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
@@ -253,6 +255,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
         case Opcode::record_test_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
@@ -390,6 +393,9 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_type_:
     case Opcode::record_call_:
         out << "#" << immediate.i;
+        break;
+    case Opcode::record_type_once_:
+        out << "#" << immediate.i << "[once]";
         break;
 
 #define V(NESTED, name, name_) case Opcode::name_##_:

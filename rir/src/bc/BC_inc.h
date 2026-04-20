@@ -19,6 +19,12 @@
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
+// record_type_once_ uses the slot index directly as the bitmap position.
+// Slots 0..RECORD_TYPE_ONCE_MAX_SLOT-1 are tracked; higher slots fall back to
+// always-record.
+#define RECORD_TYPE_ONCE_MAX_SLOT 64
+#define RECORD_TYPE_ONCE_BIT(slotIdx) ((uint64_t)1 << (slotIdx))
+
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
 
@@ -266,7 +272,7 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -314,6 +320,7 @@ class BC {
     inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
+    inline static BC recordTypeOnce(uint32_t idx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -566,6 +573,7 @@ class BC {
         case Opcode::record_call_:
         case Opcode::record_test_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

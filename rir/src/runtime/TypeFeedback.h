@@ -391,6 +391,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     size_t tests_size() { return tests_size_; }
     size_t types_size() { return types_size_; }
 
+    bool hasTypeDep(uint32_t idx) const { return typeDep(idx) != NoDep; }
+
     // Returns the source slot for slot `idx`, or NoDep if it records directly.
     uint32_t typeDep(uint32_t idx) const { return typeDeps_[idx]; }
 

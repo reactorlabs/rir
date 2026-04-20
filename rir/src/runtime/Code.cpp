@@ -269,18 +269,32 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 if (bc.bc == Opcode::record_call_) {
                     typeFeedback->callees(bc.immediate.i).print(out, fun);
                     out << " ] Call#";
+                    out << bc.immediate.i << "\n";
                 } else if (bc.bc == Opcode::record_test_) {
                     typeFeedback->test(bc.immediate.i).print(out);
                     out << " ] Test#";
+                    out << bc.immediate.i << "\n";
                 } else {
-                    typeFeedback->types(bc.immediate.i).print(out);
-                    out << " ] Type#";
+                    uint32_t slot = bc.immediate.i;
+                    typeFeedback->types(slot).print(out);
+                    const char* tag = (bc.bc == Opcode::record_type_once_)
+                                          ? " ] TypeOnce#"
+                                          : " ] Type#";
+                    out << tag << slot;
+                    if (typeFeedback->hasTypeDep(slot))
+                        out << " (dep: #" << typeFeedback->typeDep(slot) << ")";
+                    out << "\n";
                 }
-                out << bc.immediate.i << "\n";
             } else {
                 bc.print(out);
             }
             pc = BC::next(pc);
+        }
+
+        for (uint32_t i = 0; i < typeFeedback->types_size(); ++i) {
+            if (typeFeedback->hasTypeDep(i))
+                out << "        NoRecord Type#" << i << " (dep: #"
+                    << typeFeedback->typeDep(i) << ")\n";
         }
 
         for (auto i : promises) {

@@ -1985,7 +1985,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // marks how this load behaved.
     auto recordForceBehavior = [&](SEXP s) {
         // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_)
+        if (*pc != Opcode::record_type_ && *pc != Opcode::record_type_once_)
             return;
 
         ObservedValues::StateBeforeLastForce state =
@@ -2014,6 +2014,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
+    uint64_t firedBitmap = 0;
 
     // main loop
     BEGIN_MACHINE {
@@ -2340,6 +2341,21 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            if (idx < RECORD_TYPE_ONCE_MAX_SLOT) {
+                uint64_t bit = RECORD_TYPE_ONCE_BIT(idx);
+                if (!(firedBitmap & bit)) {
+                    typeFeedback->record_type(idx, ostack_top());
+                    firedBitmap |= bit;
+                }
+            } else {
+                typeFeedback->record_type(idx, ostack_top());
+            }
             NEXT();
         }
 

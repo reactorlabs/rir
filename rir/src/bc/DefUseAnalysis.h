@@ -4,6 +4,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -28,94 +29,94 @@ class DefUseAnalysis {
   public:
     // ---- types ----
 
+    // A def records the innermost open scope at the time it was made, plus
+    // the monotonic return/loop-exit counters snapshot. The scope id alone
+    // is enough to check dominance and same-scope post-dominance because
+    // scopes nest strictly: if the innermost is still open, every enclosing
+    // one is too; if it's closed, D is not reachable from the current point.
     struct Def {
-        int loopDepth;
-        int loopId;   // ID of the innermost loop at def time; 0 = top-level
-        int branchId; // 0 = unconditional, >0 = branch ID
-        int closedReturnCount;   // snapshot of closedReturnCount_ at def time
-        int closedLoopExitCount; // snapshot of
-                                 // closedLoopExitByDepth_[loopDepth] at def
-                                 // time
-        int feedbackSlot; // TypeFeedback slot of the def's record_type_, or -1
+        int scopeId; // innermost enclosing scope id; 0 = top-level
+        int closedReturnCount;
+        int closedLoopExitCount;
+        int feedbackSlot; // TypeFeedback slot of the def's record_type_, or
+                          // kNoSlot
     };
+
+    static constexpr int kNoSlot = -1;
 
     enum class UseKind { NoRecord, RecordOnce, RecordAlways };
 
     struct UseClassification {
         UseKind kind;
-        int defSlot; // valid when kind == NoRecord; -1 otherwise
+        int defSlot; // valid when kind == NoRecord; kNoSlot otherwise
     };
 
-    struct LoopEntry {
-        int loopId;
+    // A single unified stack of open control-flow scopes (branches AND loops),
+    // ordered by actual source/AST nesting. Branches and loops share one id
+    // namespace (`nextScopeId_`); `kind` is kept only where the algorithm
+    // truly needs to distinguish them (`markLoopExit` targets branches;
+    // `enterLoop`/`exitLoop` track `loopDepth_`).
+    struct ScopeEntry {
+        enum class Kind : uint8_t { Branch, Loop };
+        Kind kind;
+        int id;
+        int loopDepthAtEntry; // loopDepth_ right before this scope was pushed
         bool hasReturn = false;
+        bool hasLoopExit = false; // Branch only; ignored for Loop
+    };
+
+    // Per currently-open loop: the expected count of assignments to each
+    // variable in the loop body (from an AST pre-scan) and a running count
+    // of assignments actually seen so far during compilation. When
+    // `seen < expected`, the back-edge can still feed an as-yet-unprocessed
+    // def into earlier uses, so we cannot rely on dominance.
+    struct LoopBodyInfo {
+        int scopeId;
+        std::unordered_map<SEXP, int> expected;
+        std::unordered_map<SEXP, int> seen;
     };
 
     struct DefsSnapshot {
-        std::unordered_map<SEXP, std::vector<Def>> defs;
-        std::unordered_map<SEXP, Def> useDefs;
+        std::unordered_map<SEXP, Def> defs;
+        std::unordered_map<SEXP, std::vector<Def>> useDefs;
         int closedReturnCount;
         std::vector<int> closedLoopExitByDepth;
-        std::vector<LoopEntry> loopStack;
-    };
-
-    struct LoopBodyInfo {
+        std::vector<ScopeEntry> scopeStack;
+        std::vector<LoopBodyInfo> loopBodyDefs;
         int loopDepth;
-        int loopId;
-        std::unordered_map<SEXP, int> defCounts;
-    };
-
-    struct BranchEntry {
-        int branchId;
-        int loopDepthAtEntry;
-        bool hasReturn = false;
-        bool hasLoopExit = false;
     };
 
     // ---- data ----
 
-    std::unordered_map<SEXP, std::vector<Def>> defs_;
-    std::unordered_map<SEXP, Def> useDefs_;
+    std::unordered_map<SEXP, Def> defs_;
+    std::unordered_map<SEXP, std::vector<Def>> useDefs_;
     int loopDepth_ = 0;
-    std::vector<LoopEntry> loopStack_;
-    int nextLoopId_ = 1;
-    std::vector<BranchEntry> branchStack_;
-    int nextBranchId_ = 1;
+    std::vector<ScopeEntry> scopeStack_;
+    int nextScopeId_ = 1;
     std::vector<LoopBodyInfo> loopBodyDefs_;
     int closedReturnCount_ = 0;
     std::vector<int> closedLoopExitByDepth_;
 
     // ---- compile-time state updates ----
 
-    void trackDef(SEXP name, int feedbackSlot = -1) {
+    void trackDef(SEXP name, int feedbackSlot = kNoSlot) {
         useDefs_.erase(name);
-        int loopExitCount = (loopDepth_ < (int)closedLoopExitByDepth_.size())
-                                ? closedLoopExitByDepth_[loopDepth_]
-                                : 0;
-        defs_[name].push_back(
-            {loopDepth_, loopStack_.empty() ? 0 : loopStack_.back().loopId,
-             branchStack_.empty() ? 0 : branchStack_.back().branchId,
-             closedReturnCount_, loopExitCount, feedbackSlot});
+        defs_[name] = {currentScopeId(), closedReturnCount_,
+                       currentLoopExitCount(), feedbackSlot};
+        bumpSeen(name);
     }
 
     void trackUseDef(SEXP name, int slot) {
-        int loopExitCount = (loopDepth_ < (int)closedLoopExitByDepth_.size())
-                                ? closedLoopExitByDepth_[loopDepth_]
-                                : 0;
-        useDefs_[name] = {loopDepth_,
-                          loopStack_.empty() ? 0 : loopStack_.back().loopId,
-                          branchStack_.empty() ? 0
-                                               : branchStack_.back().branchId,
-                          closedReturnCount_,
-                          loopExitCount,
-                          slot};
+        useDefs_[name].push_back({currentScopeId(), closedReturnCount_,
+                                  currentLoopExitCount(), slot});
     }
 
     void enterBranch() {
-        branchStack_.push_back({nextBranchId_++, loopDepth_, false, false});
+        scopeStack_.push_back(
+            {ScopeEntry::Kind::Branch, nextScopeId_++, loopDepth_});
     }
     void exitBranch() {
-        const auto& entry = branchStack_.back();
+        const auto& entry = scopeStack_.back();
         if (entry.hasReturn)
             ++closedReturnCount_;
         if (entry.hasLoopExit) {
@@ -124,61 +125,68 @@ class DefUseAnalysis {
                 closedLoopExitByDepth_.resize(d + 1, 0);
             ++closedLoopExitByDepth_[d];
         }
-        branchStack_.pop_back();
+        scopeStack_.pop_back();
     }
 
     void enterLoop() {
-        loopStack_.push_back({nextLoopId_++, false});
+        scopeStack_.push_back(
+            {ScopeEntry::Kind::Loop, nextScopeId_++, loopDepth_});
         loopDepth_++;
     }
     void exitLoop() {
-        const auto& entry = loopStack_.back();
+        const auto& entry = scopeStack_.back();
         if (entry.hasReturn)
             ++closedReturnCount_;
         loopDepth_--;
-        loopStack_.pop_back();
+        scopeStack_.pop_back();
     }
 
-    // A `return` marks the innermost open scope so that when that scope
-    // closes, `closedReturnCount_` is incremented, signalling to downstream
-    // code that some path bypassed it. Branches take priority; if no branch
-    // is open but a loop is, mark the loop (the return still escapes through
-    // the loop body).
+    // A `return` is attributed to the innermost open scope — whichever was
+    // pushed most recently. When that scope closes, `closedReturnCount_` is
+    // bumped, making the return visible to all downstream compilation points.
     void markReturn() {
-        if (!branchStack_.empty())
-            branchStack_.back().hasReturn = true;
-        else if (!loopStack_.empty())
-            loopStack_.back().hasReturn = true;
+        if (!scopeStack_.empty())
+            scopeStack_.back().hasReturn = true;
     }
 
+    // A `break`/`next` is attributed to the innermost enclosing Branch at the
+    // current loop depth. The counter it bumps (`closedLoopExitByDepth_`) is
+    // consumed by later code at the same loop depth; `break`/`next` outside
+    // any branch leaves only dead code afterward.
     void markLoopExit() {
-        for (auto it = branchStack_.rbegin(); it != branchStack_.rend(); ++it) {
-            if (it->loopDepthAtEntry == loopDepth_) {
+        for (auto it = scopeStack_.rbegin(); it != scopeStack_.rend(); ++it) {
+            if (it->kind == ScopeEntry::Kind::Branch &&
+                it->loopDepthAtEntry == loopDepth_) {
                 it->hasLoopExit = true;
                 return;
             }
         }
     }
 
-    void setLoopBodyDefs(std::unordered_map<SEXP, int> counts) {
-        loopBodyDefs_.push_back(
-            {loopDepth_, loopStack_.empty() ? 0 : loopStack_.back().loopId,
-             std::move(counts)});
+    void setLoopBodyDefs(std::unordered_map<SEXP, int> expected) {
+        loopBodyDefs_.push_back({currentScopeId(), std::move(expected), {}});
     }
     void clearLoopBodyDefs() { loopBodyDefs_.pop_back(); }
 
     // ---- save / restore for loop peeling ----
 
     DefsSnapshot saveState() const {
-        return {defs_, useDefs_, closedReturnCount_, closedLoopExitByDepth_,
-                loopStack_};
+        return {defs_,
+                useDefs_,
+                closedReturnCount_,
+                closedLoopExitByDepth_,
+                scopeStack_,
+                loopBodyDefs_,
+                loopDepth_};
     }
     void restoreState(DefsSnapshot&& s) {
         defs_ = std::move(s.defs);
         useDefs_ = std::move(s.useDefs);
         closedReturnCount_ = s.closedReturnCount;
         closedLoopExitByDepth_ = std::move(s.closedLoopExitByDepth);
-        loopStack_ = std::move(s.loopStack);
+        scopeStack_ = std::move(s.scopeStack);
+        loopBodyDefs_ = std::move(s.loopBodyDefs);
+        loopDepth_ = s.loopDepth;
     }
 
     // ---- query ----
@@ -191,9 +199,8 @@ class DefUseAnalysis {
         if (!hasUnseenLoopDef(name)) {
             auto udIt = useDefs_.find(name);
             if (udIt != useDefs_.end()) {
-                const Def& ud = udIt->second;
-                if (dominates(ud)) {
-                    if (postDominates(ud))
+                for (const Def& ud : udIt->second) {
+                    if (dominates(ud) && postDominates(ud))
                         return {UseKind::NoRecord, ud.feedbackSlot};
                 }
             }
@@ -201,10 +208,10 @@ class DefUseAnalysis {
 
         const Def* d = findReachingDef(name);
         if (!d)
-            return {UseKind::RecordAlways, -1};
+            return {UseKind::RecordAlways, kNoSlot};
         if (postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
-        return {UseKind::RecordOnce, -1};
+        return {UseKind::RecordOnce, kNoSlot};
     }
 
     // ---- AST pre-scan ----
@@ -233,117 +240,82 @@ class DefUseAnalysis {
     }
 
   private:
-    // Returns true when D dominates the current compilation point — every path
-    // from function entry to here passes through D.
+    int currentScopeId() const {
+        return scopeStack_.empty() ? 0 : scopeStack_.back().id;
+    }
+
+    int currentLoopExitCount() const {
+        return (loopDepth_ < (int)closedLoopExitByDepth_.size())
+                   ? closedLoopExitByDepth_[loopDepth_]
+                   : 0;
+    }
+
+    // Increment the "seen" counter for `name` in every currently-open loop
+    // body. This lets `hasUnseenLoopDef` compare running totals against the
+    // AST pre-scan's expected counts, without needing to re-scan defs_ or
+    // track ancestor chains.
+    void bumpSeen(SEXP name) {
+        for (auto& info : loopBodyDefs_) {
+            auto it = info.expected.find(name);
+            if (it != info.expected.end())
+                ++info.seen[name];
+        }
+    }
+
+    // Returns true when D dominates the current compilation point — every
+    // path from function entry to here passes through D. Equivalent to:
+    // D's innermost scope is still on the stack (or D was at top level).
     bool dominates(const Def& d) const {
-        if (d.loopDepth > loopDepth_)
-            return false;
-        if (d.loopId != 0) {
-            bool loopOpen = false;
-            for (const auto& entry : loopStack_) {
-                if (entry.loopId == d.loopId) {
-                    loopOpen = true;
-                    break;
-                }
-            }
-            if (!loopOpen)
-                return false;
-        }
-        if (d.branchId == 0)
+        if (d.scopeId == 0)
             return true;
-        for (const auto& entry : branchStack_) {
-            if (entry.branchId == d.branchId)
+        for (const auto& entry : scopeStack_)
+            if (entry.id == d.scopeId)
                 return true;
-        }
         return false;
     }
 
-    // Returns a pointer to the unique dominating def of `name` at the current
-    // compilation point, or nullptr if none exists.
+    // Returns the unique reaching def of `name` at the current compilation
+    // point, or nullptr if none exists.
     //
-    // A def D is "dominating" if its loop is still open, its branch is still
-    // open, and it is the last def overall (no later def could have
-    // overwritten the variable).
+    // We store only the most recent def per name. If it dominates the
+    // current point, return it. Otherwise it's in a closed scope: on some
+    // paths it overwrote an earlier value, on others it didn't — we can't
+    // tell which, so bail out. (We never reset on scope close, so the
+    // lingering closed-scope def is precisely what makes that bail-out
+    // happen.)
     const Def* findReachingDef(SEXP name) const {
         auto it = defs_.find(name);
         if (it == defs_.end())
             return nullptr;
-
         if (hasUnseenLoopDef(name))
             return nullptr;
-
-        const auto& ds = it->second;
-        const Def* lastDefinite = nullptr;
-        const Def* last = &ds.back();
-        for (const auto& d : ds) {
-            if (!dominates(d))
-                continue;
-            if (d.branchId == 0) {
-                lastDefinite = &d;
-            } else {
-                for (const auto& entry : branchStack_) {
-                    if (entry.branchId == d.branchId) {
-                        lastDefinite = &d;
-                        break;
-                    }
-                }
-            }
-        }
-        if (!lastDefinite)
-            return nullptr;
-
-        // Must be the last def overall: any later def could have overwritten.
-        if (lastDefinite != last)
-            return nullptr;
-
-        return lastDefinite;
+        return dominates(it->second) ? &it->second : nullptr;
     }
 
     // Returns true when U post-dominates D — every path from D to function
     // exit passes through U.
     //
-    // Approximation (sound — no false positives):
-    //   (1) same loop: a def from a different loop does not post-dominate.
-    //   (2) branch check: U must not be inside a branch that D is not in.
-    //   (3) no return() in a closed branch between D and U.
-    //   (4) no break/next at the current loop depth in a closed branch
-    //       between D and U.
+    // D and U must be in the same innermost scope (which also implies the
+    // same loop depth, since scope nesting determines depth), and no return
+    // or break/next may have fired in a closed scope between D and U.
     bool postDominates(const Def& d) const {
-        if (d.loopDepth != loopDepth_)
+        if (currentScopeId() != d.scopeId)
             return false;
-
-        int currentBranchId =
-            branchStack_.empty() ? 0 : branchStack_.back().branchId;
-        if (currentBranchId != 0 && currentBranchId != d.branchId)
-            return false;
-
         if (closedReturnCount_ != d.closedReturnCount)
             return false;
-
-        int curLoopExit = (loopDepth_ < (int)closedLoopExitByDepth_.size())
-                              ? closedLoopExitByDepth_[loopDepth_]
-                              : 0;
-        if (curLoopExit != d.closedLoopExitCount)
+        if (currentLoopExitCount() != d.closedLoopExitCount)
             return false;
-
         return true;
     }
 
     bool hasUnseenLoopDef(SEXP name) const {
         for (const auto& info : loopBodyDefs_) {
-            auto it = info.defCounts.find(name);
-            if (it == info.defCounts.end())
+            auto expIt = info.expected.find(name);
+            if (expIt == info.expected.end())
                 continue;
-            int expected = it->second;
-            int seen = 0;
-            auto defsIt = defs_.find(name);
-            if (defsIt != defs_.end()) {
-                for (const auto& d : defsIt->second) {
-                    if (d.loopId == info.loopId)
-                        seen++;
-                }
-            }
-            if (seen < expected)
+            auto seenIt = info.seen.find(name);
+            int seen = (seenIt != info.seen.end()) ? seenIt->second : 0;
+            if (seen < expIt->second)
                 return true;
         }
         return false;
