@@ -1980,13 +1980,30 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = c->code();
     }
 
+    auto function = c->function();
+    auto typeFeedback = function->typeFeedback();
+    uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
+    if (callCtxt && c->recordTypeOnceCount > 0)
+        memset(fired, 0,
+               RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
+                   sizeof(uint64_t));
+
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
     auto recordForceBehavior = [&](SEXP s) {
         // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_ && *pc != Opcode::record_type_once_)
-            return;
+        Immediate raw = *(Immediate*)(pc + 1);
+
+        if (*pc != Opcode::record_type_) {
+            if (*pc == Opcode::record_type_once_) {
+                if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
+                                                 RECORD_TYPE_ONCE_IIDX(raw)))
+                    return;
+            } else {
+                return;
+            }
+        }
 
         ObservedValues::StateBeforeLastForce state =
             ObservedValues::StateBeforeLastForce::unknown;
@@ -2003,10 +2020,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        auto raw = *(Immediate*)(pc + 1);
-        auto idx = (*pc == Opcode::record_type_once_)
-                       ? RECORD_TYPE_ONCE_SLOT_IDX(raw)
-                       : raw;
+        uint32_t idx = (*pc == Opcode::record_type_)
+                           ? raw
+                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2014,15 +2030,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
         });
     };
-
-    auto function = c->function();
-    auto typeFeedback = function->typeFeedback();
-    uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
-    if (callCtxt && c->recordTypeOnceCount > 0) {
-        memset(fired, 0,
-               RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
-                   sizeof(uint64_t));
-    }
 
     // main loop
     BEGIN_MACHINE {
