@@ -258,12 +258,14 @@ void FeedbackOrigin::function(Function* fun) {
     function_ = fun;
 }
 bool TypeFeedback::isValid(const FeedbackIndex& index) const {
+
     switch (index.kind) {
     case FeedbackKind::Call:
         return index.idx < callees_size_;
     case FeedbackKind::Test:
         return index.idx < tests_size_;
     case FeedbackKind::Type:
+        std::cerr << "isValid: " << index.idx << " " << types_size_ << "\n";
         return index.idx < types_size_;
     default:
         return false;
