@@ -2363,12 +2363,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             uint32_t raw = readImmediate();
             advanceImmediate();
             uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
-            uint64_t& bitmapWord = fired[bitIdx >> 6];
-            uint64_t mask = (uint64_t)1 << (bitIdx & 63);
-            if (!(bitmapWord & mask)) {
+            uint64_t& word = RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx);
+            uint64_t mask = RECORD_TYPE_ONCE_MASK(bitIdx);
+            if (!(word & mask)) {
                 typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
                                           ostack_top());
-                bitmapWord |= mask;
+                word |= mask;
             }
             NEXT();
         }

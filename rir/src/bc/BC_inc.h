@@ -29,10 +29,10 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
 #define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
 #define RECORD_TYPE_ONCE_BITMAP_WORDS(count) (((count) + 63) >> 6)
+#define RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) ((bitmap)[(iidx) >> 6])
+#define RECORD_TYPE_ONCE_MASK(iidx) ((uint64_t)1 << ((iidx)&63))
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
-    ((bitmap)[(iidx) >> 6] & ((uint64_t)1 << ((iidx)&63)))
-#define RECORD_TYPE_ONCE_BITMAP_SET(bitmap, iidx)                              \
-    ((bitmap)[(iidx) >> 6] |= ((uint64_t)1 << ((iidx)&63)))
+    (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
 
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
