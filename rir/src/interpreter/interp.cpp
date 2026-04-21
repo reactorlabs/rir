@@ -2018,10 +2018,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
     uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
-    if (c->recordTypeOnceCount > 0)
+    if (callCtxt && c->recordTypeOnceCount > 0) {
         memset(fired, 0,
                RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
                    sizeof(uint64_t));
+    }
 
     // main loop
     BEGIN_MACHINE {
