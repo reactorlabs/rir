@@ -1884,9 +1884,12 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     return result;
 }
 
-const bool pir::Parameter::ENABLE_OSR =
-    (!getenv("PIR_OSR") || *getenv("PIR_OSR") != '0') &&
-    (!getenv("PIR_ENABLE") || (std::string(getenv("PIR_ENABLE")) != "off"));
+const bool pir::Parameter::ENABLE_OSR = false;
+
+// const bool pir::Parameter::ENABLE_OSR =
+//     (!getenv("PIR_OSR") || *getenv("PIR_OSR") != '0') &&
+//     (!getenv("PIR_ENABLE") || (std::string(getenv("PIR_ENABLE")) != "off"));
+
 static size_t osrLimit =
     getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
