@@ -42,6 +42,7 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
+    static bool recordLessEnabled;
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);

@@ -293,7 +293,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     unsigned beginLoopPos = cs.currentPos();
     cs << BC::beginloop(breakBranch);
 
-    if (Compiler::profile && pir::Parameter::RECORDLESS) {
+    if (Compiler::profile && Compiler::recordLessEnabled) {
         ctx.defUseAnalysis().enterLoop();
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
@@ -302,13 +302,13 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
-        auto savedDefs = (Compiler::profile && pir::Parameter::RECORDLESS)
+        auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
                              ? ctx.defUseAnalysis().saveState()
                              : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
         compileBody();
-        if (Compiler::profile && pir::Parameter::RECORDLESS)
+        if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
     }
 
@@ -317,7 +317,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     cs << BC::brfalse(breakBranch);
 
     compileBody();
-    if (Compiler::profile && pir::Parameter::RECORDLESS) {
+    if (Compiler::profile && Compiler::recordLessEnabled) {
         ctx.defUseAnalysis().clearLoopBodyDefs();
         ctx.defUseAnalysis().exitLoop();
     }
@@ -732,7 +732,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
-                if (Compiler::profile && pir::Parameter::RECORDLESS) {
+                if (Compiler::profile && Compiler::recordLessEnabled) {
                     // The last type slot allocated while compiling rhs (if
                     // any) captures the type of the value being stored —
                     // use it as the def's feedback slot.
@@ -1128,19 +1128,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::invisible();
             }
         } else {
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().enterBranch();
             compileExpr(ctx, args[2], voidContext);
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().exitBranch();
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
-        if (Compiler::profile && pir::Parameter::RECORDLESS)
+        if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1], voidContext);
-        if (Compiler::profile && pir::Parameter::RECORDLESS)
+        if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().exitBranch();
 
         cs << nextBranch;
@@ -1169,7 +1169,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (Compiler::profile && pir::Parameter::RECORDLESS)
+        if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().markReturn();
         if (ctx.inLoop() || ctx.isInPromise())
             cs << BC::return_();
@@ -1327,7 +1327,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         unsigned beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::profile && pir::Parameter::RECORDLESS) {
+        if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
@@ -1336,17 +1336,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::profile && pir::Parameter::RECORDLESS)
+            auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileExpr(ctx, body, true);
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
-        if (Compiler::profile && pir::Parameter::RECORDLESS) {
+        if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().exitLoop();
         }
@@ -1416,7 +1416,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::profile && pir::Parameter::RECORDLESS) {
+        if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
@@ -1428,12 +1428,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::profile && pir::Parameter::RECORDLESS)
+            auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
             compileExpr(ctx, body, true);
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
@@ -1442,7 +1442,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // Compile the loop body
         compileExpr(ctx, body, true);
-        if (Compiler::profile && pir::Parameter::RECORDLESS) {
+        if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().exitLoop();
         }
@@ -1474,7 +1474,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
@@ -1491,7 +1491,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::profile && pir::Parameter::RECORDLESS)
+            if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
@@ -2045,7 +2045,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (pir::Parameter::RECORDLESS) {
+            if (Compiler::recordLessEnabled) {
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
                 switch (uc.kind) {
@@ -2214,5 +2214,8 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 bool Compiler::loopPeelingEnabled = true;
+
+bool Compiler::recordLessEnabled = false;
+
 
 } // namespace rir
