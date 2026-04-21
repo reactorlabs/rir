@@ -816,7 +816,7 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
     }
 }
 
-bool pir::Parameter::RECORDLESS = false;
+bool pir::Parameter::RECORDLESS = true;
 
 const unsigned pir::Parameter::PIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
