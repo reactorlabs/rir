@@ -2053,10 +2053,14 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             case UseKind::RecordOnce: {
                 int slot = ctx.typeFeedbackBuilder.addType();
                 ctx.defUseAnalysis().trackUseDef(name, slot);
-                if (slot < RECORD_TYPE_ONCE_MAX_SLOT)
-                    cs << BC::recordTypeOnce(slot);
-                else
+                if (!ctx.isInPromise() &&
+                    RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    ctx.recordTypeOnceBitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                    uint32_t bitIdx = ctx.recordTypeOnceBitmapSize++;
+                    cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
+                } else {
                     cs << BC::recordType(slot);
+                }
                 break;
             }
             case UseKind::RecordAlways:
@@ -2182,6 +2186,7 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
+    body->recordTypeOnceCount = (uint16_t)ctx.recordTypeOnceBitmapSize;
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);

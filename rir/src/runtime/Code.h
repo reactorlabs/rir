@@ -147,6 +147,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned extraPoolSize; /// Number of elements in the per code constant pool
 
+    uint16_t
+        recordTypeOnceCount; /// Number of record_type_once_ bit indices used
+
     uint8_t data[]; /// the instructions
 
     /*

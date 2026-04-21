@@ -19,11 +19,20 @@
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
-// record_type_once_ uses the slot index directly as the bitmap position.
-// Slots 0..RECORD_TYPE_ONCE_MAX_SLOT-1 are tracked; higher slots fall back to
-// always-record.
-#define RECORD_TYPE_ONCE_MAX_SLOT 64
-#define RECORD_TYPE_ONCE_BIT(slotIdx) ((uint64_t)1 << (slotIdx))
+// Macros for packing/unpacking the immediate of record_type_once_:
+// low 16 bits = slotIdx (TypeFeedback slot), high 16 bits = iidx (bit index
+// into the per-invocation fixed bitmap).
+#define RECORD_TYPE_ONCE_BITMAP_ELEMS 8
+#define RECORD_TYPE_ONCE_MAX_IIDX (RECORD_TYPE_ONCE_BITMAP_ELEMS * 64)
+#define RECORD_TYPE_ONCE_VALID_SLOT_IDX(idx) ((idx) <= 0xFFFF)
+#define RECORD_TYPE_ONCE_SLOT_IDX(imm) ((imm)&0xFFFF)
+#define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
+#define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
+#define RECORD_TYPE_ONCE_BITMAP_WORDS(count) (((count) + 63) >> 6)
+#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
+    ((bitmap)[(iidx) >> 6] & ((uint64_t)1 << ((iidx)&63)))
+#define RECORD_TYPE_ONCE_BITMAP_SET(bitmap, iidx)                              \
+    ((bitmap)[(iidx) >> 6] |= ((uint64_t)1 << ((iidx)&63)))
 
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
@@ -320,7 +329,7 @@ class BC {
     inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
-    inline static BC recordTypeOnce(uint32_t idx);
+    inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);

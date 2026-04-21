@@ -35,9 +35,9 @@ BC BC::recordType(uint32_t idx) {
     return BC(Opcode::record_type_, i);
 }
 
-BC BC::recordTypeOnce(uint32_t idx) {
+BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
     ImmediateArguments i;
-    i.i = idx;
+    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, bitIdx);
     return BC(Opcode::record_type_once_, i);
 }
 

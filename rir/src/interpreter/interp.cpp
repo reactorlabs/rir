@@ -2003,7 +2003,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        auto idx = *(Immediate*)(pc + 1);
+        auto raw = *(Immediate*)(pc + 1);
+        auto idx = (*pc == Opcode::record_type_once_)
+                       ? RECORD_TYPE_ONCE_SLOT_IDX(raw)
+                       : raw;
         // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2014,7 +2017,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
-    uint64_t firedBitmap = 0;
+    uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
+    if (c->recordTypeOnceCount > 0)
+        memset(fired, 0,
+               RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
+                   sizeof(uint64_t));
 
     // main loop
     BEGIN_MACHINE {
@@ -2345,16 +2352,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_type_once_) {
-            Immediate idx = readImmediate();
+            uint32_t raw = readImmediate();
             advanceImmediate();
-            if (idx < RECORD_TYPE_ONCE_MAX_SLOT) {
-                uint64_t bit = RECORD_TYPE_ONCE_BIT(idx);
-                if (!(firedBitmap & bit)) {
-                    typeFeedback->record_type(idx, ostack_top());
-                    firedBitmap |= bit;
-                }
-            } else {
-                typeFeedback->record_type(idx, ostack_top());
+            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
+            uint64_t& bitmapWord = fired[bitIdx >> 6];
+            uint64_t mask = (uint64_t)1 << (bitIdx & 63);
+            if (!(bitmapWord & mask)) {
+                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                          ostack_top());
+                bitmapWord |= mask;
             }
             NEXT();
         }
