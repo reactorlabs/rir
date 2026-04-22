@@ -300,12 +300,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             pc = BC::next(pc);
         }
 
-        for (uint32_t i = 0; i < typeFeedback->types_size(); ++i) {
-            if (typeFeedback->hasTypeDep(i))
-                out << "        NoRecord Type#" << i << " (dep: #"
-                    << typeFeedback->typeDep(i) << ")\n";
-        }
-
         for (auto i : promises) {
             auto c = getPromise(i);
             out << "\n[Prom (index " << prefix << i << ")]\n";

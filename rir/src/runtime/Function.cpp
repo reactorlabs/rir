@@ -79,6 +79,13 @@ void Function::disassemble(std::ostream& out) {
     out << "invoked: " << invocationCount() << ", deopt: " << deoptCount();
     out << "\n";
     body()->disassemble(out);
+    auto tf = typeFeedback();
+    out << "\n";
+    for (uint32_t i = 0; i < tf->types_size(); ++i) {
+        if (tf->hasTypeDep(i))
+            out << "NoRecord Type#" << i << " (dep: #" << tf->typeDep(i)
+                << ")\n";
+    }
 }
 
 static int GLOBAL_SPECIALIZATION_LEVEL =
