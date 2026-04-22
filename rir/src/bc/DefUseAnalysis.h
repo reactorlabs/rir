@@ -208,14 +208,15 @@ class DefUseAnalysis {
     UseClassification classifyUse(SEXP name) const {
         // Check use-defs first: a previously recorded use of `name` that
         // dominates this point and is post-dominated by it can serve as the
-        // type-info source, avoiding another recording.
-        if (!hasUnseenLoopDef(name)) {
-            auto udIt = useDefs_.find(name);
-            if (udIt != useDefs_.end()) {
-                for (const Def& ud : udIt->second) {
-                    if (dominates(ud) && postDominates(ud))
-                        return {UseKind::NoRecord, ud.feedbackSlot};
-                }
+        // type-info source, avoiding another recording. No hasUnseenLoopDef
+        // guard here — the back-edge only reaches the loop start, not
+        // between two uses in the same basic block, so a prior in-iteration
+        // use is always a valid feedback source for a later one.
+        auto udIt = useDefs_.find(name);
+        if (udIt != useDefs_.end()) {
+            for (const Def& ud : udIt->second) {
+                if (dominates(ud) && postDominates(ud))
+                    return {UseKind::NoRecord, ud.feedbackSlot};
             }
         }
 
