@@ -294,10 +294,13 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     cs << BC::beginloop(breakBranch);
 
     if (Compiler::profile && Compiler::recordLessEnabled) {
-        ctx.defUseAnalysis().enterLoop();
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
         ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
+        // enterLoopContext: track that we're in a loop (for RecordOnce) but
+        // keep the scope stack at the outer scope — so the condition can be
+        // classified as NoRecord when a pre-loop def post-dominates it.
+        ctx.defUseAnalysis().enterLoopContext();
     }
 
     // loop peel is a copy of the condition and body, with no backwards jumps
@@ -307,19 +310,25 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                              : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
-        compileBody();
         if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterLoopScope();
+        compileBody();
+        if (Compiler::profile && Compiler::recordLessEnabled) {
+            ctx.defUseAnalysis().exitLoop();
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
+        }
     }
 
     cs << nextBranch;
     compileCond();
     cs << BC::brfalse(breakBranch);
 
+    if (Compiler::profile && Compiler::recordLessEnabled)
+        ctx.defUseAnalysis().enterLoopScope();
     compileBody();
     if (Compiler::profile && Compiler::recordLessEnabled) {
-        ctx.defUseAnalysis().clearLoopBodyDefs();
         ctx.defUseAnalysis().exitLoop();
+        ctx.defUseAnalysis().clearLoopBodyDefs();
     }
     cs << BC::br(nextBranch) << breakBranch;
 

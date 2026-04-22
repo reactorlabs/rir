@@ -129,9 +129,8 @@ class DefUseAnalysis {
     }
 
     void enterLoop() {
-        scopeStack_.push_back(
-            {ScopeEntry::Kind::Loop, nextScopeId_++, loopDepth_});
-        loopDepth_++;
+        enterLoopContext();
+        enterLoopScope();
     }
     void exitLoop() {
         const auto& entry = scopeStack_.back();
@@ -139,6 +138,20 @@ class DefUseAnalysis {
             ++closedReturnCount_;
         loopDepth_--;
         scopeStack_.pop_back();
+    }
+
+    // For while loops: call before compiling the condition. Increments
+    // loopDepth (so uses without a dominating def classify as RecordOnce)
+    // but does NOT push a scope entry — post-dominance queries against
+    // pre-loop defs still see the condition as same-scope, enabling
+    // NoRecord for uses that have a unique reaching def before the loop.
+    void enterLoopContext() { loopDepth_++; }
+
+    // For while loops: call after the condition, before the body.
+    // Pushes the loop scope so uses in the body see a distinct scope id.
+    void enterLoopScope() {
+        scopeStack_.push_back(
+            {ScopeEntry::Kind::Loop, nextScopeId_++, loopDepth_ - 1});
     }
 
     // A `return` is attributed to the innermost open scope — whichever was
