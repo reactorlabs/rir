@@ -2045,7 +2045,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (Compiler::recordLessEnabled) {
+            if (Compiler::recordLessEnabled && !ctx.isInPromise()) {
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
                 switch (uc.kind) {
@@ -2055,8 +2055,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                 case UseKind::RecordOnce: {
                     int slot = ctx.typeFeedbackBuilder.addType();
                     ctx.defUseAnalysis().trackUseDef(name, slot);
-                    if (!ctx.isInPromise() &&
-                        RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                         ctx.recordTypeOnceBitmapSize <
                             RECORD_TYPE_ONCE_MAX_IIDX) {
                         uint32_t bitIdx = ctx.recordTypeOnceBitmapSize++;
