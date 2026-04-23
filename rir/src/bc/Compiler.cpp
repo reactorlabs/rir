@@ -117,6 +117,7 @@ class CompilerContext {
         virtual bool isPromiseContext() { return false; }
 
         DefUseAnalysis defUseAnalysis;
+        uint32_t recordTypeOnceBitmapSize = 0;
     };
 
     class PromiseContext : public CodeContext {
@@ -146,7 +147,6 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
-    uint32_t recordTypeOnceBitmapSize = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -199,6 +199,8 @@ class CompilerContext {
 
     Code* pop() {
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
+        res->recordTypeOnceCount =
+            (uint16_t)code.top()->recordTypeOnceBitmapSize;
         if (code.top()->isPromiseContext())
             pushedPromiseContexts--;
         delete code.top();
@@ -2064,10 +2066,10 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                 case UseKind::RecordOnce: {
                     int slot = ctx.typeFeedbackBuilder.addType();
                     ctx.defUseAnalysis().trackUseDef(name, slot);
+                    auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
                     if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                        ctx.recordTypeOnceBitmapSize <
-                            RECORD_TYPE_ONCE_MAX_IIDX) {
-                        uint32_t bitIdx = ctx.recordTypeOnceBitmapSize++;
+                        bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                        uint32_t bitIdx = bitmapSize++;
                         cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
                     } else {
                         cs << BC::recordType(slot);
@@ -2200,7 +2202,6 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    body->recordTypeOnceCount = (uint16_t)ctx.recordTypeOnceBitmapSize;
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);

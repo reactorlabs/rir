@@ -1986,10 +1986,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
     uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
-    if (c->recordTypeOnceCount > 0)
+    if (c->recordTypeOnceCount > 0) {
         memset(fired, 0,
                RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
                    sizeof(uint64_t));
+    }
 
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
