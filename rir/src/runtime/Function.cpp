@@ -15,6 +15,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     Function* fun =
         new (payload) Function(functionSize, nullptr, {}, sig, as, nullptr);
     fun->numArgs_ = InInteger(inp);
+    fun->recordTypeOncePromiseCount = (uint16_t)InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     // What this loop does is that it sets the function owned (yet not
     // deserialized) SEXPs to something reasonable so it will not confuse the GC
@@ -50,6 +51,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
+    OutInteger(out, (int)recordTypeOncePromiseCount);
     HashAdd(container(), refTable);
     typeFeedback()->serialize(refTable, out);
     body()->serialize(refTable, out);

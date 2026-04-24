@@ -278,16 +278,20 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     out << " ] Test#";
                     out << bc.immediate.i << "\n";
                 } else {
+                    bool isOnce = bc.bc == Opcode::record_type_once_;
+                    bool isOncePromise =
+                        bc.bc == Opcode::record_type_once_promise_;
                     uint32_t slot =
-                        (bc.bc == Opcode::record_type_once_)
+                        (isOnce || isOncePromise)
                             ? RECORD_TYPE_ONCE_SLOT_IDX(bc.immediate.i)
                             : bc.immediate.i;
                     typeFeedback->types(slot).print(out);
-                    const char* tag = (bc.bc == Opcode::record_type_once_)
-                                          ? " ] TypeOnce#"
-                                          : " ] Type#";
+                    const char* tag = isOnce ? " ] TypeOnce#"
+                                             : isOncePromise
+                                                   ? " ] TypeOncePromise#"
+                                                   : " ] Type#";
                     out << tag << slot;
-                    if (bc.bc == Opcode::record_type_once_)
+                    if (isOnce || isOncePromise)
                         out << " (bit: #"
                             << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";
                     if (typeFeedback->hasTypeDep(slot))

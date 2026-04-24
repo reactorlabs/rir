@@ -115,6 +115,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned size; /// Size, in bytes, of the function and its data
 
+    /// Number of record_type_once_promise_ bit indices used across all
+    /// promises of this function. The bitmap itself lives in the call env
+    /// (envsxp_struct::recordTypeOnceBitmap) and is zeroed on function entry.
+    uint16_t recordTypeOncePromiseCount = 0;
+
 #define RIR_FUNCTION_FLAGS(V)                                                  \
     V(Deopt)                                                                   \
     V(MarkOpt)                                                                 \

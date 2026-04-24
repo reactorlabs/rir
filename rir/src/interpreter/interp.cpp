@@ -1992,6 +1992,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                    sizeof(uint64_t));
     }
 
+    // Per-function-invocation bitmap for record_type_once_promise_. Lives in
+    // the call env so it persists across promise forces. Zero only on a real
+    // call entry (not on promise forces / deopt resumes), using the main
+    // body's count as the authority.
+    if (callCtxt && function->recordTypeOncePromiseCount > 0)
+        env->u.envsxp.recordTypeOnceBitmap = 0;
+
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
@@ -2003,6 +2010,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (*pc == Opcode::record_type_once_) {
                 if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
                                                  RECORD_TYPE_ONCE_IIDX(raw)))
+                    return;
+            } else if (*pc == Opcode::record_type_once_promise_) {
+                uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+                if (env->u.envsxp.recordTypeOnceBitmap & bit)
                     return;
             } else {
                 return;
@@ -2373,6 +2384,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
                                           ostack_top());
                 word |= mask;
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_promise_) {
+            uint32_t raw = readImmediate();
+            advanceImmediate();
+            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+            uint64_t& bitmap = env->u.envsxp.recordTypeOnceBitmap;
+            if (!(bitmap & bit)) {
+                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                          ostack_top());
+                bitmap |= bit;
             }
             NEXT();
         }

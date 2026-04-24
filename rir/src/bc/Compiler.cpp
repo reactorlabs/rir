@@ -7,6 +7,7 @@
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
+#include "bc/CompilerCFG.h"
 #include "bc/DefUseAnalysis.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
@@ -147,6 +148,8 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+    CompilerCFGBuilder cfgBuilder;
+    uint32_t recordTypeOncePromiseBitmapSize = 0;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -2056,7 +2059,20 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (Compiler::recordLessEnabled /* && !ctx.isInPromise() */) {
+            if (Compiler::recordLessEnabled) {
+                // Variable free in a promise that is a parameter of the
+                // enclosing function (never assigned, not shadowed, used
+                // in a loop) — record once per function invocation via the
+                // persistent bitmap in the call env.
+                if (ctx.code.top()->isPromiseContext() &&
+                    ctx.cfgBuilder.isSupportedParameter(name) &&
+                    ctx.recordTypeOncePromiseBitmapSize <
+                        RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
+                    int slot = ctx.typeFeedbackBuilder.addType();
+                    uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
+                    cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+                    return;
+                }
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
                 switch (uc.kind) {
@@ -2169,6 +2185,9 @@ SEXP Compiler::finalize() {
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
+    if (Compiler::recordLessEnabled)
+        ctx.cfgBuilder.configure(formals, exp);
+
     // Compile formals (if any) and create signature
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_MissingArg) {
@@ -2205,6 +2224,8 @@ SEXP Compiler::finalize() {
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
+    function.function()->recordTypeOncePromiseCount =
+        (uint16_t)ctx.recordTypeOncePromiseBitmapSize;
     UNPROTECT(1);
 
 #ifdef ENABLE_SLOWASSERT

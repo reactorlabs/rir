@@ -34,6 +34,11 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
 
+// record_type_once_promise_ uses a persistent 64-bit bitmap stored in the
+// function's call environment (envsxp_struct::recordTypeOnceBitmap), so the
+// max bit index is 64.
+#define RECORD_TYPE_ONCE_PROMISE_MAX_IIDX 64
+
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
 
@@ -281,7 +286,8 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_ || bc == Opcode::record_type_once_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_ ||
+               bc == Opcode::record_type_once_promise_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -330,6 +336,7 @@ class BC {
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
     inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
+    inline static BC recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -583,6 +590,7 @@ class BC {
         case Opcode::record_test_:
         case Opcode::record_type_:
         case Opcode::record_type_once_:
+        case Opcode::record_type_once_promise_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
