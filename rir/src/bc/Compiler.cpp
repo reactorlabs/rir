@@ -2060,41 +2060,45 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
         }
         if (Compiler::profile) {
             if (Compiler::recordLessEnabled) {
-                // Variable free in a promise that is a parameter of the
-                // enclosing function (never assigned, not shadowed, used
-                // in a loop) — record once per function invocation via the
-                // persistent bitmap in the call env.
-                if (ctx.code.top()->isPromiseContext() &&
-                    ctx.cfgBuilder.isSupportedParameter(name) &&
-                    ctx.recordTypeOncePromiseBitmapSize <
-                        RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
-                    int slot = ctx.typeFeedbackBuilder.addType();
-                    uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
-                    cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
-                    return;
-                }
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
-                switch (uc.kind) {
-                case UseKind::NoRecord:
+                if (uc.kind == UseKind::NoRecord) {
                     ctx.registerNoRecordDep(uc.defSlot);
-                    break;
-                case UseKind::RecordOnce: {
+                } else if (ctx.code.top()->isPromiseContext() &&
+                           ctx.cfgBuilder.isSupportedParameter(name) &&
+                           ctx.recordTypeOncePromiseBitmapSize <
+                               RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
+                    // Variable free in a promise that is a parameter of the
+                    // enclosing function (never assigned, not shadowed, used
+                    // in a loop) — record once per function invocation via the
+                    // persistent bitmap in the call env.
                     int slot = ctx.typeFeedbackBuilder.addType();
                     ctx.defUseAnalysis().trackUseDef(name, slot);
-                    auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
-                    if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                        bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
-                        uint32_t bitIdx = bitmapSize++;
-                        cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
-                    } else {
-                        cs << BC::recordType(slot);
+                    uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
+                    cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+                } else {
+                    switch (uc.kind) {
+                    case UseKind::NoRecord:
+                        assert(false && "no record unreachable");
+                        break; // unreachable: handled above
+                    case UseKind::RecordOnce: {
+                        int slot = ctx.typeFeedbackBuilder.addType();
+                        ctx.defUseAnalysis().trackUseDef(name, slot);
+                        auto& bitmapSize =
+                            ctx.code.top()->recordTypeOnceBitmapSize;
+                        if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                            bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                            uint32_t bitIdx = bitmapSize++;
+                            cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
+                        } else {
+                            cs << BC::recordType(slot);
+                        }
+                        break;
                     }
-                    break;
-                }
-                case UseKind::RecordAlways:
-                    cs << ctx.recordTypeTracked(name);
-                    break;
+                    case UseKind::RecordAlways:
+                        cs << ctx.recordTypeTracked(name);
+                        break;
+                    }
                 }
             } else {
                 cs << ctx.recordType();
