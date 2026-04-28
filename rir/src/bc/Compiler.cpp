@@ -151,6 +151,10 @@ class CompilerContext {
     CompilerCFGBuilder cfgBuilder;
     uint32_t recordTypeOncePromiseBitmapSize = 0;
 
+    // Formals + body-assigned variables (minus inner-<<--assigned ones).
+    // Populated once in Compiler::finalize() before any context is pushed.
+    std::unordered_set<SEXP> functionLocalOrParam_;
+
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -187,17 +191,26 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        code.push(
-            new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
+        auto* ctx =
+            new CodeContext(ast, fun, code.empty() ? nullptr : code.top());
+        ctx->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
+        code.push(ctx);
     }
 
     bool isInPromise() { return pushedPromiseContexts > 0; }
 
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
-
-        code.push(
-            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
+        auto* pc =
+            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top());
+        pc->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
+        // Inherit the enclosing loop depth so the first use of a local/param
+        // inside a promise compiled within a loop gets RecordOnce rather than
+        // RecordAlways.
+        if (!code.empty())
+            pc->defUseAnalysis.loopDepth_ =
+                code.top()->defUseAnalysis.loopDepth_;
+        code.push(pc);
     }
 
     Code* pop() {
@@ -2189,8 +2202,28 @@ SEXP Compiler::finalize() {
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
-    if (Compiler::recordLessEnabled)
+    if (Compiler::recordLessEnabled) {
         ctx.cfgBuilder.configure(formals, exp);
+
+        // Collect all variables locally assigned anywhere in the function body.
+        std::unordered_map<SEXP, int> allAssigned;
+        DefUseAnalysis::collectAssignedVars(exp, allAssigned);
+
+        // Collect variables that are <<-assigned inside any inner function.
+        // These can be mutated from a nested closure, so must not be optimised.
+        std::unordered_set<SEXP> innerSuperAssigned;
+        DefUseAnalysis::collectInnerSuperAssigned(exp, innerSuperAssigned);
+
+        // Add formals.
+        for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
+            if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
+                ctx.functionLocalOrParam_.insert(arg.tag());
+
+        // Add body-assigned vars, excluding those <<-assigned in inner funs.
+        for (auto& kv : allAssigned)
+            if (!innerSuperAssigned.count(kv.first))
+                ctx.functionLocalOrParam_.insert(kv.first);
+    }
 
     // Compile formals (if any) and create signature
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {

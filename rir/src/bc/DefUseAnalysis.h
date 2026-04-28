@@ -88,6 +88,11 @@ class DefUseAnalysis {
 
     // ---- data ----
 
+    // Pointer to the function-wide set of local/param variables (owned by
+    // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
+    // mutated. Null when recordLessEnabled is off.
+    const std::unordered_set<SEXP>* localOrParam_ = nullptr;
+
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
     int loopDepth_ = 0;
@@ -98,6 +103,10 @@ class DefUseAnalysis {
     std::vector<int> closedLoopExitByDepth_;
 
     // ---- compile-time state updates ----
+
+    bool isLocalOrParam(SEXP name) const {
+        return localOrParam_ && localOrParam_->count(name) > 0;
+    }
 
     void trackDef(SEXP name, int feedbackSlot = kNoSlot) {
         useDefs_.erase(name);
@@ -206,29 +215,56 @@ class DefUseAnalysis {
 
     // Classify the use of `name` at the current compilation point.
     UseClassification classifyUse(SEXP name) const {
-        // Check use-defs first: a previously recorded use of `name` that
-        // dominates this point and is post-dominated by it can serve as the
-        // type-info source, avoiding another recording. No hasUnseenLoopDef
-        // guard here — the back-edge only reaches the loop start, not
-        // between two uses in the same basic block, so a prior in-iteration
-        // use is always a valid feedback source for a later one.
-        auto udIt = useDefs_.find(name);
-        if (udIt != useDefs_.end()) {
-            for (const Def& ud : udIt->second) {
-                if (dominates(ud) && postDominates(ud))
-                    return {UseKind::NoRecord, ud.feedbackSlot};
+        // Only local variables (formals or body-assigned) are eligible for
+        // NoRecord-via-useDefs and RecordOnce. Free variables from outer
+        // scopes must always be recorded.
+        if (isLocalOrParam(name)) {
+            // Check use-defs first: a previously recorded use of `name` that
+            // dominates this point and is post-dominated by it can serve as
+            // the type-info source. No hasUnseenLoopDef guard here — the
+            // back-edge only reaches the loop start, not between two uses in
+            // the same basic block, so a prior in-iteration use is always a
+            // valid feedback source for a later one.
+            auto udIt = useDefs_.find(name);
+            if (udIt != useDefs_.end()) {
+                for (const Def& ud : udIt->second) {
+                    if (dominates(ud) && postDominates(ud))
+                        return {UseKind::NoRecord, ud.feedbackSlot};
+                }
             }
         }
 
+        // findReachingDef only returns non-null for locally stvar-assigned
+        // variables, so no localOrParam guard is needed here.
         const Def* d = findReachingDef(name);
         if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
-        if (loopDepth_ > 0 && !assignedInEnclosingLoop(name))
+
+        if (isLocalOrParam(name) && loopDepth_ > 0 &&
+            !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
+
         return {UseKind::RecordAlways, kNoSlot};
     }
 
     // ---- AST pre-scan ----
+
+    // Collect all variables that are <<-assigned inside any inner function
+    // (at any nesting depth) of `ast`. These can be modified from a nested
+    // closure without a local stvar, so they must not be optimised.
+    static void collectInnerSuperAssigned(SEXP ast,
+                                          std::unordered_set<SEXP>& out) {
+        if (!ast || ast == R_NilValue || TYPEOF(ast) != LANGSXP)
+            return;
+        SEXP head = CAR(ast);
+        if (head == symbol::Function) {
+            // Found an inner function: scan its body for <<- at any depth.
+            scanForSuperAssigns(CADDR(ast), out);
+            return;
+        }
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            collectInnerSuperAssigned(CAR(s), out);
+    }
 
     static void collectAssignedVars(SEXP ast,
                                     std::unordered_map<SEXP, int>& out) {
@@ -254,6 +290,21 @@ class DefUseAnalysis {
     }
 
   private:
+    // Recursively scan `ast` for <<- assignments at any depth, including
+    // inside further nested functions (conservative: their <<- may bubble up).
+    static void scanForSuperAssigns(SEXP ast, std::unordered_set<SEXP>& out) {
+        if (!ast || ast == R_NilValue || TYPEOF(ast) != LANGSXP)
+            return;
+        SEXP head = CAR(ast);
+        if (head == symbol::SuperAssign) {
+            SEXP lhs = CADR(ast);
+            if (TYPEOF(lhs) == SYMSXP)
+                out.insert(lhs);
+        }
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            scanForSuperAssigns(CAR(s), out);
+    }
+
     int currentScopeId() const {
         return scopeStack_.empty() ? 0 : scopeStack_.back().id;
     }
