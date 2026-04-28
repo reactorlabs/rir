@@ -155,6 +155,18 @@ class CompilerContext {
     // Populated once in Compiler::finalize() before any context is pushed.
     std::unordered_set<SEXP> functionLocalOrParam_;
 
+    // Stable variables captured from enclosing scopes (passed in from the
+    // outer Compiler), filtered to drop names shadowed by this function's
+    // own formals or body-assignments.
+    std::unordered_set<SEXP> outerSafe_;
+
+    // Pre-scan results retained for use at inner-function call sites when
+    // computing the `safeForInner` capture set to hand to nested compilations.
+    std::unordered_set<SEXP> formalNames_;
+    std::unordered_map<SEXP, int> bodyAssignedCount_;
+    std::unordered_set<SEXP> innerSuperAssigned_;
+    std::unordered_set<SEXP> forLoopVars_;
+
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -194,6 +206,7 @@ class CompilerContext {
         auto* ctx =
             new CodeContext(ast, fun, code.empty() ? nullptr : code.top());
         ctx->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
+        ctx->defUseAnalysis.outerSafe_ = &outerSafe_;
         code.push(ctx);
     }
 
@@ -204,6 +217,7 @@ class CompilerContext {
         auto* pc =
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top());
         pc->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
+        pc->defUseAnalysis.outerSafe_ = &outerSafe_;
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.
@@ -211,6 +225,32 @@ class CompilerContext {
             pc->defUseAnalysis.loopDepth_ =
                 code.top()->defUseAnalysis.loopDepth_;
         code.push(pc);
+    }
+
+    // Build the set of stable captures to hand off to a function literal
+    // being compiled at the current point of this function's body. Combines:
+    //   1. carry-through of this function's outerSafe_ (already filtered for
+    //      shadowing by this function's own scope at finalize time)
+    //   2. this function's formals never reassigned and not <<-escaped from
+    //      an inner function
+    //   3. this function's body-locals assigned exactly once whose unique
+    //      def already dominates this compilation point, excluding for-loop
+    //      vars (reassigned every iteration) and <<-escaped names
+    std::unordered_set<SEXP> computeSafeForInner() const {
+        std::unordered_set<SEXP> safe;
+        for (SEXP s : outerSafe_)
+            safe.insert(s);
+        for (SEXP f : formalNames_)
+            if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
+                safe.insert(f);
+        const auto& dua = code.top()->defUseAnalysis;
+        for (auto& kv : bodyAssignedCount_) {
+            if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
+                !innerSuperAssigned_.count(kv.first) &&
+                dua.hasDominatingDef(kv.first))
+                safe.insert(kv.first);
+        }
+        return safe;
     }
 
     Code* pop() {
@@ -564,7 +604,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            auto dt = Compiler::compileFunction(args[1], args[0]);
+            std::unordered_set<SEXP> safeForInner;
+            if (Compiler::recordLessEnabled)
+                safeForInner = ctx.computeSafeForInner();
+            auto dt = Compiler::compileFunction(args[1], args[0],
+                                                std::move(safeForInner));
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
@@ -2205,23 +2249,31 @@ SEXP Compiler::finalize() {
     if (Compiler::recordLessEnabled) {
         ctx.cfgBuilder.configure(formals, exp);
 
-        // Collect all variables locally assigned anywhere in the function body.
-        std::unordered_map<SEXP, int> allAssigned;
-        DefUseAnalysis::collectAssignedVars(exp, allAssigned);
+        // Pre-scan the function body. Stored on ctx for reuse at inner-
+        // function call sites when computing safe captures to hand off.
+        DefUseAnalysis::collectAssignedVars(exp, ctx.bodyAssignedCount_);
+        DefUseAnalysis::collectInnerSuperAssigned(exp, ctx.innerSuperAssigned_);
+        DefUseAnalysis::collectForLoopVars(exp, ctx.forLoopVars_);
 
-        // Collect variables that are <<-assigned inside any inner function.
-        // These can be mutated from a nested closure, so must not be optimised.
-        std::unordered_set<SEXP> innerSuperAssigned;
-        DefUseAnalysis::collectInnerSuperAssigned(exp, innerSuperAssigned);
-
-        // Add formals.
         for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
             if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
-                ctx.functionLocalOrParam_.insert(arg.tag());
+                ctx.formalNames_.insert(arg.tag());
 
-        // Add body-assigned vars, excluding those <<-assigned in inner funs.
-        for (auto& kv : allAssigned)
-            if (!innerSuperAssigned.count(kv.first))
+        // outerSafe_: incoming captures, filtered to drop names shadowed by
+        // this function's own formals or body-assignments (R scoping makes
+        // a body-assigned name local to this function for the entire call).
+        for (SEXP s : outerSafe)
+            if (!ctx.formalNames_.count(s) && !ctx.bodyAssignedCount_.count(s))
+                ctx.outerSafe_.insert(s);
+
+        // functionLocalOrParam_: own formals + body-assigned, minus any var
+        // <<-assigned in an inner function (those can mutate without a
+        // visible local stvar).
+        for (SEXP f : ctx.formalNames_)
+            if (!ctx.innerSuperAssigned_.count(f))
+                ctx.functionLocalOrParam_.insert(f);
+        for (auto& kv : ctx.bodyAssignedCount_)
+            if (!ctx.innerSuperAssigned_.count(kv.first))
                 ctx.functionLocalOrParam_.insert(kv.first);
     }
 

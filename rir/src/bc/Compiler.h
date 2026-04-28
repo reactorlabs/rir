@@ -13,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 
@@ -22,6 +23,11 @@ class Compiler {
     SEXP formals;
     SEXP closureEnv;
 
+    // Stable variables captured from any enclosing function. Empty for
+    // top-level compilations; populated when this Compiler is invoked for
+    // an inner-function literal during another function's compilation.
+    std::unordered_set<SEXP> outerSafe;
+
     Preserve preserve;
 
     explicit Compiler(SEXP exp)
@@ -29,8 +35,10 @@ class Compiler {
         preserve(exp);
     }
 
-    Compiler(SEXP exp, SEXP formals, SEXP env)
-        : exp(exp), formals(formals), closureEnv(env) {
+    Compiler(SEXP exp, SEXP formals, SEXP env,
+             std::unordered_set<SEXP> outerSafe = {})
+        : exp(exp), formals(formals), closureEnv(env),
+          outerSafe(std::move(outerSafe)) {
         preserve(exp);
         preserve(formals);
         preserve(env);
@@ -49,11 +57,14 @@ class Compiler {
         return c.finalize();
     }
 
-    // Compile a function which is not yet closed
-    static SEXP compileFunction(SEXP ast, SEXP formals) {
+    // Compile a function which is not yet closed.
+    // `outerSafe` is the set of stable captured variable names from enclosing
+    // scopes; pass empty (default) for top-level compilations.
+    static SEXP compileFunction(SEXP ast, SEXP formals,
+                                std::unordered_set<SEXP> outerSafe = {}) {
         Protect p;
 
-        Compiler c(ast, formals, nullptr);
+        Compiler c(ast, formals, nullptr, std::move(outerSafe));
         auto res = p(c.finalize());
 
         // Allocate a new vtable.

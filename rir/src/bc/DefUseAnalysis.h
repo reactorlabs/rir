@@ -93,6 +93,11 @@ class DefUseAnalysis {
     // mutated. Null when recordLessEnabled is off.
     const std::unordered_set<SEXP>* localOrParam_ = nullptr;
 
+    // Pointer to the set of stable variables captured from enclosing scopes
+    // (owned by CompilerContext::outerSafe_). Held separately from
+    // localOrParam_ so future rules can treat captures differently.
+    const std::unordered_set<SEXP>* outerSafe_ = nullptr;
+
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
     int loopDepth_ = 0;
@@ -106,6 +111,19 @@ class DefUseAnalysis {
 
     bool isLocalOrParam(SEXP name) const {
         return localOrParam_ && localOrParam_->count(name) > 0;
+    }
+    bool isOuterSafe(SEXP name) const {
+        return outerSafe_ && outerSafe_->count(name) > 0;
+    }
+    bool isOptimizable(SEXP name) const {
+        return isLocalOrParam(name) || isOuterSafe(name);
+    }
+
+    // True when defs_ contains a def of `name` that dominates the current
+    // compilation point (no closed-scope or unseen-loop-def issues). Public
+    // wrapper around findReachingDef for use at inner-function call sites.
+    bool hasDominatingDef(SEXP name) const {
+        return findReachingDef(name) != nullptr;
     }
 
     void trackDef(SEXP name, int feedbackSlot = kNoSlot) {
@@ -215,10 +233,10 @@ class DefUseAnalysis {
 
     // Classify the use of `name` at the current compilation point.
     UseClassification classifyUse(SEXP name) const {
-        // Only local variables (formals or body-assigned) are eligible for
+        // Only locals/params and stable outer captures are eligible for
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
-        // scopes must always be recorded.
-        if (isLocalOrParam(name)) {
+        // scopes (not captured-stable) must always be recorded.
+        if (isOptimizable(name)) {
             // Check use-defs first: a previously recorded use of `name` that
             // dominates this point and is post-dominated by it can serve as
             // the type-info source. No hasUnseenLoopDef guard here — the
@@ -240,7 +258,7 @@ class DefUseAnalysis {
         if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
 
-        if (isLocalOrParam(name) && loopDepth_ > 0 &&
+        if (isOptimizable(name) && loopDepth_ > 0 &&
             !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
 
@@ -264,6 +282,25 @@ class DefUseAnalysis {
         }
         for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
             collectInnerSuperAssigned(CAR(s), out);
+    }
+
+    // Collect variables bound by `for (sym in ...)` loops anywhere in `ast`
+    // (not recursing into inner functions). For-loop variables are reassigned
+    // on every iteration, so they must never be treated as "stable / assigned
+    // exactly once" when computing safe captures for inner functions.
+    static void collectForLoopVars(SEXP ast, std::unordered_set<SEXP>& out) {
+        if (!ast || ast == R_NilValue || TYPEOF(ast) != LANGSXP)
+            return;
+        SEXP fun = CAR(ast);
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::For) {
+            SEXP sym = CADR(ast);
+            if (TYPEOF(sym) == SYMSXP)
+                out.insert(sym);
+        }
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::Function)
+            return;
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            collectForLoopVars(CAR(s), out);
     }
 
     static void collectAssignedVars(SEXP ast,
