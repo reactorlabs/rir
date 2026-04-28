@@ -190,7 +190,7 @@ class CompilerContext {
     void push(SEXP ast, SEXP env) {
         auto* ctx =
             new CodeContext(ast, fun, code.empty() ? nullptr : code.top());
-        ctx->defUseAnalysis.localOrParam_ = functionLocalOrParam_;
+        ctx->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
         code.push(ctx);
     }
 
@@ -200,7 +200,7 @@ class CompilerContext {
         pushedPromiseContexts++;
         auto* pc =
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top());
-        pc->defUseAnalysis.localOrParam_ = functionLocalOrParam_;
+        pc->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.

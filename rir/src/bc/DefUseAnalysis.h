@@ -88,12 +88,10 @@ class DefUseAnalysis {
 
     // ---- data ----
 
-    // Variables known to be local: formal parameters or variables assigned in
-    // the function body (excluding any that are <<-assigned inside an inner
-    // function, since those can change without a visible local stvar).
-    // Only these are eligible for NoRecord-via-useDefs and RecordOnce.
-    // Free variables from outer scopes are always RecordAlways.
-    std::unordered_set<SEXP> localOrParam_;
+    // Pointer to the function-wide set of local/param variables (owned by
+    // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
+    // mutated. Null when recordLessEnabled is off.
+    const std::unordered_set<SEXP>* localOrParam_ = nullptr;
 
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
@@ -106,9 +104,8 @@ class DefUseAnalysis {
 
     // ---- compile-time state updates ----
 
-    void addLocalOrParam(SEXP name) { localOrParam_.insert(name); }
     bool isLocalOrParam(SEXP name) const {
-        return localOrParam_.count(name) > 0;
+        return localOrParam_ && localOrParam_->count(name) > 0;
     }
 
     void trackDef(SEXP name, int feedbackSlot = kNoSlot) {
