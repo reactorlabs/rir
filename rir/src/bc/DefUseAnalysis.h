@@ -281,7 +281,7 @@ class DefUseAnalysis {
         if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
 
-        if (loopDepth_ > 0 && !assignedInEnclosingLoop(name))
+        if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
 
         return {UseKind::RecordAlways, kNoSlot};
