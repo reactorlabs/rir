@@ -2069,7 +2069,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (Compiler::recordLessEnabled /* && !ctx.isInPromise() */) {
+            if (Compiler::recordLessEnabled && !ctx.isInPromise()) {
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
                 switch (uc.kind) {
