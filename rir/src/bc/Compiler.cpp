@@ -155,10 +155,17 @@ class CompilerContext {
     // Populated once in Compiler::finalize() before any context is pushed.
     std::unordered_set<SEXP> functionLocalOrParam_;
 
-    // Stable variables captured from enclosing scopes (passed in from the
-    // outer Compiler), filtered to drop names shadowed by this function's
-    // own formals or body-assignments.
-    std::unordered_set<SEXP> outerSafe_;
+    // Variables from enclosing scopes in our "realm": when a local def has not
+    // run, ldvar falls through to a controlled env, not to global. Superset
+    // of outerImmutable_. Enables RecordOnce. Names that are also locally
+    // assigned by formals of this function are excluded (formal completely
+    // shadows the outer name).
+    std::unordered_set<SEXP> outerControlled_;
+
+    // Strict subset of outerControlled_: values that truly do not change during
+    // this function's lifetime. Names locally body-assigned here are excluded.
+    // Reserved for future cross-invocation optimizations.
+    std::unordered_set<SEXP> outerImmutable_;
 
     // Pre-scan results retained for use at inner-function call sites when
     // computing the `safeForInner` capture set to hand to nested compilations.
@@ -206,7 +213,9 @@ class CompilerContext {
         auto* ctx =
             new CodeContext(ast, fun, code.empty() ? nullptr : code.top());
         ctx->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
-        ctx->defUseAnalysis.outerSafe_ = &outerSafe_;
+        ctx->defUseAnalysis.outerControlled_ = &outerControlled_;
+        ctx->defUseAnalysis.outerImmutable_ = &outerImmutable_;
+        ctx->defUseAnalysis.formalNames_ = &formalNames_;
         code.push(ctx);
     }
 
@@ -217,7 +226,9 @@ class CompilerContext {
         auto* pc =
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top());
         pc->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
-        pc->defUseAnalysis.outerSafe_ = &outerSafe_;
+        pc->defUseAnalysis.outerControlled_ = &outerControlled_;
+        pc->defUseAnalysis.outerImmutable_ = &outerImmutable_;
+        pc->defUseAnalysis.formalNames_ = &formalNames_;
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.
@@ -227,30 +238,52 @@ class CompilerContext {
         code.push(pc);
     }
 
-    // Build the set of stable captures to hand off to a function literal
-    // being compiled at the current point of this function's body. Combines:
-    //   1. carry-through of this function's outerSafe_ (already filtered for
-    //      shadowing by this function's own scope at finalize time)
-    //   2. this function's formals never reassigned and not <<-escaped from
-    //      an inner function
-    //   3. this function's body-locals assigned exactly once whose unique
-    //      def already dominates this compilation point, excluding for-loop
-    //      vars (reassigned every iteration) and <<-escaped names
-    std::unordered_set<SEXP> computeSafeForInner() const {
-        std::unordered_set<SEXP> safe;
-        for (SEXP s : outerSafe_)
-            safe.insert(s);
-        for (SEXP f : formalNames_)
-            if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
-                safe.insert(f);
+    struct CaptureInfo {
+        std::unordered_set<SEXP> immutable;
+        std::unordered_set<SEXP> controlled;
+    };
+
+    // Build the two capture sets to hand off to a function literal being
+    // compiled at the current point of this function's body.
+    //
+    // `controlled`: everything in our realm — the inner function can rely on
+    // fallthrough going to a controlled env rather than global.
+    // `immutable`: strict subset — values that won't change during the inner
+    // function's lifetime (enables future cross-invocation optimizations).
+    CaptureInfo computeCapturesForInner() const {
+        CaptureInfo result;
         const auto& dua = code.top()->defUseAnalysis;
+
+        // Carry-through: outer captures remain valid for the inner function.
+        for (SEXP s : outerImmutable_) {
+            result.immutable.insert(s);
+            result.controlled.insert(s);
+        }
+        for (SEXP s : outerControlled_)
+            result.controlled.insert(s);
+
+        // Own formals: always bound at call time → controlled.
+        // Immutable only if never body-assigned (so the binding never changes)
+        // and not <<-escaped from an inner function.
+        for (SEXP f : formalNames_) {
+            result.controlled.insert(f);
+            if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
+                result.immutable.insert(f);
+        }
+
+        // Own body-locals: live in the current function's local env →
+        // controlled. Immutable only if assigned exactly once, not a for-loop
+        // variable, not
+        // <<-escaped, and the single def dominates this compilation point.
         for (auto& kv : bodyAssignedCount_) {
+            result.controlled.insert(kv.first);
             if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
                 !innerSuperAssigned_.count(kv.first) &&
                 dua.hasDominatingDef(kv.first))
-                safe.insert(kv.first);
+                result.immutable.insert(kv.first);
         }
-        return safe;
+
+        return result;
     }
 
     Code* pop() {
@@ -604,11 +637,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            std::unordered_set<SEXP> safeForInner;
+            CompilerContext::CaptureInfo captures;
             if (Compiler::recordLessEnabled)
-                safeForInner = ctx.computeSafeForInner();
+                captures = ctx.computeCapturesForInner();
             auto dt = Compiler::compileFunction(args[1], args[0],
-                                                std::move(safeForInner));
+                                                std::move(captures.immutable),
+                                                std::move(captures.controlled));
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
@@ -2259,12 +2293,20 @@ SEXP Compiler::finalize() {
             if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
                 ctx.formalNames_.insert(arg.tag());
 
-        // outerSafe_: incoming captures, filtered to drop names shadowed by
-        // this function's own formals or body-assignments (R scoping makes
-        // a body-assigned name local to this function for the entire call).
-        for (SEXP s : outerSafe)
+        // outerImmutable_: incoming immutable captures, minus names shadowed by
+        // this function's own formals (formal completely hides the outer name)
+        // or body-assigned here (local assignment breaks immutability).
+        for (SEXP s : outerImmutable)
             if (!ctx.formalNames_.count(s) && !ctx.bodyAssignedCount_.count(s))
-                ctx.outerSafe_.insert(s);
+                ctx.outerImmutable_.insert(s);
+
+        // outerControlled_: incoming controlled captures (superset of
+        // immutable), minus names shadowed by this function's own formals.
+        // Body-assigned names stay: when the local def hasn't run, ldvar falls
+        // through to the controlled outer env, not to global.
+        for (SEXP s : outerControlled)
+            if (!ctx.formalNames_.count(s))
+                ctx.outerControlled_.insert(s);
 
         // functionLocalOrParam_: own formals + body-assigned, minus any var
         // <<-assigned in an inner function (those can mutate without a

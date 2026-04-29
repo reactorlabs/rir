@@ -93,10 +93,24 @@ class DefUseAnalysis {
     // mutated. Null when recordLessEnabled is off.
     const std::unordered_set<SEXP>* localOrParam_ = nullptr;
 
-    // Pointer to the set of stable variables captured from enclosing scopes
-    // (owned by CompilerContext::outerSafe_). Held separately from
-    // localOrParam_ so future rules can treat captures differently.
-    const std::unordered_set<SEXP>* outerSafe_ = nullptr;
+    // Pointer to the set of variables captured from enclosing scopes that are
+    // within our "realm" — when the local def has not yet run, an ldvar for
+    // one of these falls through to a controlled (sentinel-monitorable) env,
+    // not to global. Superset of outerImmutable_. Enables RecordOnce.
+    // (owned by CompilerContext::outerControlled_)
+    const std::unordered_set<SEXP>* outerControlled_ = nullptr;
+
+    // Pointer to the strict subset of outerControlled_ whose values truly do
+    // not change during this function's lifetime (formals of outer never
+    // reassigned, body-locals of outer assigned once with dominating def).
+    // Reserved for future cross-invocation optimizations.
+    // (owned by CompilerContext::outerImmutable_)
+    const std::unordered_set<SEXP>* outerImmutable_ = nullptr;
+
+    // Pointer to this function's formal parameter names (owned by
+    // CompilerContext::formalNames_). Formals are always bound at call time,
+    // so RecordOnce is sound for them even without a dominating stvar def.
+    const std::unordered_set<SEXP>* formalNames_ = nullptr;
 
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
@@ -112,11 +126,23 @@ class DefUseAnalysis {
     bool isLocalOrParam(SEXP name) const {
         return localOrParam_ && localOrParam_->count(name) > 0;
     }
-    bool isOuterSafe(SEXP name) const {
-        return outerSafe_ && outerSafe_->count(name) > 0;
+    bool isOuterControlled(SEXP name) const {
+        return outerControlled_ && outerControlled_->count(name) > 0;
     }
+    bool isOuterImmutable(SEXP name) const {
+        return outerImmutable_ && outerImmutable_->count(name) > 0;
+    }
+    bool isFormal(SEXP name) const {
+        return formalNames_ && formalNames_->count(name) > 0;
+    }
+    // A use is optimizable when the variable is provably "under our control":
+    //   isFormal          — always bound at call time
+    //   isOuterControlled — fallthrough goes to a controlled env, not global
+    //   hasDominatingDef  — a local stvar dominates this point (no path reads
+    //                       an unbound value from an uncontrolled outer scope)
     bool isOptimizable(SEXP name) const {
-        return isLocalOrParam(name) || isOuterSafe(name);
+        return isFormal(name) || isOuterControlled(name) ||
+               hasDominatingDef(name);
     }
 
     // True when defs_ contains a def of `name` that dominates the current
@@ -236,13 +262,13 @@ class DefUseAnalysis {
         // Only locals/params and stable outer captures are eligible for
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
         // scopes (not captured-stable) must always be recorded.
-        if (isOptimizable(name)) {
-            // Check use-defs first: a previously recorded use of `name` that
-            // dominates this point and is post-dominated by it can serve as
-            // the type-info source. No hasUnseenLoopDef guard here — the
-            // back-edge only reaches the loop start, not between two uses in
-            // the same basic block, so a prior in-iteration use is always a
-            // valid feedback source for a later one.
+        const Def* d = findReachingDef(name);
+        const bool optimizable =
+            isFormal(name) || isOuterControlled(name) || d != nullptr;
+
+        if (optimizable) {
+            // useDefs dedup: a previously recorded use that dominates and
+            // post-dominates this point has the same value — skip re-recording.
             auto udIt = useDefs_.find(name);
             if (udIt != useDefs_.end()) {
                 for (const Def& ud : udIt->second) {
@@ -252,14 +278,10 @@ class DefUseAnalysis {
             }
         }
 
-        // findReachingDef only returns non-null for locally stvar-assigned
-        // variables, so no localOrParam guard is needed here.
-        const Def* d = findReachingDef(name);
         if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
 
-        if (isOptimizable(name) && loopDepth_ > 0 &&
-            !assignedInEnclosingLoop(name))
+        if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
 
         return {UseKind::RecordAlways, kNoSlot};

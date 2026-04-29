@@ -23,10 +23,12 @@ class Compiler {
     SEXP formals;
     SEXP closureEnv;
 
-    // Stable variables captured from any enclosing function. Empty for
-    // top-level compilations; populated when this Compiler is invoked for
-    // an inner-function literal during another function's compilation.
-    std::unordered_set<SEXP> outerSafe;
+    // Variables from any enclosing function in our "realm" (controlled env
+    // chain). Superset of outerImmutable. Enables RecordOnce.
+    std::unordered_set<SEXP> outerControlled;
+    // Strict subset: values that truly won't change during this function's
+    // lifetime. Reserved for future cross-invocation optimizations.
+    std::unordered_set<SEXP> outerImmutable;
 
     Preserve preserve;
 
@@ -36,9 +38,11 @@ class Compiler {
     }
 
     Compiler(SEXP exp, SEXP formals, SEXP env,
-             std::unordered_set<SEXP> outerSafe = {})
+             std::unordered_set<SEXP> outerImmutable = {},
+             std::unordered_set<SEXP> outerControlled = {})
         : exp(exp), formals(formals), closureEnv(env),
-          outerSafe(std::move(outerSafe)) {
+          outerControlled(std::move(outerControlled)),
+          outerImmutable(std::move(outerImmutable)) {
         preserve(exp);
         preserve(formals);
         preserve(env);
@@ -58,13 +62,15 @@ class Compiler {
     }
 
     // Compile a function which is not yet closed.
-    // `outerSafe` is the set of stable captured variable names from enclosing
-    // scopes; pass empty (default) for top-level compilations.
+    // `outerImmutable` / `outerControlled` are capture sets from the enclosing
+    // compiler; pass empty (default) for top-level compilations.
     static SEXP compileFunction(SEXP ast, SEXP formals,
-                                std::unordered_set<SEXP> outerSafe = {}) {
+                                std::unordered_set<SEXP> outerImmutable = {},
+                                std::unordered_set<SEXP> outerControlled = {}) {
         Protect p;
 
-        Compiler c(ast, formals, nullptr, std::move(outerSafe));
+        Compiler c(ast, formals, nullptr, std::move(outerImmutable),
+                   std::move(outerControlled));
         auto res = p(c.finalize());
 
         // Allocate a new vtable.
