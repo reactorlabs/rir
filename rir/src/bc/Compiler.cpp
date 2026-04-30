@@ -2376,6 +2376,6 @@ bool Compiler::profile =
 
 bool Compiler::loopPeelingEnabled = true;
 
-bool Compiler::recordLessEnabled = true;
+bool Compiler::recordLessEnabled = false;
 
 } // namespace rir
