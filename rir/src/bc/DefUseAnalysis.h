@@ -259,14 +259,14 @@ class DefUseAnalysis {
 
     // Classify the use of `name` at the current compilation point.
     UseClassification classifyUse(SEXP name) const {
-        // Only locals/params and stable outer captures are eligible for
-        // NoRecord-via-useDefs and RecordOnce. Free variables from outer
-        // scopes (not captured-stable) must always be recorded.
+        // useDefs dedup: locals/params and outerControlled vars (even without a
+        // unique reaching def). RecordOnce: requires a dominating def or
+        // formal.
         const Def* d = findReachingDef(name);
         const bool optimizable =
             isFormal(name) || isOuterControlled(name) || d != nullptr;
 
-        if (optimizable) {
+        if (isLocalOrParam(name) || isOuterControlled(name)) {
             // useDefs dedup: a previously recorded use that dominates and
             // post-dominates this point has the same value — skip re-recording.
             auto udIt = useDefs_.find(name);
