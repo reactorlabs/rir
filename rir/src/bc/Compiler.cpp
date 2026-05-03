@@ -558,6 +558,9 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
+    if (Compiler::profile && Compiler::recordLessEnabled)
+        ctx.defUseAnalysis().pushForLoopVar(sym);
+
     // while
     compileWhile(
         ctx,
@@ -582,6 +585,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // }
         },
         body, !containsLoop(body));
+
+    if (Compiler::profile && Compiler::recordLessEnabled)
+        ctx.defUseAnalysis().popForLoopVar(sym);
+
     cs << BC::popn(3);
     if (!voidContext)
         cs << BC::push(R_NilValue) << BC::invisible();
@@ -1523,6 +1530,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().enterLoop();
+            ctx.defUseAnalysis().pushForLoopVar(sym);
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
             // The for loop also assigns sym on each iteration
@@ -1549,6 +1557,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         compileExpr(ctx, body, true);
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
+            ctx.defUseAnalysis().popForLoopVar(sym);
             ctx.defUseAnalysis().exitLoop();
         }
         cs << BC::br(nextBranch) << breakBranch;
@@ -2151,6 +2160,11 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
         }
         if (Compiler::profile) {
             if (Compiler::recordLessEnabled && !ctx.isInPromise()) {
+
+                // if  (name == Rf_install("i") || name == Rf_install("j")) {
+                //     return;
+                // }
+
                 using UseKind = DefUseAnalysis::UseKind;
                 auto uc = ctx.classifyUse(name);
                 if (uc.kind == UseKind::NoRecord) {

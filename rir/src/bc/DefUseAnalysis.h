@@ -121,6 +121,13 @@ class DefUseAnalysis {
     int closedReturnCount_ = 0;
     std::vector<int> closedLoopExitByDepth_;
 
+    // Per-name nesting count of for-loop iteration variables currently being
+    // compiled. The for-loop's implicit stvar reassigns this each iteration
+    // with a single, type-stable value extracted from the seq, so within one
+    // iteration the type is consistent — useDefs dedup is safe even though
+    // there is no trackDef-tracked dominating def.
+    std::unordered_map<SEXP, int> forLoopVarDepth_;
+
     // ---- compile-time state updates ----
 
     bool isLocalOrParam(SEXP name) const {
@@ -234,6 +241,16 @@ class DefUseAnalysis {
     }
     void clearLoopBodyDefs() { loopBodyDefs_.pop_back(); }
 
+    void pushForLoopVar(SEXP sym) { ++forLoopVarDepth_[sym]; }
+    void popForLoopVar(SEXP sym) {
+        auto it = forLoopVarDepth_.find(sym);
+        if (it != forLoopVarDepth_.end() && --it->second == 0)
+            forLoopVarDepth_.erase(it);
+    }
+    bool isForLoopVar(SEXP name) const {
+        return forLoopVarDepth_.count(name) > 0;
+    }
+
     // ---- save / restore for loop peeling ----
 
     DefsSnapshot saveState() const {
@@ -266,9 +283,13 @@ class DefUseAnalysis {
         const bool optimizable =
             isFormal(name) || isOuterControlled(name) || d != nullptr;
 
-        if (optimizable) {
+        if (optimizable || isForLoopVar(name)) {
             // useDefs dedup: a previously recorded use that dominates and
             // post-dominates this point has the same value — skip re-recording.
+            // For-loop iter vars are admitted here even though
+            // optimizable=false (no trackDef'd reaching def): the for-loop's
+            // implicit stvar sets the same type each iteration, so within an
+            // iteration any prior RecordAlways recording is current.
             auto udIt = useDefs_.find(name);
             if (udIt != useDefs_.end()) {
                 for (const Def& ud : udIt->second) {
