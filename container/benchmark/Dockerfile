@@ -7,4 +7,4 @@ RUN apt-get update && \
     cd /opt/ReBench && \
     git checkout 1aaba13 && \
     pip3 install . && \
-    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout a92447b37a03e96f8da1e18eb3cd8ab3b46fbf89
+    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 44a71d1344b356fab0e5e23ae2ceb1d88c5de6ff
