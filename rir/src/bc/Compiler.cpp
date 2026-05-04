@@ -722,7 +722,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(args[0]);
         cs << BC::dup() << BC::brfalse(nextBranch);
 
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
         cs.addSrc(args[1]);
@@ -746,7 +750,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         cs << BC::dup() << BC::brtrue(nextBranch);
 
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
         cs.addSrc(ast);
@@ -1348,14 +1356,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << objBranch;
 
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterBranch();
         {
             LoadArgsResult dummy;
             compileLoadArgs(ctx, ast, fun, args_, dummy, voidContext, 1);
         }
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << nonObjBranch;
 
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, *idx);
         if (dims == 3) {
             compileExpr(ctx, *(idx + 1));
@@ -1363,6 +1377,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else if (dims == 2) {
             compileExpr(ctx, *(idx + 1));
         }
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << contBranch;
@@ -1793,7 +1809,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 continue;
             } else {
                 cs << BC::pop();
+                if (Compiler::profile && Compiler::recordLessEnabled)
+                    ctx.defUseAnalysis().enterBranch();
                 compileExpr(ctx, expressions[j++]);
+                if (Compiler::profile && Compiler::recordLessEnabled)
+                    ctx.defUseAnalysis().exitBranch();
                 cs << BC::br(contBr);
             }
         }
@@ -2112,6 +2132,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     };
 
     LoadArgsResult info;
+    if (speculateOnBuiltin && Compiler::profile && Compiler::recordLessEnabled)
+        ctx.defUseAnalysis().enterBranch();
     if (fun == symbol::forceAndCall) {
         // forceAndCall is a special with signature `function(n, FUN, ...)`
         // The first two args are eager
@@ -2125,15 +2147,21 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadArgs(ctx, ast, fun, args, info, voidContext);
     }
     compileCall(info);
+    if (speculateOnBuiltin && Compiler::profile && Compiler::recordLessEnabled)
+        ctx.defUseAnalysis().exitBranch();
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().enterBranch();
         LoadArgsResult infoEager;
         compileLoadArgs(ctx, ast, fun, args, infoEager, voidContext, 0,
                         RList(args).length());
 
         compileCall(infoEager);
+        if (Compiler::profile && Compiler::recordLessEnabled)
+            ctx.defUseAnalysis().exitBranch();
 
         cs << theEnd;
     }
