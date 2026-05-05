@@ -34,6 +34,13 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
 
+// Macros for packing/unpacking the immediate of
+// clear_record_type_once_bits_range_: low 16 bits = start bit index, high 16
+// bits = count
+#define RECORD_TYPE_ONCE_RANGE_PACK(start, count) (((count) << 16) | (start))
+#define RECORD_TYPE_ONCE_RANGE_START(imm) ((imm)&0xFFFF)
+#define RECORD_TYPE_ONCE_RANGE_COUNT(imm) ((imm) >> 16)
+
 // record_type_once_promise_ uses a persistent 64-bit bitmap stored in the
 // function's call environment (envsxp_struct::recordTypeOnceBitmap), so the
 // max bit index is 64.
@@ -337,6 +344,9 @@ class BC {
     inline static BC recordType(uint32_t idx);
     inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
     inline static BC recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx);
+    inline static BC clearRecordTypeOnceBit(uint32_t bitIdx);
+    inline static BC clearRecordTypeOnceBitsRange(uint32_t start,
+                                                  uint32_t count);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -591,6 +601,8 @@ class BC {
         case Opcode::record_type_:
         case Opcode::record_type_once_:
         case Opcode::record_type_once_promise_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

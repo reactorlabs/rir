@@ -374,7 +374,7 @@ static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, SEXP bodyAst,
-                  bool peelLoop = false) {
+                  bool peelLoop = false, bool resetFeedbackAfterPeel = false) {
     CodeStream& cs = ctx.cs();
 
     BC::Label nextBranch = cs.mkLabel();
@@ -403,7 +403,18 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
         if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().enterLoopScope();
+        // Save feedback counters before peel body so main body can re-use
+        // the same slot+bit indices at each corresponding position.
+        unsigned bitmapSavePeel = resetFeedbackAfterPeel
+                                      ? ctx.code.top()->recordTypeOnceBitmapSize
+                                      : 0;
+        unsigned typeCountSavePeel =
+            resetFeedbackAfterPeel ? ctx.typeFeedbackBuilder.typeCount() : 0;
         compileBody();
+        if (resetFeedbackAfterPeel) {
+            ctx.code.top()->recordTypeOnceBitmapSize = bitmapSavePeel;
+            ctx.typeFeedbackBuilder.resetTypesTo(typeCountSavePeel);
+        }
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().exitLoop();
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
@@ -436,6 +447,19 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
     if (!Compiler::unsoundOpts) {
         cs << BC::guardNamePrimitive(fun);
     }
+}
+
+// True when `seq` is an AST call to `:`, `seq_len`, or `seq_along` — these are
+// the seq forms whose elements all have the same SEXP type, so a for-loop's
+// iter var has stable type across iterations.
+static bool isRangeBasedSeq(SEXP seq) {
+    if (TYPEOF(seq) != LANGSXP)
+        return false;
+    SEXP fun = CAR(seq);
+    if (TYPEOF(fun) != SYMSXP)
+        return false;
+    return fun == symbol::Colon || fun == symbol::seq_len ||
+           fun == symbol::seq_along;
 }
 
 /**
@@ -558,8 +582,28 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
-    if (Compiler::profile && Compiler::recordLessEnabled)
+    bool resetFeedback = false;
+    bool nestedRangeBased = false;
+    unsigned bitmapRangeStart = 0;
+    unsigned placeholderPos = 0;
+    if (Compiler::profile && Compiler::recordLessEnabled) {
         ctx.defUseAnalysis().pushForLoopVar(sym);
+        // compileSimpleFor always handles `:` — always range-based.
+        // Each RecordOnce use-site of sym gets its own bit. For nested loops,
+        // emit a clear_record_type_once_bits_range_ placeholder before the
+        // loop body; after compilation we know the actual range and patch it.
+        // This clears all per-position bits on each outer iteration so
+        // re-recording is possible. For top-level loops no clear is needed
+        // (fired[] is zero-initialised at function entry).
+        nestedRangeBased = ctx.defUseAnalysis().loopDepth() > 0;
+        bitmapRangeStart = ctx.code.top()->recordTypeOnceBitmapSize;
+        if (nestedRangeBased) {
+            placeholderPos = cs.currentPos();
+            cs << BC::clearRecordTypeOnceBitsRange(0, 0);
+        }
+        ctx.defUseAnalysis().pushRangeBasedForLoopVar(sym);
+        resetFeedback = true;
+    }
 
     // while
     compileWhile(
@@ -584,10 +628,22 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             compileExpr(ctx, body, true);
             // }
         },
-        body, !containsLoop(body));
+        body, !containsLoop(body), resetFeedback);
 
-    if (Compiler::profile && Compiler::recordLessEnabled)
+    if (Compiler::profile && Compiler::recordLessEnabled) {
+        if (nestedRangeBased) {
+            unsigned rangeCount =
+                ctx.code.top()->recordTypeOnceBitmapSize - bitmapRangeStart;
+            if (rangeCount == 0)
+                cs.remove(placeholderPos);
+            else
+                cs.patchImmediate(
+                    placeholderPos,
+                    RECORD_TYPE_ONCE_RANGE_PACK(bitmapRangeStart, rangeCount));
+        }
+        ctx.defUseAnalysis().popRangeBasedForLoopVar();
         ctx.defUseAnalysis().popForLoopVar(sym);
+    }
 
     cs << BC::popn(3);
     if (!voidContext)
@@ -1541,12 +1597,29 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::stvar(sym);
         };
 
+        // Detect a range-based seq before entering the loop scope so we can
+        // emit a placeholder range-clear for nested loops.
+        bool rangeBased = Compiler::profile && Compiler::recordLessEnabled &&
+                          isRangeBasedSeq(seq);
+        bool nestedRangeBased = false;
+        unsigned bitmapRangeStart = ctx.code.top()->recordTypeOnceBitmapSize;
+        unsigned placeholderPos = 0;
+        if (rangeBased) {
+            nestedRangeBased = ctx.defUseAnalysis().loopDepth() > 0;
+            if (nestedRangeBased) {
+                placeholderPos = cs.currentPos();
+                cs << BC::clearRecordTypeOnceBitsRange(0, 0);
+            }
+        }
+
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().enterLoop();
             ctx.defUseAnalysis().pushForLoopVar(sym);
+            if (rangeBased)
+                ctx.defUseAnalysis().pushRangeBasedForLoopVar(sym);
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
             // The for loop also assigns sym on each iteration
@@ -1561,7 +1634,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
+            unsigned bitmapSavePeel =
+                rangeBased ? ctx.code.top()->recordTypeOnceBitmapSize : 0;
+            unsigned typeCountSavePeel =
+                rangeBased ? ctx.typeFeedbackBuilder.typeCount() : 0;
             compileExpr(ctx, body, true);
+            if (rangeBased) {
+                ctx.code.top()->recordTypeOnceBitmapSize = bitmapSavePeel;
+                ctx.typeFeedbackBuilder.resetTypesTo(typeCountSavePeel);
+            }
             if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
@@ -1573,6 +1654,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         compileExpr(ctx, body, true);
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
+            if (rangeBased) {
+                if (nestedRangeBased) {
+                    unsigned rangeCount =
+                        ctx.code.top()->recordTypeOnceBitmapSize -
+                        bitmapRangeStart;
+                    if (rangeCount == 0)
+                        cs.remove(placeholderPos);
+                    else
+                        cs.patchImmediate(placeholderPos,
+                                          RECORD_TYPE_ONCE_RANGE_PACK(
+                                              bitmapRangeStart, rangeCount));
+                }
+                ctx.defUseAnalysis().popRangeBasedForLoopVar();
+            }
             ctx.defUseAnalysis().popForLoopVar(sym);
             ctx.defUseAnalysis().exitLoop();
         }

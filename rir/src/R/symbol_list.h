@@ -57,6 +57,8 @@
     V(quote, "quote")                                                          \
     V(Missing, "missing")                                                      \
     V(seq, "seq")                                                              \
+    V(seq_len, "seq_len")                                                      \
+    V(seq_along, "seq_along")                                                  \
     V(lapply, "lapply")                                                        \
     V(aslist, "as.list")                                                       \
     V(ascharacter, "as.character")                                             \

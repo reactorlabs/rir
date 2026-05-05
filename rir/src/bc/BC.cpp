@@ -84,6 +84,8 @@ void BC::write(CodeStream& cs) const {
     case Opcode::record_type_:
     case Opcode::record_type_once_:
     case Opcode::record_type_once_promise_:
+    case Opcode::clear_record_type_once_bit_:
+    case Opcode::clear_record_type_once_bits_range_:
         cs.insert(immediate.i);
         return;
 
@@ -167,6 +169,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::record_type_once_:
         case Opcode::record_type_once_promise_:
         case Opcode::record_test_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -260,6 +264,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::record_type_once_:
         case Opcode::record_type_once_promise_:
         case Opcode::record_test_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -403,6 +409,15 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_type_once_promise_:
         out << "#" << immediate.i << "[once-promise]";
         break;
+    case Opcode::clear_record_type_once_bit_:
+        out << "bit#" << immediate.i << "[clear]";
+        break;
+    case Opcode::clear_record_type_once_bits_range_: {
+        uint32_t start = RECORD_TYPE_ONCE_RANGE_START(immediate.i);
+        uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(immediate.i);
+        out << "bits[" << start << "+" << count << "][clear]";
+        break;
+    }
 
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)

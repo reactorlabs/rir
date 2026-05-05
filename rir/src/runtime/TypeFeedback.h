@@ -356,6 +356,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         uint32_t addCallee();
         uint32_t addTest();
         uint32_t addType();
+        // Roll back type slot allocations to a saved count. Used to reset
+        // after loop-peel body compilation so the main body re-allocates the
+        // same slot indices, making peel and main share feedback slots.
+        void resetTypesTo(unsigned n);
         // Record that the type slot `slot` should be populated from `source`
         // before JIT compilation rather than being recorded at runtime.
         void setTypeDep(uint32_t slot, uint32_t source);

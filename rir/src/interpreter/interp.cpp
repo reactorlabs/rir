@@ -2401,6 +2401,25 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(clear_record_type_once_bit_) {
+            uint32_t bitIdx = readImmediate();
+            advanceImmediate();
+            RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx) &=
+                ~RECORD_TYPE_ONCE_MASK(bitIdx);
+            NEXT();
+        }
+
+        INSTRUCTION(clear_record_type_once_bits_range_) {
+            uint32_t packed = readImmediate();
+            advanceImmediate();
+            uint32_t start = RECORD_TYPE_ONCE_RANGE_START(packed);
+            uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(packed);
+            for (uint32_t b = start; b < start + count; b++)
+                RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
+                    ~RECORD_TYPE_ONCE_MASK(b);
+            NEXT();
+        }
+
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length();

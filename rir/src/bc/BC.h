@@ -47,6 +47,18 @@ BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx) {
     return BC(Opcode::record_type_once_promise_, i);
 }
 
+BC BC::clearRecordTypeOnceBit(uint32_t bitIdx) {
+    ImmediateArguments i;
+    i.i = bitIdx;
+    return BC(Opcode::clear_record_type_once_bit_, i);
+}
+
+BC BC::clearRecordTypeOnceBitsRange(uint32_t start, uint32_t count) {
+    ImmediateArguments i;
+    i.i = RECORD_TYPE_ONCE_RANGE_PACK(start, count);
+    return BC(Opcode::clear_record_type_once_bits_range_, i);
+}
+
 BC BC::recordTest(uint32_t idx) {
     ImmediateArguments i;
     i.i = idx;

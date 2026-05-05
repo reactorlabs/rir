@@ -238,6 +238,12 @@ uint32_t TypeFeedback::Builder::addType() {
     return ntypes_++;
 }
 
+void TypeFeedback::Builder::resetTypesTo(unsigned n) {
+    assert(n <= ntypes_);
+    ntypes_ = n;
+    typeDeps_.resize(n);
+}
+
 void TypeFeedback::Builder::setTypeDep(uint32_t slot, uint32_t source) {
     assert(slot < typeDeps_.size());
     typeDeps_[slot] = source;

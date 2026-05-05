@@ -448,6 +448,8 @@ DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_type_once_, 1, 1, 1)
 DEF_INSTR(record_type_once_promise_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
+DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
+DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)
 
 DEF_INSTR(int3_, 0, 0, 0)
 

@@ -128,6 +128,19 @@ class DefUseAnalysis {
     // there is no trackDef-tracked dominating def.
     std::unordered_map<SEXP, int> forLoopVarDepth_;
 
+    // Stack of currently-active range-based for-loop iteration variables
+    // (seq is `:`, `seq_len`, or `seq_along` — type stable across iterations).
+    // Each RecordOnce use-site of the iter var gets its own bit (allocated via
+    // bitmapSize++ in compileGetvar). For nested loops, a
+    // clear_record_type_once_bits_range_ is emitted before the loop so all
+    // per-position bits are cleared on each outer iteration. Peel and main
+    // share slot+bit at each position via typeCount/bitmapSize reset after
+    // peel body compilation.
+    struct RangeBasedLoopVarEntry {
+        SEXP sym;
+    };
+    std::vector<RangeBasedLoopVarEntry> rangeBasedForLoopVars_;
+
     // ---- compile-time state updates ----
 
     bool isLocalOrParam(SEXP name) const {
@@ -251,6 +264,19 @@ class DefUseAnalysis {
         return forLoopVarDepth_.count(name) > 0;
     }
 
+    void pushRangeBasedForLoopVar(SEXP sym) {
+        rangeBasedForLoopVars_.push_back({sym});
+    }
+    void popRangeBasedForLoopVar() { rangeBasedForLoopVars_.pop_back(); }
+    bool isRangeBasedForLoopVar(SEXP name) const {
+        for (const auto& e : rangeBasedForLoopVars_)
+            if (e.sym == name)
+                return true;
+        return false;
+    }
+
+    int loopDepth() const { return loopDepth_; }
+
     // ---- save / restore for loop peeling ----
 
     DefsSnapshot saveState() const {
@@ -303,6 +329,16 @@ class DefUseAnalysis {
             return {UseKind::NoRecord, d->feedbackSlot};
 
         if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
+            return {UseKind::RecordOnce, kNoSlot};
+
+        // Range-based for-loop iter var with no prior useDefs hit: type is
+        // stable across iterations of THIS loop (seq is `:`, `seq_len`, or
+        // `seq_along`), so RecordOnce is sound even though the for-loop
+        // implicitly reassigns sym every iteration. For nested loops the
+        // pre-allocated bit gets cleared on each entry to the loop, so a
+        // different outer iteration can re-record if the seq's element type
+        // changed (queried via rangeBasedForLoopVarBit at compileGetvar).
+        if (isRangeBasedForLoopVar(name) && loopDepth_ > 0)
             return {UseKind::RecordOnce, kNoSlot};
 
         return {UseKind::RecordAlways, kNoSlot};
