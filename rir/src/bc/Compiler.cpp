@@ -452,45 +452,63 @@ static bool isRangeBasedSeq(SEXP seq) {
 }
 
 // RAII-style helper for range-based for-loop iter-var instrumentation.
-// Construction does the "before loop body" work (emit placeholder if nested,
-// push range-based var); finish() does the "after loop body" work (patch or
-// remove placeholder, pop range-based var).
+// Construction does the "before loop body" work (emit clear placeholder if
+// nested, push range-based var, push dynamic-bit tracking entry); finish()
+// does the "after loop body" work (patch or remove placeholder using the
+// tracked dynamic bit range, pop range-based var).
+//
+// clearActive    — emit a clear_record_type_once_bits_range_ placeholder before
+//                  the loop body when nested. True for ALL loop kinds when
+//                  recordLess is enabled, so bits for outer-scope-def variables
+//                  are cleared on each outer iteration.
+// rangeVarActive — push/pop sym as a range-based for-loop iter var. True only
+//                  for `:` / seq_len / seq_along sequences.
+//
+// Stable bits are excluded from the clear range: when compileGetvar allocates
+// a RecordOnce bit, it tells DefUseAnalysis whether the bit is dynamic
+// (variable re-assigned in some enclosing loop / range-based iter var) or
+// stable. The clear range covers only [first dynamic bit, last+1), so stable
+// bits at either end persist for the whole invocation.
 struct RangeBasedIterVarScope {
     CompilerContext& ctx_;
     CodeStream& cs_;
-    bool active_ = false;
+    bool clearActive_ = false;
+    bool rangeVarActive_ = false;
     bool nested_ = false;
-    unsigned bitmapRangeStart_ = 0;
     unsigned placeholderPos_ = 0;
 
     RangeBasedIterVarScope(CompilerContext& ctx, CodeStream& cs, SEXP sym,
-                           bool active)
-        : ctx_(ctx), cs_(cs), active_(active) {
-        if (!active_)
-            return;
-        nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
-        bitmapRangeStart_ = ctx_.code.top()->recordTypeOnceBitmapSize;
-        if (nested_) {
-            placeholderPos_ = cs_.currentPos();
-            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
+                           bool clearActive, bool rangeVarActive)
+        : ctx_(ctx), cs_(cs), clearActive_(clearActive),
+          rangeVarActive_(rangeVarActive) {
+        if (clearActive_) {
+            nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
+            if (nested_) {
+                placeholderPos_ = cs_.currentPos();
+                cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
+                ctx_.defUseAnalysis().pushDynamicBitTracking();
+            }
         }
-        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym);
+        if (rangeVarActive_)
+            ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym);
     }
 
     void finish() {
-        if (!active_)
-            return;
-        if (nested_) {
-            unsigned rangeCount =
-                ctx_.code.top()->recordTypeOnceBitmapSize - bitmapRangeStart_;
-            if (rangeCount == 0)
+        if (clearActive_ && nested_) {
+            auto range = ctx_.defUseAnalysis().popDynamicBitTracking();
+            int first = range.first;
+            int last = range.second;
+            if (first == -1) {
                 cs_.remove(placeholderPos_);
-            else
-                cs_.patchImmediate(
-                    placeholderPos_,
-                    RECORD_TYPE_ONCE_RANGE_PACK(bitmapRangeStart_, rangeCount));
+            } else {
+                unsigned start = (unsigned)first;
+                unsigned count = (unsigned)(last - first + 1);
+                cs_.patchImmediate(placeholderPos_,
+                                   RECORD_TYPE_ONCE_RANGE_PACK(start, count));
+            }
         }
-        ctx_.defUseAnalysis().popRangeBasedForLoopVar();
+        if (rangeVarActive_)
+            ctx_.defUseAnalysis().popRangeBasedForLoopVar();
     }
 };
 
@@ -617,8 +635,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     if (Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().pushForLoopVar(sym);
     // compileSimpleFor always handles `:` — always range-based.
-    RangeBasedIterVarScope rangeScope(ctx, cs, sym,
-                                      Compiler::isRecordLessEnabled());
+    RangeBasedIterVarScope rangeScope(
+        ctx, cs, sym,
+        /*clearActive=*/Compiler::isRecordLessEnabled(),
+        /*rangeVarActive=*/Compiler::isRecordLessEnabled());
 
     // while
     compileWhile(
@@ -1486,6 +1506,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
+        RangeBasedIterVarScope clearScope(
+            ctx, cs, R_NilValue,
+            /*clearActive=*/Compiler::isRecordLessEnabled(),
+            /*rangeVarActive=*/false);
         compileWhile(
             ctx,
             [&ctx, &cs, &cond]() {
@@ -1494,6 +1518,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             },
             [&ctx, &body]() { compileExpr(ctx, body, true); }, body,
             !containsLoop(body));
+        clearScope.finish();
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
@@ -1522,6 +1547,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         }
 
+        RangeBasedIterVarScope clearScope(
+            ctx, cs, R_NilValue,
+            /*clearActive=*/Compiler::isRecordLessEnabled(),
+            /*rangeVarActive=*/false);
+
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
             auto savedDefs = (Compiler::isRecordLessEnabled())
@@ -1534,6 +1564,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
+        clearScope.finish();
         if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().exitLoop();
@@ -1603,7 +1634,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         bool rangeBased =
             Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
-        RangeBasedIterVarScope rangeScope(ctx, cs, sym, rangeBased);
+        RangeBasedIterVarScope rangeScope(
+            ctx, cs, sym,
+            /*clearActive=*/Compiler::isRecordLessEnabled(),
+            /*rangeVarActive=*/rangeBased);
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
@@ -2287,6 +2321,15 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                         if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                             bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
                             uint32_t bitIdx = bitmapSize++;
+                            // A "dynamic" bit must be cleared on each outer
+                            // iteration: variables re-assigned in some
+                            // enclosing loop (incl. range-based for-loop iter
+                            // vars whose sym is in the loop body defs).
+                            // Stable bits (e.g. for top-level vars) skip this
+                            // and stay outside the clear range.
+                            if (ctx.defUseAnalysis().assignedInEnclosingLoop(
+                                    name))
+                                ctx.defUseAnalysis().recordDynamicBit(bitIdx);
                             cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
                         } else {
                             cs << BC::recordType(slot);
@@ -2481,7 +2524,7 @@ bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
-bool Compiler::loopPeelingEnabled = true;
+bool Compiler::loopPeelingEnabled = false;
 
 bool Compiler::recordLessEnabled = true;
 

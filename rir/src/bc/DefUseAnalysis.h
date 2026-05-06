@@ -115,6 +115,17 @@ class DefUseAnalysis {
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
     int loopDepth_ = 0;
+
+    // Stack of (firstDynamicBit, lastDynamicBit) — one entry per currently-open
+    // clearable loop scope. As compileGetvar allocates RecordOnce bits, the
+    // ones that are "dynamic" (variable re-assigned in some enclosing loop or
+    // a range-based for-loop iter var) update every entry on this stack.
+    // RangeBasedIterVarScope::finish() pops the top entry and patches the
+    // clear placeholder to cover only [first, last+1] — stable bits on either
+    // side fall outside the cleared range and persist for the whole invocation.
+    // -1 sentinels mean "no dynamic bit recorded yet."
+    std::vector<std::pair<int, int>> dynamicBitTracking_;
+
     std::vector<ScopeEntry> scopeStack_;
     int nextScopeId_ = 1;
     std::vector<LoopBodyInfo> loopBodyDefs_;
@@ -165,6 +176,18 @@ class DefUseAnalysis {
                hasDominatingDef(name);
     }
 
+    // True when `name` is assigned in the body of any currently-open loop.
+    // Such a variable can change type between iterations, so one recording
+    // per invocation is not representative — RecordOnce is unsafe.
+    bool assignedInEnclosingLoop(SEXP name) const {
+        for (const auto& info : loopBodyDefs_) {
+            auto it = info.expected.find(name);
+            if (it != info.expected.end() && it->second > 0)
+                return true;
+        }
+        return false;
+    }
+
     // True when defs_ contains a def of `name` that dominates the current
     // compilation point (no closed-scope or unseen-loop-def issues). Public
     // wrapper around findReachingDef for use at inner-function call sites.
@@ -177,6 +200,34 @@ class DefUseAnalysis {
         defs_[name] = {currentScopeId(), closedReturnCount_,
                        currentLoopExitCount(), feedbackSlot};
         bumpSeen(name);
+    }
+
+    // Push/pop a dynamic-bit tracking entry. Called by RangeBasedIterVarScope
+    // when entering/leaving a nested clearable loop scope.
+    void pushDynamicBitTracking() { dynamicBitTracking_.push_back({-1, -1}); }
+    std::pair<int, int> popDynamicBitTracking() {
+        auto p = dynamicBitTracking_.back();
+        dynamicBitTracking_.pop_back();
+        return p;
+    }
+
+    // Record that a "dynamic" RecordOnce bit was just allocated at `bitIdx`.
+    // Updates first/last for every currently-open clearable scope: a bit
+    // allocated inside an inner loop is also part of every enclosing scope's
+    // range and must be cleared by each.
+    void recordDynamicBit(uint32_t bitIdx) {
+        int idx = (int)bitIdx;
+        for (auto& e : dynamicBitTracking_) {
+            if (e.first == -1) {
+                e.first = idx;
+                e.second = idx;
+            } else {
+                if (idx < e.first)
+                    e.first = idx;
+                if (idx > e.second)
+                    e.second = idx;
+            }
+        }
     }
 
     void trackUseDef(SEXP name, int slot) {
@@ -328,6 +379,26 @@ class DefUseAnalysis {
         if (d && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
 
+        // Unique dominating def from an enclosing loop (doesn't post-dominate):
+        // the value changes per enclosing-loop iteration.  RecordOnce is sound;
+        // the enclosing loop clears this bit before each inner-loop execution
+        // via clear_record_type_once_bits_range_.
+        // Guards:
+        //   !assignedInInnermostLoop — same-loop def can change each iteration,
+        //     no per-iteration clear mechanism for branches within the same
+        //     loop.
+        //   assignedInEnclosingLoop  — only fire for vars re-assigned in some
+        //     enclosing loop; truly stable vars (assigned before all loops)
+        //     must NOT land in the clear range.
+        if (d != nullptr && loopDepth_ > 0 && !assignedInInnermostLoop(name) &&
+            assignedInEnclosingLoop(name))
+            return {UseKind::RecordOnce, kNoSlot};
+
+        // Stable RecordOnce: var has a dominating def / is formal / outer-
+        // controlled, AND is not re-assigned in any enclosing loop.  The
+        // bit allocated for this use is excluded from the clear range —
+        // compileGetvar tracks dynamic vs stable bits and the inner loop
+        // clears only [first dynamic bit, last+1).
         if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
 
@@ -502,16 +573,16 @@ class DefUseAnalysis {
         return false;
     }
 
-    // True when `name` is assigned in the body of any currently-open loop.
-    // Such a variable can change type between iterations, so one recording
-    // per invocation is not representative — RecordOnce is unsafe.
-    bool assignedInEnclosingLoop(SEXP name) const {
-        for (const auto& info : loopBodyDefs_) {
-            auto it = info.expected.find(name);
-            if (it != info.expected.end() && it->second > 0)
-                return true;
-        }
-        return false;
+    // True when `name` is assigned in the body of the INNERMOST currently-open
+    // loop. Used to guard the "dominating def in outer scope → RecordOnce"
+    // case: if the def is from the same loop body as the use, the value can
+    // change each iteration and no per-iteration clear mechanism exists.
+    bool assignedInInnermostLoop(SEXP name) const {
+        if (loopBodyDefs_.empty())
+            return false;
+        const auto& inner = loopBodyDefs_.back();
+        auto it = inner.expected.find(name);
+        return it != inner.expected.end() && it->second > 0;
     }
 };
 
