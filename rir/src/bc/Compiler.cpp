@@ -374,7 +374,7 @@ static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, SEXP bodyAst,
-                  bool peelLoop = false, bool resetFeedbackAfterPeel = false) {
+                  bool peelLoop = false) {
     CodeStream& cs = ctx.cs();
 
     BC::Label nextBranch = cs.mkLabel();
@@ -403,18 +403,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
         if (Compiler::profile && Compiler::recordLessEnabled)
             ctx.defUseAnalysis().enterLoopScope();
-        // Save feedback counters before peel body so main body can re-use
-        // the same slot+bit indices at each corresponding position.
-        unsigned bitmapSavePeel = resetFeedbackAfterPeel
-                                      ? ctx.code.top()->recordTypeOnceBitmapSize
-                                      : 0;
-        unsigned typeCountSavePeel =
-            resetFeedbackAfterPeel ? ctx.typeFeedbackBuilder.typeCount() : 0;
         compileBody();
-        if (resetFeedbackAfterPeel) {
-            ctx.code.top()->recordTypeOnceBitmapSize = bitmapSavePeel;
-            ctx.typeFeedbackBuilder.resetTypesTo(typeCountSavePeel);
-        }
         if (Compiler::profile && Compiler::recordLessEnabled) {
             ctx.defUseAnalysis().exitLoop();
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
@@ -582,7 +571,6 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
-    bool resetFeedback = false;
     bool nestedRangeBased = false;
     unsigned bitmapRangeStart = 0;
     unsigned placeholderPos = 0;
@@ -602,7 +590,6 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             cs << BC::clearRecordTypeOnceBitsRange(0, 0);
         }
         ctx.defUseAnalysis().pushRangeBasedForLoopVar(sym);
-        resetFeedback = true;
     }
 
     // while
@@ -628,7 +615,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             compileExpr(ctx, body, true);
             // }
         },
-        body, !containsLoop(body), resetFeedback);
+        body, !containsLoop(body));
 
     if (Compiler::profile && Compiler::recordLessEnabled) {
         if (nestedRangeBased) {
@@ -1634,15 +1621,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
-            unsigned bitmapSavePeel =
-                rangeBased ? ctx.code.top()->recordTypeOnceBitmapSize : 0;
-            unsigned typeCountSavePeel =
-                rangeBased ? ctx.typeFeedbackBuilder.typeCount() : 0;
             compileExpr(ctx, body, true);
-            if (rangeBased) {
-                ctx.code.top()->recordTypeOnceBitmapSize = bitmapSavePeel;
-                ctx.typeFeedbackBuilder.resetTypesTo(typeCountSavePeel);
-            }
             if (Compiler::profile && Compiler::recordLessEnabled)
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
