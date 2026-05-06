@@ -2414,9 +2414,28 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             uint32_t start = RECORD_TYPE_ONCE_RANGE_START(packed);
             uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(packed);
-            for (uint32_t b = start; b < start + count; b++)
-                RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
-                    ~RECORD_TYPE_ONCE_MASK(b);
+            // Naive bit-by-bit (reference):
+            // for (uint32_t b = start; b < start + count; b++)
+            //     RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
+            //         ~RECORD_TYPE_ONCE_MASK(b);
+            uint32_t end = start + count; // exclusive
+            uint32_t startWord = start >> 6;
+            uint32_t endWord = (end - 1) >> 6;
+            if (startWord == endWord) {
+                // All bits fall within one word: build a single mask.
+                uint64_t& word = fired[startWord];
+                uint64_t mask = (~(uint64_t)0 << (start & 63)) &
+                                (~(uint64_t)0 >> (63 - ((end - 1) & 63)));
+                word &= ~mask;
+            } else {
+                // Partial first word: clear bits [start&63 .. 63].
+                fired[startWord] &= ~(~(uint64_t)0 << (start & 63));
+                // Full middle words.
+                for (uint32_t w = startWord + 1; w < endWord; w++)
+                    fired[w] = 0;
+                // Partial last word: clear bits [0 .. (end-1)&63].
+                fired[endWord] &= ~(~(uint64_t)0 >> (63 - ((end - 1) & 63)));
+            }
             NEXT();
         }
 
