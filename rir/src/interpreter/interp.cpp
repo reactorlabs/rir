@@ -2419,22 +2419,24 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             //     RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
             //         ~RECORD_TYPE_ONCE_MASK(b);
             uint32_t end = start + count; // exclusive
-            uint32_t startWord = start >> 6;
-            uint32_t endWord = (end - 1) >> 6;
+            uint32_t startWord = RECORD_TYPE_ONCE_WORD_IDX(start);
+            uint32_t endWord = RECORD_TYPE_ONCE_WORD_IDX(end - 1);
             if (startWord == endWord) {
                 // All bits fall within one word: build a single mask.
                 uint64_t& word = fired[startWord];
-                uint64_t mask = (~(uint64_t)0 << (start & 63)) &
-                                (~(uint64_t)0 >> (63 - ((end - 1) & 63)));
-                word &= ~mask;
+                word &= ~RECORD_TYPE_ONCE_CLEAR_MASK(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(start),
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
             } else {
                 // Partial first word: clear bits [start&63 .. 63].
-                fired[startWord] &= ~(~(uint64_t)0 << (start & 63));
+                fired[startWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_FROM(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(start));
                 // Full middle words.
                 for (uint32_t w = startWord + 1; w < endWord; w++)
                     fired[w] = 0;
                 // Partial last word: clear bits [0 .. (end-1)&63].
-                fired[endWord] &= ~(~(uint64_t)0 >> (63 - ((end - 1) & 63)));
+                fired[endWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_TO(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
             }
             NEXT();
         }

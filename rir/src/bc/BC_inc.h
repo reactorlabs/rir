@@ -29,10 +29,24 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
 #define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
 #define RECORD_TYPE_ONCE_BITMAP_WORDS(count) (((count) + 63) >> 6)
-#define RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) ((bitmap)[(iidx) >> 6])
-#define RECORD_TYPE_ONCE_MASK(iidx) ((uint64_t)1 << ((iidx)&63))
+// Index of the 64-bit word that contains bit iidx.
+#define RECORD_TYPE_ONCE_WORD_IDX(iidx) ((iidx) >> 6)
+// Bit position of iidx within its word (0-63).
+#define RECORD_TYPE_ONCE_BIT_IN_WORD(iidx) ((iidx)&63)
+#define RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx)                             \
+    ((bitmap)[RECORD_TYPE_ONCE_WORD_IDX(iidx)])
+#define RECORD_TYPE_ONCE_MASK(iidx)                                            \
+    ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
+// Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
+#define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
+// Mask with 1s in word positions [0..hi] (clears bits from start of word to
+// hi).
+#define RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi) (~(uint64_t)0 >> (63 - (hi)))
+// Mask with 1s in word positions [lo..hi].
+#define RECORD_TYPE_ONCE_CLEAR_MASK(lo, hi)                                    \
+    (RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) & RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi))
 
 // Macros for packing/unpacking the immediate of
 // clear_record_type_once_bits_range_: low 16 bits = start bit index, high 16
