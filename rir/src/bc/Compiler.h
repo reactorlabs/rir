@@ -56,6 +56,8 @@ class Compiler {
     static bool loopPeelingEnabled;
     static bool recordLessEnabled;
 
+    static bool isRecordLessEnabled() { return profile && recordLessEnabled; }
+
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);
         return c.finalize();

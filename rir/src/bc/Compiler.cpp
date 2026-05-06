@@ -384,7 +384,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     unsigned beginLoopPos = cs.currentPos();
     cs << BC::beginloop(breakBranch);
 
-    if (Compiler::profile && Compiler::recordLessEnabled) {
+    if (Compiler::isRecordLessEnabled()) {
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
         ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
@@ -396,15 +396,15 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
-        auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
+        auto savedDefs = (Compiler::isRecordLessEnabled())
                              ? ctx.defUseAnalysis().saveState()
                              : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterLoopScope();
         compileBody();
-        if (Compiler::profile && Compiler::recordLessEnabled) {
+        if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().exitLoop();
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
@@ -414,10 +414,10 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     compileCond();
     cs << BC::brfalse(breakBranch);
 
-    if (Compiler::profile && Compiler::recordLessEnabled)
+    if (Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().enterLoopScope();
     compileBody();
-    if (Compiler::profile && Compiler::recordLessEnabled) {
+    if (Compiler::isRecordLessEnabled()) {
         ctx.defUseAnalysis().exitLoop();
         ctx.defUseAnalysis().clearLoopBodyDefs();
     }
@@ -450,6 +450,49 @@ static bool isRangeBasedSeq(SEXP seq) {
     return fun == symbol::Colon || fun == symbol::seq_len ||
            fun == symbol::seq_along;
 }
+
+// RAII-style helper for range-based for-loop iter-var instrumentation.
+// Construction does the "before loop body" work (emit placeholder if nested,
+// push range-based var); finish() does the "after loop body" work (patch or
+// remove placeholder, pop range-based var).
+struct RangeBasedIterVarScope {
+    CompilerContext& ctx_;
+    CodeStream& cs_;
+    bool active_ = false;
+    bool nested_ = false;
+    unsigned bitmapRangeStart_ = 0;
+    unsigned placeholderPos_ = 0;
+
+    RangeBasedIterVarScope(CompilerContext& ctx, CodeStream& cs, SEXP sym,
+                           bool active)
+        : ctx_(ctx), cs_(cs), active_(active) {
+        if (!active_)
+            return;
+        nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
+        bitmapRangeStart_ = ctx_.code.top()->recordTypeOnceBitmapSize;
+        if (nested_) {
+            placeholderPos_ = cs_.currentPos();
+            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
+        }
+        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym);
+    }
+
+    void finish() {
+        if (!active_)
+            return;
+        if (nested_) {
+            unsigned rangeCount =
+                ctx_.code.top()->recordTypeOnceBitmapSize - bitmapRangeStart_;
+            if (rangeCount == 0)
+                cs_.remove(placeholderPos_);
+            else
+                cs_.patchImmediate(
+                    placeholderPos_,
+                    RECORD_TYPE_ONCE_RANGE_PACK(bitmapRangeStart_, rangeCount));
+        }
+        ctx_.defUseAnalysis().popRangeBasedForLoopVar();
+    }
+};
 
 /**
  * Try to convert this loop into a C-style for loop. If it fails or must compile
@@ -571,26 +614,11 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
-    bool nestedRangeBased = false;
-    unsigned bitmapRangeStart = 0;
-    unsigned placeholderPos = 0;
-    if (Compiler::profile && Compiler::recordLessEnabled) {
+    if (Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().pushForLoopVar(sym);
-        // compileSimpleFor always handles `:` — always range-based.
-        // Each RecordOnce use-site of sym gets its own bit. For nested loops,
-        // emit a clear_record_type_once_bits_range_ placeholder before the
-        // loop body; after compilation we know the actual range and patch it.
-        // This clears all per-position bits on each outer iteration so
-        // re-recording is possible. For top-level loops no clear is needed
-        // (fired[] is zero-initialised at function entry).
-        nestedRangeBased = ctx.defUseAnalysis().loopDepth() > 0;
-        bitmapRangeStart = ctx.code.top()->recordTypeOnceBitmapSize;
-        if (nestedRangeBased) {
-            placeholderPos = cs.currentPos();
-            cs << BC::clearRecordTypeOnceBitsRange(0, 0);
-        }
-        ctx.defUseAnalysis().pushRangeBasedForLoopVar(sym);
-    }
+    // compileSimpleFor always handles `:` — always range-based.
+    RangeBasedIterVarScope rangeScope(ctx, cs, sym,
+                                      Compiler::isRecordLessEnabled());
 
     // while
     compileWhile(
@@ -617,20 +645,9 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         },
         body, !containsLoop(body));
 
-    if (Compiler::profile && Compiler::recordLessEnabled) {
-        if (nestedRangeBased) {
-            unsigned rangeCount =
-                ctx.code.top()->recordTypeOnceBitmapSize - bitmapRangeStart;
-            if (rangeCount == 0)
-                cs.remove(placeholderPos);
-            else
-                cs.patchImmediate(
-                    placeholderPos,
-                    RECORD_TYPE_ONCE_RANGE_PACK(bitmapRangeStart, rangeCount));
-        }
-        ctx.defUseAnalysis().popRangeBasedForLoopVar();
+    rangeScope.finish();
+    if (Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().popForLoopVar(sym);
-    }
 
     cs << BC::popn(3);
     if (!voidContext)
@@ -765,10 +782,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(args[0]);
         cs << BC::dup() << BC::brfalse(nextBranch);
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
@@ -793,10 +810,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         cs << BC::dup() << BC::brtrue(nextBranch);
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
@@ -895,7 +912,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
-                if (Compiler::profile && Compiler::recordLessEnabled) {
+                if (Compiler::isRecordLessEnabled()) {
                     // The last type slot allocated while compiling rhs (if
                     // any) captures the type of the value being stored —
                     // use it as the def's feedback slot.
@@ -1291,19 +1308,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::invisible();
             }
         } else {
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().enterBranch();
             compileExpr(ctx, args[2], voidContext);
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().exitBranch();
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1], voidContext);
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << nextBranch;
@@ -1332,7 +1349,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().markReturn();
         if (ctx.inLoop() || ctx.isInPromise())
             cs << BC::return_();
@@ -1399,19 +1416,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << objBranch;
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         {
             LoadArgsResult dummy;
             compileLoadArgs(ctx, ast, fun, args_, dummy, voidContext, 1);
         }
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << nonObjBranch;
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, *idx);
         if (dims == 3) {
@@ -1420,7 +1437,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else if (dims == 2) {
             compileExpr(ctx, *(idx + 1));
         }
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
@@ -1498,7 +1515,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         unsigned beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::profile && Compiler::recordLessEnabled) {
+        if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
@@ -1507,17 +1524,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
+            auto savedDefs = (Compiler::isRecordLessEnabled())
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileExpr(ctx, body, true);
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
-        if (Compiler::profile && Compiler::recordLessEnabled) {
+        if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().exitLoop();
         }
@@ -1584,29 +1601,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::stvar(sym);
         };
 
-        // Detect a range-based seq before entering the loop scope so we can
-        // emit a placeholder range-clear for nested loops.
-        bool rangeBased = Compiler::profile && Compiler::recordLessEnabled &&
-                          isRangeBasedSeq(seq);
-        bool nestedRangeBased = false;
-        unsigned bitmapRangeStart = ctx.code.top()->recordTypeOnceBitmapSize;
-        unsigned placeholderPos = 0;
-        if (rangeBased) {
-            nestedRangeBased = ctx.defUseAnalysis().loopDepth() > 0;
-            if (nestedRangeBased) {
-                placeholderPos = cs.currentPos();
-                cs << BC::clearRecordTypeOnceBitsRange(0, 0);
-            }
-        }
+        bool rangeBased =
+            Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
+        RangeBasedIterVarScope rangeScope(ctx, cs, sym, rangeBased);
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::profile && Compiler::recordLessEnabled) {
+        if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().enterLoop();
             ctx.defUseAnalysis().pushForLoopVar(sym);
-            if (rangeBased)
-                ctx.defUseAnalysis().pushRangeBasedForLoopVar(sym);
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
             // The for loop also assigns sym on each iteration
@@ -1617,12 +1621,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::profile && Compiler::recordLessEnabled)
+            auto savedDefs = (Compiler::isRecordLessEnabled())
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
             compileExpr(ctx, body, true);
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
@@ -1631,22 +1635,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // Compile the loop body
         compileExpr(ctx, body, true);
-        if (Compiler::profile && Compiler::recordLessEnabled) {
+        rangeScope.finish();
+        if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
-            if (rangeBased) {
-                if (nestedRangeBased) {
-                    unsigned rangeCount =
-                        ctx.code.top()->recordTypeOnceBitmapSize -
-                        bitmapRangeStart;
-                    if (rangeCount == 0)
-                        cs.remove(placeholderPos);
-                    else
-                        cs.patchImmediate(placeholderPos,
-                                          RECORD_TYPE_ONCE_RANGE_PACK(
-                                              bitmapRangeStart, rangeCount));
-                }
-                ctx.defUseAnalysis().popRangeBasedForLoopVar();
-            }
             ctx.defUseAnalysis().popForLoopVar(sym);
             ctx.defUseAnalysis().exitLoop();
         }
@@ -1678,7 +1669,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
@@ -1695,7 +1686,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::profile && Compiler::recordLessEnabled)
+            if (Compiler::isRecordLessEnabled())
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
@@ -1883,10 +1874,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 continue;
             } else {
                 cs << BC::pop();
-                if (Compiler::profile && Compiler::recordLessEnabled)
+                if (Compiler::isRecordLessEnabled())
                     ctx.defUseAnalysis().enterBranch();
                 compileExpr(ctx, expressions[j++]);
-                if (Compiler::profile && Compiler::recordLessEnabled)
+                if (Compiler::isRecordLessEnabled())
                     ctx.defUseAnalysis().exitBranch();
                 cs << BC::br(contBr);
             }
@@ -2206,7 +2197,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     };
 
     LoadArgsResult info;
-    if (speculateOnBuiltin && Compiler::profile && Compiler::recordLessEnabled)
+    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().enterBranch();
     if (fun == symbol::forceAndCall) {
         // forceAndCall is a special with signature `function(n, FUN, ...)`
@@ -2221,20 +2212,20 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadArgs(ctx, ast, fun, args, info, voidContext);
     }
     compileCall(info);
-    if (speculateOnBuiltin && Compiler::profile && Compiler::recordLessEnabled)
+    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().exitBranch();
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().enterBranch();
         LoadArgsResult infoEager;
         compileLoadArgs(ctx, ast, fun, args, infoEager, voidContext, 0,
                         RList(args).length());
 
         compileCall(infoEager);
-        if (Compiler::profile && Compiler::recordLessEnabled)
+        if (Compiler::isRecordLessEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << theEnd;
