@@ -458,39 +458,59 @@ static bool isRangeBasedSeq(SEXP seq) {
 struct RangeBasedIterVarScope {
     CompilerContext& ctx_;
     CodeStream& cs_;
+    SEXP sym_ = nullptr;
     bool active_ = false;
     bool nested_ = false;
-    unsigned bitmapRangeStart_ = 0;
     unsigned placeholderPos_ = 0;
 
     RangeBasedIterVarScope(CompilerContext& ctx, CodeStream& cs, SEXP sym,
                            bool active)
-        : ctx_(ctx), cs_(cs), active_(active) {
+        : ctx_(ctx), cs_(cs), sym_(sym), active_(active) {
         if (!active_)
             return;
         nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
-        bitmapRangeStart_ = ctx_.code.top()->recordTypeOnceBitmapSize;
         if (nested_) {
             placeholderPos_ = cs_.currentPos();
             cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
         }
-        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym);
+        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
+                                                       placeholderPos_);
     }
 
     void finish() {
         if (!active_)
             return;
-        if (nested_) {
-            unsigned rangeCount =
-                ctx_.code.top()->recordTypeOnceBitmapSize - bitmapRangeStart_;
-            if (rangeCount == 0)
-                cs_.remove(placeholderPos_);
-            else
+        ctx_.defUseAnalysis().moveRangeVarToPending();
+        if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
+            assignRangeVarBits();
+    }
+
+    // Called when rangeBasedForLoopVars_ is empty: all scopes have finished.
+    // Assign contiguous bit ranges in outermost-first order (reverse of the
+    // pending list, which is innermost-first) and patch every clear template
+    // and use site.
+    void assignRangeVarBits() {
+        auto& pending = ctx_.defUseAnalysis().pendingRangeVarEntries_;
+        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
+        for (auto it = pending.rbegin(); it != pending.rend(); ++it) {
+            auto& e = *it;
+            unsigned base = bitmapSize;
+            int count = e.pendingCount;
+            for (int i = 0; i < count; ++i)
                 cs_.patchImmediate(
-                    placeholderPos_,
-                    RECORD_TYPE_ONCE_RANGE_PACK(bitmapRangeStart_, rangeCount));
+                    e.useSitePos[i],
+                    RECORD_TYPE_ONCE_PACK(e.useSiteSlot[i], base + i));
+            if (e.nested) {
+                if (count > 0)
+                    cs_.patchImmediate(
+                        e.clearTemplatePos,
+                        RECORD_TYPE_ONCE_RANGE_PACK(base, count));
+                else
+                    cs_.remove(e.clearTemplatePos);
+            }
+            bitmapSize += count;
         }
-        ctx_.defUseAnalysis().popRangeBasedForLoopVar();
+        pending.clear();
     }
 };
 
@@ -2284,12 +2304,31 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                         ctx.defUseAnalysis().trackUseDef(name, slot);
                         auto& bitmapSize =
                             ctx.code.top()->recordTypeOnceBitmapSize;
-                        if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                            bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
-                            uint32_t bitIdx = bitmapSize++;
-                            cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
+                        if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
+                            // Deferred: bit assigned later when outermost
+                            // range-based scope finishes.
+                            int total =
+                                (int)bitmapSize +
+                                ctx.defUseAnalysis().rangeVarTotalPending();
+                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                                total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                                unsigned bcPos = cs.currentPos();
+                                cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                                ctx.defUseAnalysis().registerRangeVarUse(
+                                    name, bcPos, slot);
+                            } else {
+                                cs << BC::recordType(slot);
+                            }
                         } else {
-                            cs << BC::recordType(slot);
+                            // Stable: assign bit immediately.
+                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                                bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                                uint32_t bitIdx = bitmapSize++;
+                                cs << BC::recordTypeOnce((uint32_t)slot,
+                                                         bitIdx);
+                            } else {
+                                cs << BC::recordType(slot);
+                            }
                         }
                         break;
                     }
