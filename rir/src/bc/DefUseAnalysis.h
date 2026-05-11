@@ -141,16 +141,28 @@ class DefUseAnalysis {
 
     // Stack of currently-active range-based for-loop iteration variables
     // (seq is `:`, `seq_len`, or `seq_along` — type stable across iterations).
-    // Each RecordOnce use-site of the iter var gets its own bit (allocated via
-    // bitmapSize++ in compileGetvar). For nested loops, a
-    // clear_record_type_once_bits_range_ is emitted before the loop so all
-    // per-position bits are cleared on each outer iteration. Peel and main
-    // share slot+bit at each position via typeCount/bitmapSize reset after
-    // peel body compilation.
+    //
+    // For nested loops a clear_record_type_once_bits_range_ is emitted before
+    // each loop body.  Bit indices are assigned lazily: each use site is
+    // emitted with a placeholder (bitIdx=0) and registered here; when the
+    // outermost range-based scope finishes (rangeBasedForLoopVars_ becomes
+    // empty) all pending use sites and clear templates are patched in
+    // outermost-first order so each var's bits form a contiguous range.
     struct RangeBasedLoopVarEntry {
+        struct UseSite {
+            unsigned pos; // bytecode position of record_type_once_
+            int slot;     // TypeFeedback slot
+        };
         SEXP sym;
+        bool nested;               // true when a clear template was emitted
+        unsigned clearTemplatePos; // bytecode position of the clear template
+        int pendingCount = 0;      // number of use sites recorded so far
+        std::vector<UseSite> useSites;
     };
     std::vector<RangeBasedLoopVarEntry> rangeBasedForLoopVars_;
+    // Entries that have been popped but not yet assigned final bit indices.
+    // Ordered innermost-first (outermost is at the back after all pops).
+    std::vector<RangeBasedLoopVarEntry> pendingRangeVarEntries_;
 
     // ---- compile-time state updates ----
 
@@ -315,15 +327,48 @@ class DefUseAnalysis {
         return forLoopVarDepth_.count(name) > 0;
     }
 
-    void pushRangeBasedForLoopVar(SEXP sym) {
-        rangeBasedForLoopVars_.push_back({sym});
+    void pushRangeBasedForLoopVar(SEXP sym, bool nested,
+                                  unsigned clearTemplatePos) {
+        rangeBasedForLoopVars_.push_back(
+            {sym, nested, clearTemplatePos, 0, {}});
     }
-    void popRangeBasedForLoopVar() { rangeBasedForLoopVars_.pop_back(); }
+    // Move the innermost active entry to pendingRangeVarEntries_.
+    void moveRangeVarToPending() {
+        pendingRangeVarEntries_.push_back(
+            std::move(rangeBasedForLoopVars_.back()));
+        rangeBasedForLoopVars_.pop_back();
+    }
     bool isRangeBasedForLoopVar(SEXP name) const {
         for (const auto& e : rangeBasedForLoopVars_)
             if (e.sym == name)
                 return true;
         return false;
+    }
+    // Register a deferred RecordOnce use site for a range-based loop var.
+    void registerRangeVarUse(SEXP name, unsigned bcPos, int slot) {
+        for (auto& e : rangeBasedForLoopVars_) {
+            if (e.sym == name) {
+                e.pendingCount++;
+                e.useSites.push_back({bcPos, slot});
+                return;
+            }
+        }
+    }
+    // True when all range-based scopes have finished and the final bit
+    // assignment can be performed.
+    bool rangeVarAssignmentReady() const {
+        return rangeBasedForLoopVars_.empty() &&
+               !pendingRangeVarEntries_.empty();
+    }
+    // Total deferred bits across all active and pending entries (for budget
+    // check before emitting a new deferred use site).
+    int rangeVarTotalPending() const {
+        int total = 0;
+        for (const auto& e : rangeBasedForLoopVars_)
+            total += e.pendingCount;
+        for (const auto& e : pendingRangeVarEntries_)
+            total += e.pendingCount;
+        return total;
     }
 
     int loopDepth() const { return loopDepth_; }

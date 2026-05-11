@@ -481,34 +481,67 @@ struct RangeBasedIterVarScope {
                            bool clearActive, bool rangeVarActive)
         : ctx_(ctx), cs_(cs), clearActive_(clearActive),
           rangeVarActive_(rangeVarActive) {
-        if (clearActive_) {
-            nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
+        nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
+        if (rangeVarActive_) {
+            // Range-based for-loop iter var: deferred bit assignment.
             if (nested_) {
                 placeholderPos_ = cs_.currentPos();
                 cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-                ctx_.defUseAnalysis().pushDynamicBitTracking();
             }
+            ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
+                                                           placeholderPos_);
+        } else if (clearActive_ && nested_) {
+            // Generic loop (while/repeat/non-range for): dynamic bit tracking.
+            placeholderPos_ = cs_.currentPos();
+            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
+            ctx_.defUseAnalysis().pushDynamicBitTracking();
         }
-        if (rangeVarActive_)
-            ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym);
     }
 
     void finish() {
-        if (clearActive_ && nested_) {
+        if (rangeVarActive_) {
+            ctx_.defUseAnalysis().moveRangeVarToPending();
+            if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
+                assignRangeVarBits();
+        } else if (clearActive_ && nested_) {
             auto range = ctx_.defUseAnalysis().popDynamicBitTracking();
             int first = range.first;
             int last = range.second;
             if (first == -1) {
                 cs_.remove(placeholderPos_);
             } else {
-                unsigned start = (unsigned)first;
-                unsigned count = (unsigned)(last - first + 1);
-                cs_.patchImmediate(placeholderPos_,
-                                   RECORD_TYPE_ONCE_RANGE_PACK(start, count));
+                cs_.patchImmediate(
+                    placeholderPos_,
+                    RECORD_TYPE_ONCE_RANGE_PACK((unsigned)first,
+                                                (unsigned)(last - first + 1)));
             }
         }
-        if (rangeVarActive_)
-            ctx_.defUseAnalysis().popRangeBasedForLoopVar();
+    }
+
+    // Assign contiguous bit ranges outermost-first (reverse of pending list,
+    // which is innermost-first) and patch every clear template and use site.
+    void assignRangeVarBits() {
+        auto& pending = ctx_.defUseAnalysis().pendingRangeVarEntries_;
+        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
+        for (auto it = pending.rbegin(); it != pending.rend(); ++it) {
+            auto& e = *it;
+            unsigned base = bitmapSize;
+            int count = e.pendingCount;
+            for (int i = 0; i < count; ++i)
+                cs_.patchImmediate(
+                    e.useSites[i].pos,
+                    RECORD_TYPE_ONCE_PACK(e.useSites[i].slot, base + i));
+            if (e.nested) {
+                if (count > 0)
+                    cs_.patchImmediate(
+                        e.clearTemplatePos,
+                        RECORD_TYPE_ONCE_RANGE_PACK(base, count));
+                else
+                    cs_.remove(e.clearTemplatePos);
+            }
+            bitmapSize += count;
+        }
+        pending.clear();
     }
 };
 
@@ -2318,15 +2351,26 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                         ctx.defUseAnalysis().trackUseDef(name, slot);
                         auto& bitmapSize =
                             ctx.code.top()->recordTypeOnceBitmapSize;
-                        if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                            bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                        if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
+                            // Deferred: bit assigned later when outermost
+                            // range-based scope finishes.
+                            int total =
+                                (int)bitmapSize +
+                                ctx.defUseAnalysis().rangeVarTotalPending();
+                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                                total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                                unsigned bcPos = cs.currentPos();
+                                cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                                ctx.defUseAnalysis().registerRangeVarUse(
+                                    name, bcPos, slot);
+                            } else {
+                                cs << BC::recordType(slot);
+                            }
+                        } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                                   bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
                             uint32_t bitIdx = bitmapSize++;
-                            // A "dynamic" bit must be cleared on each outer
-                            // iteration: variables re-assigned in some
-                            // enclosing loop (incl. range-based for-loop iter
-                            // vars whose sym is in the loop body defs).
-                            // Stable bits (e.g. for top-level vars) skip this
-                            // and stay outside the clear range.
+                            // Dynamic bit: re-assigned in an enclosing loop,
+                            // must be cleared on each outer iteration.
                             if (ctx.defUseAnalysis().assignedInEnclosingLoop(
                                     name))
                                 ctx.defUseAnalysis().recordDynamicBit(bitIdx);
