@@ -161,6 +161,11 @@ class DefUseAnalysis {
     // interleaving problem of a simple [first, last+1) range approach.
     struct ClearableScopeEntry {
         unsigned clearTemplatePos;
+        // Size of loopBodyDefs_ at the moment this scope was pushed. Used to
+        // map a loopBodyDefs_ assignment index to the right clearable scope:
+        // the first scope with loopBodyDefsIdxAtPush > found is the loop
+        // directly inside the loop that assigns the var.
+        int loopBodyDefsIdxAtPush;
         std::vector<RangeBasedLoopVarEntry::UseSite> useSites;
     };
     std::vector<ClearableScopeEntry> clearableScopeStack_;
@@ -216,7 +221,8 @@ class DefUseAnalysis {
     }
 
     void pushClearableScope(unsigned clearTemplatePos) {
-        clearableScopeStack_.push_back({clearTemplatePos, {}});
+        clearableScopeStack_.push_back(
+            {clearTemplatePos, (int)loopBodyDefs_.size(), {}});
     }
     ClearableScopeEntry popClearableScope() {
         auto e = std::move(clearableScopeStack_.back());
@@ -240,8 +246,19 @@ class DefUseAnalysis {
             if (it != loopBodyDefs_[k].expected.end() && it->second > 0)
                 found = k;
         }
-        assert(found >= 0 && (size_t)found < clearableScopeStack_.size());
-        clearableScopeStack_[found].useSites.push_back({bcPos, slot});
+        assert(found >= 0);
+        // Find the first clearable scope whose loop is directly inside the
+        // loop at loopBodyDefs_[found]. Range-based for-loops push to
+        // loopBodyDefs_ but NOT to clearableScopeStack_, so we cannot index
+        // directly. Instead find the first entry with loopBodyDefsIdxAtPush >
+        // found.
+        for (auto& e : clearableScopeStack_) {
+            if (e.loopBodyDefsIdxAtPush > found) {
+                e.useSites.push_back({bcPos, slot});
+                return;
+            }
+        }
+        assert(false && "no clearable scope inside loop that assigns this var");
     }
     bool hasClearableScope() const { return !clearableScopeStack_.empty(); }
 
