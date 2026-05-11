@@ -491,10 +491,11 @@ struct RangeBasedIterVarScope {
             ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
                                                            placeholderPos_);
         } else if (clearActive_ && nested_) {
-            // Generic loop (while/repeat/non-range for): dynamic bit tracking.
+            // Generic loop (while/repeat/non-range for): deferred bit
+            // assignment.
             placeholderPos_ = cs_.currentPos();
             cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-            ctx_.defUseAnalysis().pushDynamicBitTracking();
+            ctx_.defUseAnalysis().pushClearableScope(placeholderPos_);
         }
     }
 
@@ -504,17 +505,25 @@ struct RangeBasedIterVarScope {
             if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
                 assignRangeVarBits();
         } else if (clearActive_ && nested_) {
-            auto range = ctx_.defUseAnalysis().popDynamicBitTracking();
-            int first = range.first;
-            int last = range.second;
-            if (first == -1) {
-                cs_.remove(placeholderPos_);
-            } else {
-                cs_.patchImmediate(
-                    placeholderPos_,
-                    RECORD_TYPE_ONCE_RANGE_PACK((unsigned)first,
-                                                (unsigned)(last - first + 1)));
-            }
+            auto entry = ctx_.defUseAnalysis().popClearableScope();
+            assignClearableScopeBits(entry);
+        }
+    }
+
+    void assignClearableScopeBits(DefUseAnalysis::ClearableScopeEntry& e) {
+        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
+        int count = (int)e.useSites.size();
+        unsigned base = bitmapSize;
+        for (int i = 0; i < count; ++i)
+            cs_.patchImmediate(
+                e.useSites[i].pos,
+                RECORD_TYPE_ONCE_PACK(e.useSites[i].slot, base + i));
+        if (count > 0) {
+            cs_.patchImmediate(e.clearTemplatePos,
+                               RECORD_TYPE_ONCE_RANGE_PACK(base, count));
+            bitmapSize += count;
+        } else {
+            cs_.remove(e.clearTemplatePos);
         }
     }
 
@@ -2366,15 +2375,30 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
                             } else {
                                 cs << BC::recordType(slot);
                             }
+                        } else if (ctx.defUseAnalysis().assignedInEnclosingLoop(
+                                       name) &&
+                                   ctx.defUseAnalysis().hasClearableScope()) {
+                            // Dynamic: re-assigned in an enclosing loop.
+                            // Defer bit assignment to the innermost clearable
+                            // scope so stable bits never interleave with the
+                            // clear range.
+                            int total =
+                                (int)bitmapSize +
+                                ctx.defUseAnalysis().rangeVarTotalPending();
+                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                                total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                                unsigned bcPos = cs.currentPos();
+                                cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                                ctx.defUseAnalysis().registerClearableUse(
+                                    name, bcPos, slot);
+                            } else {
+                                cs << BC::recordType(slot);
+                            }
                         } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                                    bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
-                            uint32_t bitIdx = bitmapSize++;
-                            // Dynamic bit: re-assigned in an enclosing loop,
-                            // must be cleared on each outer iteration.
-                            if (ctx.defUseAnalysis().assignedInEnclosingLoop(
-                                    name))
-                                ctx.defUseAnalysis().recordDynamicBit(bitIdx);
-                            cs << BC::recordTypeOnce((uint32_t)slot, bitIdx);
+                            // Stable: assign bit immediately.
+                            cs << BC::recordTypeOnce((uint32_t)slot,
+                                                     bitmapSize++);
                         } else {
                             cs << BC::recordType(slot);
                         }
@@ -2568,7 +2592,7 @@ bool Compiler::profile =
     !(getenv("RIR_PROFILING") &&
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
-bool Compiler::loopPeelingEnabled = false;
+bool Compiler::loopPeelingEnabled = true;
 
 bool Compiler::recordLessEnabled = true;
 

@@ -116,16 +116,6 @@ class DefUseAnalysis {
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
     int loopDepth_ = 0;
 
-    // Stack of (firstDynamicBit, lastDynamicBit) — one entry per currently-open
-    // clearable loop scope. As compileGetvar allocates RecordOnce bits, the
-    // ones that are "dynamic" (variable re-assigned in some enclosing loop or
-    // a range-based for-loop iter var) update every entry on this stack.
-    // RangeBasedIterVarScope::finish() pops the top entry and patches the
-    // clear placeholder to cover only [first, last+1] — stable bits on either
-    // side fall outside the cleared range and persist for the whole invocation.
-    // -1 sentinels mean "no dynamic bit recorded yet."
-    std::vector<std::pair<int, int>> dynamicBitTracking_;
-
     std::vector<ScopeEntry> scopeStack_;
     int nextScopeId_ = 1;
     std::vector<LoopBodyInfo> loopBodyDefs_;
@@ -163,6 +153,17 @@ class DefUseAnalysis {
     // Entries that have been popped but not yet assigned final bit indices.
     // Ordered innermost-first (outermost is at the back after all pops).
     std::vector<RangeBasedLoopVarEntry> pendingRangeVarEntries_;
+
+    // Stack of open clearable loop scopes (while/repeat/non-range-based for).
+    // Each entry collects deferred RecordOnce use sites for vars assigned in
+    // an enclosing loop. Bits are assigned when the scope finishes
+    // (innermost-first), so they always come after stable bits, avoiding the
+    // interleaving problem of a simple [first, last+1) range approach.
+    struct ClearableScopeEntry {
+        unsigned clearTemplatePos;
+        std::vector<RangeBasedLoopVarEntry::UseSite> useSites;
+    };
+    std::vector<ClearableScopeEntry> clearableScopeStack_;
 
     // ---- compile-time state updates ----
 
@@ -214,33 +215,35 @@ class DefUseAnalysis {
         bumpSeen(name);
     }
 
-    // Push/pop a dynamic-bit tracking entry. Called by RangeBasedIterVarScope
-    // when entering/leaving a nested clearable loop scope.
-    void pushDynamicBitTracking() { dynamicBitTracking_.push_back({-1, -1}); }
-    std::pair<int, int> popDynamicBitTracking() {
-        auto p = dynamicBitTracking_.back();
-        dynamicBitTracking_.pop_back();
-        return p;
+    void pushClearableScope(unsigned clearTemplatePos) {
+        clearableScopeStack_.push_back({clearTemplatePos, {}});
     }
-
-    // Record that a "dynamic" RecordOnce bit was just allocated at `bitIdx`.
-    // Updates first/last for every currently-open clearable scope: a bit
-    // allocated inside an inner loop is also part of every enclosing scope's
-    // range and must be cleared by each.
-    void recordDynamicBit(uint32_t bitIdx) {
-        int idx = (int)bitIdx;
-        for (auto& e : dynamicBitTracking_) {
-            if (e.first == -1) {
-                e.first = idx;
-                e.second = idx;
-            } else {
-                if (idx < e.first)
-                    e.first = idx;
-                if (idx > e.second)
-                    e.second = idx;
-            }
+    ClearableScopeEntry popClearableScope() {
+        auto e = std::move(clearableScopeStack_.back());
+        clearableScopeStack_.pop_back();
+        return e;
+    }
+    // Register a deferred dynamic use site. The var is assigned in some
+    // enclosing loop L; we find the first loopBodyDefs_[k] that contains
+    // `name` and register with clearableScopeStack_[k] — the clearable scope
+    // for the loop directly inside L.
+    // Register a deferred dynamic use site with the correct clearable scope.
+    // collectAssignedVars recurses into nested loops, so loopBodyDefs_[k]
+    // contains vars from all nested sub-loops too. We therefore scan all
+    // entries and take the LAST (deepest/innermost) match — that is the
+    // innermost enclosing loop that directly assigns `name`, whose directly
+    // inner loop's clearable scope (clearableScopeStack_[k]) is the right one.
+    void registerClearableUse(SEXP name, unsigned bcPos, int slot) {
+        int found = -1;
+        for (int k = 0; k < (int)loopBodyDefs_.size(); ++k) {
+            auto it = loopBodyDefs_[k].expected.find(name);
+            if (it != loopBodyDefs_[k].expected.end() && it->second > 0)
+                found = k;
         }
+        assert(found >= 0 && (size_t)found < clearableScopeStack_.size());
+        clearableScopeStack_[found].useSites.push_back({bcPos, slot});
     }
+    bool hasClearableScope() const { return !clearableScopeStack_.empty(); }
 
     void trackUseDef(SEXP name, int slot) {
         useDefs_[name].push_back({currentScopeId(), closedReturnCount_,
