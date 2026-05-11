@@ -138,13 +138,15 @@ class DefUseAnalysis {
     // empty) all pending use sites and clear templates are patched in
     // outermost-first order so each var's bits form a contiguous range.
     struct RangeBasedLoopVarEntry {
+        struct UseSite {
+            unsigned pos; // bytecode position of record_type_once_
+            int slot;     // TypeFeedback slot
+        };
         SEXP sym;
         bool nested;               // true when a clear template was emitted
         unsigned clearTemplatePos; // bytecode position of the clear template
         int pendingCount = 0;      // number of use sites recorded so far
-        std::vector<unsigned>
-            useSitePos;               // bytecode positions of record_type_once_
-        std::vector<int> useSiteSlot; // TypeFeedback slots at those positions
+        std::vector<UseSite> useSites;
     };
     std::vector<RangeBasedLoopVarEntry> rangeBasedForLoopVars_;
     // Entries that have been popped but not yet assigned final bit indices.
@@ -277,7 +279,7 @@ class DefUseAnalysis {
     void pushRangeBasedForLoopVar(SEXP sym, bool nested,
                                   unsigned clearTemplatePos) {
         rangeBasedForLoopVars_.push_back(
-            {sym, nested, clearTemplatePos, 0, {}, {}});
+            {sym, nested, clearTemplatePos, 0, {}});
     }
     // Move the innermost active entry to pendingRangeVarEntries_.
     void moveRangeVarToPending() {
@@ -296,8 +298,7 @@ class DefUseAnalysis {
         for (auto& e : rangeBasedForLoopVars_) {
             if (e.sym == name) {
                 e.pendingCount++;
-                e.useSitePos.push_back(bcPos);
-                e.useSiteSlot.push_back(slot);
+                e.useSites.push_back({bcPos, slot});
                 return;
             }
         }

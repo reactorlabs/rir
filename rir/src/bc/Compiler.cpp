@@ -498,15 +498,16 @@ struct RangeBasedIterVarScope {
             int count = e.pendingCount;
             for (int i = 0; i < count; ++i)
                 cs_.patchImmediate(
-                    e.useSitePos[i],
-                    RECORD_TYPE_ONCE_PACK(e.useSiteSlot[i], base + i));
+                    e.useSites[i].pos,
+                    RECORD_TYPE_ONCE_PACK(e.useSites[i].slot, base + i));
             if (e.nested) {
                 if (count > 0)
                     cs_.patchImmediate(
                         e.clearTemplatePos,
                         RECORD_TYPE_ONCE_RANGE_PACK(base, count));
-                else
+                else {
                     cs_.remove(e.clearTemplatePos);
+                }
             }
             bitmapSize += count;
         }
