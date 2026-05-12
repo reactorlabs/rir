@@ -200,7 +200,8 @@ class CompilerContext {
         // variable, not
         // <<-escaped, and the single def dominates this compilation point.
         for (auto& kv : bodyAssignedCount_) {
-            result.controlled.insert(kv.first);
+            if (!innerSuperAssigned_.count(kv.first))
+                result.controlled.insert(kv.first);
             if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
                 !innerSuperAssigned_.count(kv.first) &&
                 dua.hasDominatingDef(kv.first))
