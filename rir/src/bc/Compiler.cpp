@@ -9,6 +9,7 @@
 #include "bc/CodeVerifier.h"
 #include "bc/CompilerCFG.h"
 #include "bc/DefUseAnalysis.h"
+#include "bc/LoopScopeGuards.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
@@ -62,80 +63,10 @@ static bool containsLoop(SEXP exp) {
 
 class CompilerContext {
   public:
-    class LoopContext {
-      public:
-        BC::Label next_;
-        BC::Label break_;
-        bool context_needed_ = false;
-        LoopContext(BC::Label next_, BC::Label break_)
-            : next_(next_), break_(break_) {}
-    };
+    using LoopContext = rir::LoopContext;
+    using CodeContext = rir::CodeContext;
 
-    class CodeContext {
-      public:
-        typedef size_t CacheSlotNumber;
-        static constexpr CacheSlotNumber BindingCacheDisabled = (size_t)-1;
-
-        CodeStream cs;
-        std::stack<LoopContext> loops;
-        CodeContext* parent;
-        std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
-
-        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : cs(fun, ast), parent(p) {}
-        virtual ~CodeContext() {}
-        bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
-        BC::Label loopNext() {
-            assert(!loops.empty());
-            return loops.top().next_;
-        }
-        BC::Label loopBreak() {
-            assert(!loops.empty());
-            return loops.top().break_;
-        }
-        void setContextNeeded() {
-            if (loops.empty() && parent)
-                parent->setContextNeeded();
-            else
-                loops.top().context_needed_ = true;
-        }
-        size_t isCached(SEXP name) {
-            assert(loadsSlotInCache.size() <= MAX_CACHE_SIZE);
-            auto f = loadsSlotInCache.find(name);
-            return f != loadsSlotInCache.end() &&
-                   f->second != BindingCacheDisabled;
-        }
-        size_t nCached = 0;
-        size_t cacheSlotFor(SEXP name) {
-            auto f = loadsSlotInCache.find(name);
-            if (f != loadsSlotInCache.end())
-                return f->second;
-            if (nCached >= MAX_CACHE_SIZE)
-                return BindingCacheDisabled;
-            return loadsSlotInCache.emplace(name, nCached++).first->second;
-        }
-        virtual bool loopIsLocal() { return !loops.empty(); }
-        virtual bool isPromiseContext() { return false; }
-
-        DefUseAnalysis defUseAnalysis;
-        uint32_t recordTypeOnceBitmapSize = 0;
-    };
-
-    class PromiseContext : public CodeContext {
-
-      public:
-        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : CodeContext(ast, fun, p) {}
-        bool loopIsLocal() override {
-            if (loops.empty()) {
-                parent->setContextNeeded();
-                return false;
-            }
-            return true;
-        }
-
-        bool isPromiseContext() override { return true; }
-    };
+    using PromiseContext = rir::PromiseContext;
 
     std::stack<CodeContext*> code;
 
@@ -210,32 +141,25 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        auto* ctx =
-            new CodeContext(ast, fun, code.empty() ? nullptr : code.top());
-        ctx->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
-        ctx->defUseAnalysis.outerControlled_ = &outerControlled_;
-        ctx->defUseAnalysis.outerImmutable_ = &outerImmutable_;
-        ctx->defUseAnalysis.formalNames_ = &formalNames_;
-        code.push(ctx);
+        DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
+                           &outerImmutable_, &formalNames_);
+        code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
+                                  std::move(dua)));
     }
 
     bool isInPromise() { return pushedPromiseContexts > 0; }
 
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
-        auto* pc =
-            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top());
-        pc->defUseAnalysis.localOrParam_ = &functionLocalOrParam_;
-        pc->defUseAnalysis.outerControlled_ = &outerControlled_;
-        pc->defUseAnalysis.outerImmutable_ = &outerImmutable_;
-        pc->defUseAnalysis.formalNames_ = &formalNames_;
+        DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
+                           &outerImmutable_, &formalNames_);
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.
         if (!code.empty())
-            pc->defUseAnalysis.loopDepth_ =
-                code.top()->defUseAnalysis.loopDepth_;
-        code.push(pc);
+            dua.loopDepth_ = code.top()->defUseAnalysis.loopDepth_;
+        code.push(new PromiseContext(
+            ast, fun, code.empty() ? nullptr : code.top(), std::move(dua)));
     }
 
     struct CaptureInfo {
@@ -469,105 +393,6 @@ static bool isRangeBasedSeq(SEXP seq) {
 // (variable re-assigned in some enclosing loop / range-based iter var) or
 // stable. The clear range covers only [first dynamic bit, last+1), so stable
 // bits at either end persist for the whole invocation.
-// RAII guard for the range-based iter var optimization: records the type of `i`
-// once per call per outer-loop iteration. A clear placeholder is emitted before
-// the loop (in the enclosing scope) so that on the next outer iteration `i` can
-// re-record if the range type changed. Only used for range-based for-loops.
-struct RangeBasedIterVarScope {
-    CompilerContext& ctx_;
-    CodeStream& cs_;
-    bool active_ = false;
-    bool nested_ = false;
-    unsigned placeholderPos_ = 0;
-
-    RangeBasedIterVarScope(CompilerContext& ctx, CodeStream& cs, SEXP sym,
-                           bool active)
-        : ctx_(ctx), cs_(cs), active_(active) {
-        if (!active_)
-            return;
-        nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
-        if (nested_) {
-            placeholderPos_ = cs_.currentPos();
-            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-        }
-        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
-                                                       placeholderPos_);
-    }
-
-    void finish() {
-        if (!active_)
-            return;
-        ctx_.defUseAnalysis().moveRangeVarToPending();
-        if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
-            assignBits();
-    }
-
-    void assignBits() {
-        auto& pending = ctx_.defUseAnalysis().pendingRangeVarEntries_;
-        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
-        for (auto it = pending.rbegin(); it != pending.rend(); ++it) {
-            auto& e = *it;
-            unsigned base = bitmapSize;
-            int count = e.pendingCount;
-            for (int i = 0; i < count; ++i)
-                cs_.patchImmediate(
-                    e.useSites[i].pos,
-                    RECORD_TYPE_ONCE_PACK(e.useSites[i].slot, base + i));
-            if (e.nested) {
-                if (count > 0)
-                    cs_.patchImmediate(
-                        e.clearTemplatePos,
-                        RECORD_TYPE_ONCE_RANGE_PACK(base, count));
-                else
-                    cs_.remove(e.clearTemplatePos);
-            }
-            bitmapSize += count;
-        }
-        pending.clear();
-    }
-};
-
-// RAII guard for the clearable scope mechanism: user-defined variables assigned
-// in an outer loop and used inside this loop need their record_type_once_ bits
-// cleared before each run of this loop. A clear placeholder is emitted before
-// the loop (in the enclosing scope) and patched with the actual bit range when
-// the loop scope is popped. Used for all loop kinds when nested.
-struct ClearableScopeGuard {
-    CompilerContext& ctx_;
-    CodeStream& cs_;
-    bool active_ = false;
-    unsigned placeholderPos_ = 0;
-
-    ClearableScopeGuard(CompilerContext& ctx, CodeStream& cs)
-        : ctx_(ctx), cs_(cs) {
-        active_ = ctx_.defUseAnalysis().loopDepth() > 0;
-        if (active_) {
-            placeholderPos_ = cs_.currentPos();
-            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-            ctx_.defUseAnalysis().pushClearableScope(placeholderPos_);
-        }
-    }
-
-    void finish() {
-        if (!active_)
-            return;
-        auto entry = ctx_.defUseAnalysis().popClearableScope();
-        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
-        int count = (int)entry.useSites.size();
-        unsigned base = bitmapSize;
-        for (int i = 0; i < count; ++i)
-            cs_.patchImmediate(
-                entry.useSites[i].pos,
-                RECORD_TYPE_ONCE_PACK(entry.useSites[i].slot, base + i));
-        if (count > 0) {
-            cs_.patchImmediate(entry.clearTemplatePos,
-                               RECORD_TYPE_ONCE_RANGE_PACK(base, count));
-            bitmapSize += count;
-        } else {
-            cs_.remove(entry.clearTemplatePos);
-        }
-    }
-};
 
 /**
  * Try to convert this loop into a C-style for loop. If it fails or must compile
@@ -693,9 +518,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         ctx.defUseAnalysis().pushForLoopVar(sym);
     // compileSimpleFor always handles `:` — always range-based.
     RangeBasedIterVarScope rangeScope(
-        ctx, cs, sym,
+        ctx.code.top(), sym,
         /*active=*/Compiler::isRecordLessEnabled());
-    ClearableScopeGuard clearScope(ctx, cs);
+    ClearableScopeGuard clearScope(ctx.code.top(),
+                                   Compiler::isRecordLessEnabled());
 
     // while
     compileWhile(
@@ -764,11 +590,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     // TODO: this is not sound... There are other ways to call remove... What we
     // should do instead is trap do_remove in gnur and clear the cache!
     if (fun == symbol::remove || fun == symbol::rm) {
-        CompilerContext::CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
-        CompilerContext::CodeContext::CacheSlotNumber max = 0;
+        CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
+        CodeContext::CacheSlotNumber max = 0;
         for (auto c : ctx.code.top()->loadsSlotInCache) {
             auto i = c.second;
-            if (i == CompilerContext::CodeContext::BindingCacheDisabled)
+            if (i == CodeContext::BindingCacheDisabled)
                 continue;
             if (i < min)
                 min = i;
@@ -1564,7 +1390,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        ClearableScopeGuard clearScope(ctx, cs);
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
         compileWhile(
             ctx,
             [&ctx, &cs, &cond]() {
@@ -1602,7 +1429,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         }
 
-        ClearableScopeGuard clearScope(ctx, cs);
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
@@ -1686,8 +1514,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         bool rangeBased =
             Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
-        RangeBasedIterVarScope rangeScope(ctx, cs, sym, /*active=*/rangeBased);
-        ClearableScopeGuard clearScope(ctx, cs);
+        RangeBasedIterVarScope rangeScope(ctx.code.top(), sym,
+                                          /*active=*/rangeBased);
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
@@ -2566,7 +2396,7 @@ SEXP Compiler::finalize() {
             for (auto n : RList(CDR(e))) {
                 if (CAR(e) == symbol::rm) {
                     ctx.code.top()->loadsSlotInCache[n] =
-                        CompilerContext::CodeContext::BindingCacheDisabled;
+                        CodeContext::BindingCacheDisabled;
                 } else if (TYPEOF(n) == SYMSXP) {
                     ctx.code.top()->cacheSlotFor(n);
                 } else {

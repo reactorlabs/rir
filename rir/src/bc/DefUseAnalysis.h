@@ -88,6 +88,14 @@ class DefUseAnalysis {
 
     // ---- data ----
 
+    DefUseAnalysis() = default;
+    DefUseAnalysis(const std::unordered_set<SEXP>* localOrParam,
+                   const std::unordered_set<SEXP>* outerControlled,
+                   const std::unordered_set<SEXP>* outerImmutable,
+                   const std::unordered_set<SEXP>* formalNames)
+        : localOrParam_(localOrParam), outerControlled_(outerControlled),
+          outerImmutable_(outerImmutable), formalNames_(formalNames) {}
+
     // Pointer to the function-wide set of local/param variables (owned by
     // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
     // mutated. Null when recordLessEnabled is off.
