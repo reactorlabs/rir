@@ -430,8 +430,8 @@ class DefUseAnalysis {
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
         // scopes (not captured-stable) must always be recorded.
         const Def* d = findReachingDef(name);
-        const bool optimizable =
-            isFormal(name) || isOuterControlled(name) || d != nullptr;
+        const bool optimizable = isFormal(name) || isOuterControlled(name) ||
+                                 (isLocalOrParam(name) && d != nullptr);
 
         if (optimizable || isForLoopVar(name)) {
             // useDefs dedup: a previously recorded use that dominates and
@@ -449,7 +449,7 @@ class DefUseAnalysis {
             }
         }
 
-        if (d && postDominates(*d))
+        if (d && isLocalOrParam(name) && postDominates(*d))
             return {UseKind::NoRecord, d->feedbackSlot};
 
         // Unique dominating def from an enclosing loop (doesn't post-dominate):
@@ -463,8 +463,8 @@ class DefUseAnalysis {
         //   assignedInEnclosingLoop  — only fire for vars re-assigned in some
         //     enclosing loop; truly stable vars (assigned before all loops)
         //     must NOT land in the clear range.
-        if (d != nullptr && loopDepth_ > 0 && !assignedInInnermostLoop(name) &&
-            assignedInEnclosingLoop(name))
+        if (d != nullptr && isLocalOrParam(name) && loopDepth_ > 0 &&
+            !assignedInInnermostLoop(name) && assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot};
 
         // Stable RecordOnce: var has a dominating def / is formal / outer-
