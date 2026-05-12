@@ -469,67 +469,40 @@ static bool isRangeBasedSeq(SEXP seq) {
 // (variable re-assigned in some enclosing loop / range-based iter var) or
 // stable. The clear range covers only [first dynamic bit, last+1), so stable
 // bits at either end persist for the whole invocation.
+// RAII guard for the range-based iter var optimization: records the type of `i`
+// once per call per outer-loop iteration. A clear placeholder is emitted before
+// the loop (in the enclosing scope) so that on the next outer iteration `i` can
+// re-record if the range type changed. Only used for range-based for-loops.
 struct RangeBasedIterVarScope {
     CompilerContext& ctx_;
     CodeStream& cs_;
-    bool clearActive_ = false;
-    bool rangeVarActive_ = false;
+    bool active_ = false;
     bool nested_ = false;
     unsigned placeholderPos_ = 0;
 
     RangeBasedIterVarScope(CompilerContext& ctx, CodeStream& cs, SEXP sym,
-                           bool clearActive, bool rangeVarActive)
-        : ctx_(ctx), cs_(cs), clearActive_(clearActive),
-          rangeVarActive_(rangeVarActive) {
+                           bool active)
+        : ctx_(ctx), cs_(cs), active_(active) {
+        if (!active_)
+            return;
         nested_ = ctx_.defUseAnalysis().loopDepth() > 0;
-        if (rangeVarActive_) {
-            // Range-based for-loop iter var: deferred bit assignment.
-            if (nested_) {
-                placeholderPos_ = cs_.currentPos();
-                cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-            }
-            ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
-                                                           placeholderPos_);
-        } else if (clearActive_ && nested_) {
-            // Generic loop (while/repeat/non-range for): deferred bit
-            // assignment.
+        if (nested_) {
             placeholderPos_ = cs_.currentPos();
             cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
-            ctx_.defUseAnalysis().pushClearableScope(placeholderPos_);
         }
+        ctx_.defUseAnalysis().pushRangeBasedForLoopVar(sym, nested_,
+                                                       placeholderPos_);
     }
 
     void finish() {
-        if (rangeVarActive_) {
-            ctx_.defUseAnalysis().moveRangeVarToPending();
-            if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
-                assignRangeVarBits();
-        } else if (clearActive_ && nested_) {
-            auto entry = ctx_.defUseAnalysis().popClearableScope();
-            assignClearableScopeBits(entry);
-        }
+        if (!active_)
+            return;
+        ctx_.defUseAnalysis().moveRangeVarToPending();
+        if (ctx_.defUseAnalysis().rangeVarAssignmentReady())
+            assignBits();
     }
 
-    void assignClearableScopeBits(DefUseAnalysis::ClearableScopeEntry& e) {
-        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
-        int count = (int)e.useSites.size();
-        unsigned base = bitmapSize;
-        for (int i = 0; i < count; ++i)
-            cs_.patchImmediate(
-                e.useSites[i].pos,
-                RECORD_TYPE_ONCE_PACK(e.useSites[i].slot, base + i));
-        if (count > 0) {
-            cs_.patchImmediate(e.clearTemplatePos,
-                               RECORD_TYPE_ONCE_RANGE_PACK(base, count));
-            bitmapSize += count;
-        } else {
-            cs_.remove(e.clearTemplatePos);
-        }
-    }
-
-    // Assign contiguous bit ranges outermost-first (reverse of pending list,
-    // which is innermost-first) and patch every clear template and use site.
-    void assignRangeVarBits() {
+    void assignBits() {
         auto& pending = ctx_.defUseAnalysis().pendingRangeVarEntries_;
         auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
         for (auto it = pending.rbegin(); it != pending.rend(); ++it) {
@@ -551,6 +524,48 @@ struct RangeBasedIterVarScope {
             bitmapSize += count;
         }
         pending.clear();
+    }
+};
+
+// RAII guard for the clearable scope mechanism: user-defined variables assigned
+// in an outer loop and used inside this loop need their record_type_once_ bits
+// cleared before each run of this loop. A clear placeholder is emitted before
+// the loop (in the enclosing scope) and patched with the actual bit range when
+// the loop scope is popped. Used for all loop kinds when nested.
+struct ClearableScopeGuard {
+    CompilerContext& ctx_;
+    CodeStream& cs_;
+    bool active_ = false;
+    unsigned placeholderPos_ = 0;
+
+    ClearableScopeGuard(CompilerContext& ctx, CodeStream& cs)
+        : ctx_(ctx), cs_(cs) {
+        active_ = ctx_.defUseAnalysis().loopDepth() > 0;
+        if (active_) {
+            placeholderPos_ = cs_.currentPos();
+            cs_ << BC::clearRecordTypeOnceBitsRange(0, 0);
+            ctx_.defUseAnalysis().pushClearableScope(placeholderPos_);
+        }
+    }
+
+    void finish() {
+        if (!active_)
+            return;
+        auto entry = ctx_.defUseAnalysis().popClearableScope();
+        auto& bitmapSize = ctx_.code.top()->recordTypeOnceBitmapSize;
+        int count = (int)entry.useSites.size();
+        unsigned base = bitmapSize;
+        for (int i = 0; i < count; ++i)
+            cs_.patchImmediate(
+                entry.useSites[i].pos,
+                RECORD_TYPE_ONCE_PACK(entry.useSites[i].slot, base + i));
+        if (count > 0) {
+            cs_.patchImmediate(entry.clearTemplatePos,
+                               RECORD_TYPE_ONCE_RANGE_PACK(base, count));
+            bitmapSize += count;
+        } else {
+            cs_.remove(entry.clearTemplatePos);
+        }
     }
 };
 
@@ -679,8 +694,8 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // compileSimpleFor always handles `:` — always range-based.
     RangeBasedIterVarScope rangeScope(
         ctx, cs, sym,
-        /*clearActive=*/Compiler::isRecordLessEnabled(),
-        /*rangeVarActive=*/Compiler::isRecordLessEnabled());
+        /*active=*/Compiler::isRecordLessEnabled());
+    ClearableScopeGuard clearScope(ctx, cs);
 
     // while
     compileWhile(
@@ -708,6 +723,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         body, !containsLoop(body));
 
     rangeScope.finish();
+    clearScope.finish();
     if (Compiler::isRecordLessEnabled())
         ctx.defUseAnalysis().popForLoopVar(sym);
 
@@ -1548,10 +1564,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        RangeBasedIterVarScope clearScope(
-            ctx, cs, R_NilValue,
-            /*clearActive=*/Compiler::isRecordLessEnabled(),
-            /*rangeVarActive=*/false);
+        ClearableScopeGuard clearScope(ctx, cs);
         compileWhile(
             ctx,
             [&ctx, &cs, &cond]() {
@@ -1589,10 +1602,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         }
 
-        RangeBasedIterVarScope clearScope(
-            ctx, cs, R_NilValue,
-            /*clearActive=*/Compiler::isRecordLessEnabled(),
-            /*rangeVarActive=*/false);
+        ClearableScopeGuard clearScope(ctx, cs);
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
@@ -1676,10 +1686,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         bool rangeBased =
             Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
-        RangeBasedIterVarScope rangeScope(
-            ctx, cs, sym,
-            /*clearActive=*/Compiler::isRecordLessEnabled(),
-            /*rangeVarActive=*/rangeBased);
+        RangeBasedIterVarScope rangeScope(ctx, cs, sym, /*active=*/rangeBased);
+        ClearableScopeGuard clearScope(ctx, cs);
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
@@ -1712,6 +1720,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // Compile the loop body
         compileExpr(ctx, body, true);
         rangeScope.finish();
+        clearScope.finish();
         if (Compiler::isRecordLessEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().popForLoopVar(sym);
