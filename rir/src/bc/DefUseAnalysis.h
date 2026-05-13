@@ -558,6 +558,9 @@ class DefUseAnalysis {
         SEXP head = CAR(ast);
         if (head == symbol::SuperAssign) {
             SEXP lhs = CADR(ast);
+            // Walk subscript chain (`x[[i]] <<-`, `x$f <<-`, etc.) to root.
+            while (TYPEOF(lhs) == LANGSXP)
+                lhs = CADR(lhs);
             if (TYPEOF(lhs) == SYMSXP)
                 out.insert(lhs);
         }
