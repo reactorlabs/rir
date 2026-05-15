@@ -276,6 +276,8 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext);
+static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
+                                 SEXP name);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has
 // already been evaluated: wrap the value at TOS into a promise. This is used in
@@ -935,16 +937,22 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             if (superAssign) {
                 cs << BC::ldvarSuper(target);
+                if (Compiler::profile)
+                    cs << ctx.recordType();
             } else {
-                if (ctx.code.top()->isCached(target))
+                if (ctx.code.top()->isCached(target)) {
                     cs << BC::ldvarForUpdateCached(
                         target, ctx.code.top()->cacheSlotFor(target));
-                else
+                } else {
                     cs << BC::ldvarForUpdate(target);
+                }
+                if (Compiler::profile) {
+                    if (Compiler::recordLessEnabled)
+                        emitRecordTypeForVar(ctx, cs, target);
+                    else
+                        cs << ctx.recordType();
+                }
             }
-
-            if (Compiler::profile)
-                cs << ctx.recordType();
 
             if (maybeChanges(target, *idx) ||
                 (dims > 1 && maybeChanges(target, *(idx + 1))) ||
@@ -2161,6 +2169,86 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         cs << ctx.recordType();
 }
 
+// Classify the use of `name` and emit the appropriate recording instruction.
+// Falls back to plain recordType() when called from inside a promise context.
+static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
+                                 SEXP name) {
+    if (ctx.isInPromise()) {
+        cs << ctx.recordType();
+        return;
+    }
+
+    using UseKind = DefUseAnalysis::UseKind;
+    auto uc = ctx.classifyUse(name);
+    if (uc.kind == UseKind::NoRecord) {
+        ctx.registerNoRecordDep(uc.defSlot);
+    } else if (ctx.code.top()->isPromiseContext() &&
+               ctx.cfgBuilder.isSupportedParameter(name) &&
+               ctx.recordTypeOncePromiseBitmapSize <
+                   RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
+        // Variable free in a promise that is a parameter of the
+        // enclosing function (never assigned, not shadowed, used
+        // in a loop) — record once per function invocation via the
+        // persistent bitmap in the call env.
+        int slot = ctx.typeFeedbackBuilder.addType();
+        ctx.defUseAnalysis().trackUseDef(name, slot);
+        uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
+        cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+    } else {
+        switch (uc.kind) {
+        case UseKind::NoRecord:
+            assert(false && "no record unreachable");
+            break; // unreachable: handled above
+        case UseKind::RecordOnce: {
+            int slot = ctx.typeFeedbackBuilder.addType();
+            ctx.defUseAnalysis().trackUseDef(name, slot);
+            auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
+            if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
+                // Deferred: bit assigned later when outermost
+                // range-based scope finishes.
+                int total = (int)bitmapSize +
+                            ctx.defUseAnalysis().rangeVarTotalPending();
+                if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                    unsigned bcPos = cs.currentPos();
+                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    ctx.defUseAnalysis().registerRangeVarUse(name, bcPos, slot);
+                } else {
+                    cs << BC::recordType(slot);
+                }
+            } else if (ctx.defUseAnalysis().assignedInEnclosingLoop(name) &&
+                       ctx.defUseAnalysis().hasClearableScope()) {
+                // Dynamic: re-assigned in an enclosing loop.
+                // Defer bit assignment to the innermost clearable
+                // scope so stable bits never interleave with the
+                // clear range.
+                int total = (int)bitmapSize +
+                            ctx.defUseAnalysis().rangeVarTotalPending();
+                if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                    unsigned bcPos = cs.currentPos();
+                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    ctx.defUseAnalysis().registerClearableUse(name, bcPos,
+                                                              slot);
+                } else {
+                    cs << BC::recordType(slot);
+                }
+            } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                       bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                // Stable: assign bit immediately.
+                cs << BC::recordTypeOnce((uint32_t)slot, bitmapSize++);
+            } else {
+                cs << BC::recordType(slot);
+            }
+            break;
+        }
+        case UseKind::RecordAlways:
+            cs << ctx.recordTypeTracked(name);
+            break;
+        }
+    }
+}
+
 // Lookup
 void compileGetvar(CompilerContext& ctx, SEXP name) {
     CodeStream& cs = ctx.cs();
@@ -2176,90 +2264,10 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (Compiler::recordLessEnabled && !ctx.isInPromise()) {
-
-                // if  (name == Rf_install("i") || name == Rf_install("j")) {
-                //     return;
-                // }
-
-                using UseKind = DefUseAnalysis::UseKind;
-                auto uc = ctx.classifyUse(name);
-                if (uc.kind == UseKind::NoRecord) {
-                    ctx.registerNoRecordDep(uc.defSlot);
-                } else if (ctx.code.top()->isPromiseContext() &&
-                           ctx.cfgBuilder.isSupportedParameter(name) &&
-                           ctx.recordTypeOncePromiseBitmapSize <
-                               RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
-                    // Variable free in a promise that is a parameter of the
-                    // enclosing function (never assigned, not shadowed, used
-                    // in a loop) — record once per function invocation via the
-                    // persistent bitmap in the call env.
-                    int slot = ctx.typeFeedbackBuilder.addType();
-                    ctx.defUseAnalysis().trackUseDef(name, slot);
-                    uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
-                    cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
-                } else {
-                    switch (uc.kind) {
-                    case UseKind::NoRecord:
-                        assert(false && "no record unreachable");
-                        break; // unreachable: handled above
-                    case UseKind::RecordOnce: {
-                        int slot = ctx.typeFeedbackBuilder.addType();
-                        ctx.defUseAnalysis().trackUseDef(name, slot);
-                        auto& bitmapSize =
-                            ctx.code.top()->recordTypeOnceBitmapSize;
-                        if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
-                            // Deferred: bit assigned later when outermost
-                            // range-based scope finishes.
-                            int total =
-                                (int)bitmapSize +
-                                ctx.defUseAnalysis().rangeVarTotalPending();
-                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                                total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
-                                unsigned bcPos = cs.currentPos();
-                                cs << BC::recordTypeOnce((uint32_t)slot, 0);
-                                ctx.defUseAnalysis().registerRangeVarUse(
-                                    name, bcPos, slot);
-                            } else {
-                                cs << BC::recordType(slot);
-                            }
-                        } else if (ctx.defUseAnalysis().assignedInEnclosingLoop(
-                                       name) &&
-                                   ctx.defUseAnalysis().hasClearableScope()) {
-                            // Dynamic: re-assigned in an enclosing loop.
-                            // Defer bit assignment to the innermost clearable
-                            // scope so stable bits never interleave with the
-                            // clear range.
-                            int total =
-                                (int)bitmapSize +
-                                ctx.defUseAnalysis().rangeVarTotalPending();
-                            if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                                total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
-                                unsigned bcPos = cs.currentPos();
-                                cs << BC::recordTypeOnce((uint32_t)slot, 0);
-                                ctx.defUseAnalysis().registerClearableUse(
-                                    name, bcPos, slot);
-                            } else {
-                                cs << BC::recordType(slot);
-                            }
-                        } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
-                                   bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
-                            // Stable: assign bit immediately.
-                            cs << BC::recordTypeOnce((uint32_t)slot,
-                                                     bitmapSize++);
-                        } else {
-                            cs << BC::recordType(slot);
-                        }
-                        break;
-                    }
-                    case UseKind::RecordAlways:
-                        cs << ctx.recordTypeTracked(name);
-                        break;
-                    }
-                }
-            } else {
+            if (Compiler::recordLessEnabled)
+                emitRecordTypeForVar(ctx, cs, name);
+            else
                 cs << ctx.recordType();
-            }
         }
     }
 }
