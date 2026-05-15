@@ -980,11 +980,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (superAssign) {
                 cs << BC::stvarSuper(target);
             } else {
-                if (ctx.code.top()->isCached(target))
+                int defSlot = -1;
+                if (Compiler::profile) {
+                    defSlot = (int)ctx.typeSlotCount();
+                    cs << ctx.recordType();
+                }
+                if (ctx.code.top()->isCached(target)) {
                     cs << BC::stvarCached(target,
                                           ctx.code.top()->cacheSlotFor(target));
-                else
+                } else {
                     cs << BC::stvar(target);
+                }
+                if (Compiler::isRecordLessEnabled())
+                    ctx.defUseAnalysis().trackDef(target, defSlot);
             }
 
             if (!voidContext)
