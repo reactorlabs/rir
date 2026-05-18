@@ -221,6 +221,16 @@ class DefUseAnalysis {
         return findReachingDef(name) != nullptr;
     }
 
+    // Like findReachingDef but ignores hasUnseenLoopDef. Use when a dominating
+    // local assignment is sufficient to establish control — even if the loop
+    // back-edge has an unseen def that might shadow it later.
+    const Def* findDominatingDef(SEXP name) const {
+        auto it = defs_.find(name);
+        if (it == defs_.end())
+            return nullptr;
+        return dominates(it->second) ? &it->second : nullptr;
+    }
+
     void trackDef(SEXP name, int feedbackSlot = kNoSlot) {
         useDefs_.erase(name);
         defs_[name] = {currentScopeId(), closedReturnCount_,
@@ -433,13 +443,13 @@ class DefUseAnalysis {
         const bool optimizable = isFormal(name) || isOuterControlled(name) ||
                                  (isLocalOrParam(name) && d != nullptr);
 
-        if (optimizable || isForLoopVar(name)) {
+        if (optimizable || isForLoopVar(name) ||
+            (isLocalOrParam(name) && findDominatingDef(name))) {
             // useDefs dedup: a previously recorded use that dominates and
             // post-dominates this point has the same value — skip re-recording.
-            // For-loop iter vars are admitted here even though
-            // optimizable=false (no trackDef'd reaching def): the for-loop's
-            // implicit stvar sets the same type each iteration, so within an
-            // iteration any prior RecordAlways recording is current.
+            // For-loop iter vars and locals with a dominating def (even when
+            // hasUnseenLoopDef blocks findReachingDef) are also admitted: the
+            // variable is under local control so prior recordings are valid.
             auto udIt = useDefs_.find(name);
             if (udIt != useDefs_.end()) {
                 for (const Def& ud : udIt->second) {
@@ -534,6 +544,8 @@ class DefUseAnalysis {
         if (TYPEOF(fun) == SYMSXP &&
             (fun == symbol::Assign || fun == symbol::Assign2)) {
             SEXP lhs = CADR(ast);
+            while (TYPEOF(lhs) == LANGSXP)
+                lhs = CADR(lhs);
             if (TYPEOF(lhs) == SYMSXP)
                 out[lhs]++;
         }
