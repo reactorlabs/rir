@@ -122,11 +122,17 @@ class DefUseAnalysis {
         if (TYPEOF(fun) == SYMSXP &&
             (fun == symbol::Assign || fun == symbol::Assign2 ||
              fun == symbol::SuperAssign)) {
-            // Skip the LHS entirely — it is a write target, not a read.
-            // If the LHS is a subscript expression, scan its index args (they
-            // are reads), but not the container itself.
+            // Skip simple assignment LHS — it is a write target, not a read.
+            // For subscript assignment (v[i] <- ...), the root container is
+            // loaded by ldvarForUpdate, so it counts as a read. Index args
+            // are also reads.
             SEXP lhs = CADR(ast);
             if (TYPEOF(lhs) == LANGSXP) {
+                SEXP container = lhs;
+                while (TYPEOF(container) == LANGSXP)
+                    container = CADR(container);
+                if (TYPEOF(container) == SYMSXP)
+                    out.insert(container);
                 for (SEXP s = CDDR(lhs); s != R_NilValue; s = CDR(s))
                     collectPureReadVars(CAR(s), out);
             }
