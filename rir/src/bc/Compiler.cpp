@@ -105,6 +105,10 @@ class CompilerContext {
     std::unordered_set<SEXP> innerSuperAssigned_;
     std::unordered_set<SEXP> forLoopVars_;
 
+    // Variables that appear in pure-read (value) position in the function body.
+    // Used to gate the post-subassign record_type_ emission.
+    std::unordered_set<SEXP> readVars_;
+
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -142,7 +146,7 @@ class CompilerContext {
 
     void push(SEXP ast, SEXP env) {
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
-                           &outerImmutable_, &formalNames_);
+                           &outerImmutable_, &formalNames_, &readVars_);
         code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
                                   std::move(dua)));
     }
@@ -245,10 +249,10 @@ class CompilerContext {
     // Allocate a slot for a NoRecord use and register its dependency on
     // `sourceSlot` so the type info can be propagated before JIT compilation.
     void registerNoRecordDep(int sourceSlot) {
+        assert(sourceSlot != DefUseAnalysis::kNoSlot &&
+               "NoRecord must always reference a valid feedback slot");
         uint32_t slot = typeFeedbackBuilder.addType();
-        if (sourceSlot >= 0) {
-            typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
-        }
+        typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
     }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
@@ -825,7 +829,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     // use it as the def's feedback slot.
                     int defSlot = (ctx.typeSlotCount() > typesBefore)
                                       ? (int)ctx.typeSlotCount() - 1
-                                      : -1;
+                                      : DefUseAnalysis::kNoSlot;
                     ctx.defUseAnalysis().trackDef(lhs, defSlot);
                 }
             }
@@ -988,8 +992,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (superAssign) {
                 cs << BC::stvarSuper(target);
             } else {
-                int defSlot = -1;
-                if (Compiler::profile) {
+                int defSlot = DefUseAnalysis::kNoSlot;
+                if (Compiler::profile &&
+                    (Compiler::isRecordLessEnabled() &&
+                     ctx.defUseAnalysis().hasRead(target))) {
                     defSlot = (int)ctx.typeSlotCount();
                     cs << ctx.recordType();
                 }
@@ -2362,6 +2368,7 @@ SEXP Compiler::finalize() {
         DefUseAnalysis::collectAssignedVars(exp, ctx.bodyAssignedCount_);
         DefUseAnalysis::collectInnerSuperAssigned(exp, ctx.innerSuperAssigned_);
         DefUseAnalysis::collectForLoopVars(exp, ctx.forLoopVars_);
+        DefUseAnalysis::collectPureReadVars(exp, ctx.readVars_);
 
         for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
             if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)

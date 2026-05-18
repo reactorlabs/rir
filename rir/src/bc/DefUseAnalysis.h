@@ -92,9 +92,51 @@ class DefUseAnalysis {
     DefUseAnalysis(const std::unordered_set<SEXP>* localOrParam,
                    const std::unordered_set<SEXP>* outerControlled,
                    const std::unordered_set<SEXP>* outerImmutable,
-                   const std::unordered_set<SEXP>* formalNames)
+                   const std::unordered_set<SEXP>* formalNames,
+                   const std::unordered_set<SEXP>* readVars = nullptr)
         : localOrParam_(localOrParam), outerControlled_(outerControlled),
-          outerImmutable_(outerImmutable), formalNames_(formalNames) {}
+          outerImmutable_(outerImmutable), formalNames_(formalNames),
+          readVars_(readVars) {}
+
+    bool hasRead(SEXP name) const {
+        return readVars_ && readVars_->count(name);
+    }
+
+    // Collect all symbols that appear in pure-read (value) position in `ast`.
+    // Excludes: direct symbol LHS of plain assignments (`v <- expr`), and the
+    // container chain of subscript LHS (`v[i] <- expr` — v is ldvarForUpdate,
+    // not a value read). Index expressions inside subscript LHS are included.
+    // Does not recurse into nested function bodies.
+    static void collectPureReadVars(SEXP ast, std::unordered_set<SEXP>& out) {
+        if (!ast || ast == R_NilValue)
+            return;
+        if (TYPEOF(ast) == SYMSXP) {
+            out.insert(ast);
+            return;
+        }
+        if (TYPEOF(ast) != LANGSXP)
+            return;
+        SEXP fun = CAR(ast);
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::Function)
+            return;
+        if (TYPEOF(fun) == SYMSXP &&
+            (fun == symbol::Assign || fun == symbol::Assign2 ||
+             fun == symbol::SuperAssign)) {
+            // Skip the LHS entirely — it is a write target, not a read.
+            // If the LHS is a subscript expression, scan its index args (they
+            // are reads), but not the container itself.
+            SEXP lhs = CADR(ast);
+            if (TYPEOF(lhs) == LANGSXP) {
+                for (SEXP s = CDDR(lhs); s != R_NilValue; s = CDR(s))
+                    collectPureReadVars(CAR(s), out);
+            }
+            // Scan the RHS.
+            collectPureReadVars(CADDR(ast), out);
+            return;
+        }
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            collectPureReadVars(CAR(s), out);
+    }
 
     // Pointer to the function-wide set of local/param variables (owned by
     // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
@@ -119,6 +161,12 @@ class DefUseAnalysis {
     // CompilerContext::formalNames_). Formals are always bound at call time,
     // so RecordOnce is sound for them even without a dominating stvar def.
     const std::unordered_set<SEXP>* formalNames_ = nullptr;
+
+    // Pointer to the set of variables that appear in pure-read (value) position
+    // in the function body (owned by CompilerContext::readVars_). Used to gate
+    // the post-subassign record_type_ so we don't record when no ldvar will
+    // ever consume the slot.
+    const std::unordered_set<SEXP>* readVars_ = nullptr;
 
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
@@ -459,7 +507,8 @@ class DefUseAnalysis {
             }
         }
 
-        if (d && isLocalOrParam(name) && postDominates(*d))
+        if (d && isLocalOrParam(name) && postDominates(*d) &&
+            d->feedbackSlot != kNoSlot)
             return {UseKind::NoRecord, d->feedbackSlot};
 
         // Unique dominating def from an enclosing loop (doesn't post-dominate):
