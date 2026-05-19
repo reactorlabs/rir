@@ -105,9 +105,10 @@ class CompilerContext {
     std::unordered_set<SEXP> innerSuperAssigned_;
     std::unordered_set<SEXP> forLoopVars_;
 
-    // Variables that appear in pure-read (value) position in the function body.
-    // Used to gate the post-subassign record_type_ emission.
-    std::unordered_set<SEXP> readVars_;
+    // // Variables that appear in pure-read (value) position in the function
+    // body.
+    // // Used to gate the post-subassign record_type_ emission.
+    // std::unordered_set<SEXP> readVars_;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -146,7 +147,7 @@ class CompilerContext {
 
     void push(SEXP ast, SEXP env) {
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
-                           &outerImmutable_, &formalNames_, &readVars_);
+                           &outerImmutable_, &formalNames_);
         code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
                                   std::move(dua)));
     }
@@ -992,13 +993,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (superAssign) {
                 cs << BC::stvarSuper(target);
             } else {
-                int defSlot = DefUseAnalysis::kNoSlot;
-                if (Compiler::profile &&
-                    (Compiler::isRecordLessEnabled() &&
-                     ctx.defUseAnalysis().hasRead(target))) {
-                    defSlot = (int)ctx.typeSlotCount();
-                    cs << ctx.recordType();
-                }
+
                 if (ctx.code.top()->isCached(target)) {
                     cs << BC::stvarCached(target,
                                           ctx.code.top()->cacheSlotFor(target));
@@ -1006,7 +1001,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::stvar(target);
                 }
                 if (Compiler::isRecordLessEnabled())
-                    ctx.defUseAnalysis().trackDef(target, defSlot);
+                    ctx.defUseAnalysis().trackDef(target,
+                                                  DefUseAnalysis::kNoSlot);
             }
 
             if (!voidContext)
@@ -2368,7 +2364,7 @@ SEXP Compiler::finalize() {
         DefUseAnalysis::collectAssignedVars(exp, ctx.bodyAssignedCount_);
         DefUseAnalysis::collectInnerSuperAssigned(exp, ctx.innerSuperAssigned_);
         DefUseAnalysis::collectForLoopVars(exp, ctx.forLoopVars_);
-        DefUseAnalysis::collectPureReadVars(exp, ctx.readVars_);
+        // DefUseAnalysis::collectPureReadVars(exp, ctx.readVars_);
 
         for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
             if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
