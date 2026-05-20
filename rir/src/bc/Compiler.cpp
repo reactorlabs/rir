@@ -2192,18 +2192,18 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     auto uc = ctx.classifyUse(name);
     if (uc.kind == UseKind::NoRecord) {
         ctx.registerNoRecordDep(uc.defSlot);
-    } else if (ctx.code.top()->isPromiseContext() &&
-               ctx.cfgBuilder.isSupportedParameter(name) &&
-               ctx.recordTypeOncePromiseBitmapSize <
-                   RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
-        // Variable free in a promise that is a parameter of the
-        // enclosing function (never assigned, not shadowed, used
-        // in a loop) — record once per function invocation via the
-        // persistent bitmap in the call env.
-        int slot = ctx.typeFeedbackBuilder.addType();
-        ctx.defUseAnalysis().trackUseDef(name, slot);
-        uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
-        cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+        // } else if (ctx.code.top()->isPromiseContext() &&
+        //            ctx.cfgBuilder.isSupportedParameter(name) &&
+        //            ctx.recordTypeOncePromiseBitmapSize <
+        //                RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
+        //     // Variable free in a promise that is a parameter of the
+        //     // enclosing function (never assigned, not shadowed, used
+        //     // in a loop) — record once per function invocation via the
+        //     // persistent bitmap in the call env.
+        //     int slot = ctx.typeFeedbackBuilder.addType();
+        //     ctx.defUseAnalysis().trackUseDef(name, slot);
+        //     uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
+        //     cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
     } else {
         switch (uc.kind) {
         case UseKind::NoRecord:
@@ -2440,8 +2440,8 @@ SEXP Compiler::finalize() {
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
-    function.function()->recordTypeOncePromiseCount =
-        (uint16_t)ctx.recordTypeOncePromiseBitmapSize;
+    // function.function()->recordTypeOncePromiseCount =
+    //     (uint16_t)ctx.recordTypeOncePromiseBitmapSize;
     UNPROTECT(1);
 
 #ifdef ENABLE_SLOWASSERT
