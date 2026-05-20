@@ -146,8 +146,12 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
+        std::unordered_set<SEXP> argAssigned;
+        if (Compiler::recordLessEnabled)
+            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
-                           &outerImmutable_, &formalNames_);
+                           &outerImmutable_, &formalNames_,
+                           std::move(argAssigned));
         code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
                                   std::move(dua)));
     }
@@ -156,8 +160,12 @@ class CompilerContext {
 
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
+        std::unordered_set<SEXP> argAssigned;
+        if (Compiler::recordLessEnabled)
+            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
-                           &outerImmutable_, &formalNames_);
+                           &outerImmutable_, &formalNames_,
+                           std::move(argAssigned));
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.
@@ -2175,10 +2183,10 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 // Falls back to plain recordType() when called from inside a promise context.
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                                  SEXP name) {
-    if (ctx.isInPromise()) {
-        cs << ctx.recordType();
-        return;
-    }
+    // if (ctx.isInPromise()) {
+    //     cs << ctx.recordType();
+    //     return;
+    // }
 
     using UseKind = DefUseAnalysis::UseKind;
     auto uc = ctx.classifyUse(name);

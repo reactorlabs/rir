@@ -92,9 +92,11 @@ class DefUseAnalysis {
     DefUseAnalysis(const std::unordered_set<SEXP>* localOrParam,
                    const std::unordered_set<SEXP>* outerControlled,
                    const std::unordered_set<SEXP>* outerImmutable,
-                   const std::unordered_set<SEXP>* formalNames)
+                   const std::unordered_set<SEXP>* formalNames,
+                   std::unordered_set<SEXP> argAssignedVars = {})
         : localOrParam_(localOrParam), outerControlled_(outerControlled),
-          outerImmutable_(outerImmutable), formalNames_(formalNames) {}
+          outerImmutable_(outerImmutable), formalNames_(formalNames),
+          argAssignedVars_(std::move(argAssignedVars)) {}
 
     // bool hasRead(SEXP name) const {
     //     return readVars_ && readVars_->count(name);
@@ -173,6 +175,16 @@ class DefUseAnalysis {
     // // the post-subassign record_type_ so we don't record when no ldvar will
     // // ever consume the slot.
     // const std::unordered_set<SEXP>* readVars_ = nullptr;
+
+    // Variables assigned inside promise-argument positions of this code
+    // context's AST. Assignments there run at an unpredictable point (when
+    // the promise is forced), invisible to the DFA — so we exclude them from
+    // all optimizations (RecordAlways).
+    std::unordered_set<SEXP> argAssignedVars_;
+
+    bool isArgAssigned(SEXP name) const {
+        return argAssignedVars_.count(name) > 0;
+    }
 
     std::unordered_map<SEXP, Def> defs_;
     std::unordered_map<SEXP, std::vector<Def>> useDefs_;
@@ -502,6 +514,13 @@ class DefUseAnalysis {
 
     // Classify the use of `name` at the current compilation point.
     UseClassification classifyUse(SEXP name) const {
+        // Variables assigned in promise-argument positions are not tracked by
+        // the DFA (the assignment runs when the promise is forced, which is
+        // invisible to the main code's stvar sequence). Exclude from all
+        // optimizations.
+        if (isArgAssigned(name))
+            return {UseKind::RecordAlways, kNoSlot};
+
         // Only locals/params and stable outer captures are eligible for
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
         // scopes (not captured-stable) must always be recorded.
@@ -626,6 +645,37 @@ class DefUseAnalysis {
         for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s)) {
             collectAssignedVars(CAR(s), out);
         }
+    }
+
+    // Collect variables assigned inside promise-argument positions of regular
+    // function calls. Control-flow forms (if/while/for/repeat/{/switch) and
+    // assignment forms compile sub-expressions inline — not promise boundaries.
+    // Does not cross inner function definitions.
+    static void collectArgAssignedVars(SEXP ast, std::unordered_set<SEXP>& out,
+                                       bool inPromise = false) {
+        if (!ast || ast == R_NilValue || TYPEOF(ast) != LANGSXP)
+            return;
+        SEXP fun = CAR(ast);
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::Function)
+            return;
+        const bool isAssign =
+            TYPEOF(fun) == SYMSXP &&
+            (fun == symbol::Assign || fun == symbol::Assign2 ||
+             fun == symbol::SuperAssign);
+        const bool isInline =
+            isAssign || (TYPEOF(fun) == SYMSXP &&
+                         (fun == symbol::If || fun == symbol::While ||
+                          fun == symbol::For || fun == symbol::Repeat ||
+                          fun == symbol::Block || fun == symbol::Switch));
+        if (inPromise && isAssign) {
+            SEXP lhs = CADR(ast);
+            while (TYPEOF(lhs) == LANGSXP)
+                lhs = CADR(lhs);
+            if (TYPEOF(lhs) == SYMSXP)
+                out.insert(lhs);
+        }
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            collectArgAssignedVars(CAR(s), out, inPromise || !isInline);
     }
 
   private:
