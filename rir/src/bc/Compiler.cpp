@@ -169,8 +169,8 @@ class CompilerContext {
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.
-        if (!code.empty())
-            dua.loopDepth_ = code.top()->defUseAnalysis.loopDepth_;
+        // if (!code.empty())
+        //    dua.loopDepth_ = code.top()->defUseAnalysis.loopDepth_;
         code.push(new PromiseContext(
             ast, fun, code.empty() ? nullptr : code.top(), std::move(dua)));
     }
