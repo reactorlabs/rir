@@ -2191,6 +2191,13 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     //     return;
     // }
 
+    // No main body context yet (compiling default formal arguments): skip
+    // promise-specific optimizations and fall through to the normal path.
+    if (!ctx.mainBodyCtx_) {
+        cs << ctx.recordType();
+        return;
+    }
+
     using UseKind = DefUseAnalysis::UseKind;
     auto uc = ctx.classifyUse(name);
     if (uc.kind == UseKind::NoRecord) {
