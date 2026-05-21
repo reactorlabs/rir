@@ -1996,8 +1996,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // the call env so it persists across promise forces. Zero only on a real
     // call entry (not on promise forces / deopt resumes), using the main
     // body's count as the authority.
-    // if (callCtxt && function->recordTypeOncePromiseCount > 0)
-    //     env->u.envsxp.recordTypeOnceBitmap = 0;
+    if (callCtxt && function->recordTypeOncePromiseCount > 0)
+        env->u.envsxp.recordTypeOnceBitmap = 0;
 
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
