@@ -173,6 +173,7 @@ struct ObservedValues {
     ObservedValues* parent;
     bool isLeaf;
     bool shouldRecord;
+    bool hasNotifiedParent;
 
     std::array<uint8_t, MaxTypes> seen;
 
@@ -235,8 +236,9 @@ struct ObservedValues {
         }
 
         // B
-        if (parent && object) {
+        if (object && parent && !hasNotifiedParent) {
             parent->shouldRecord = true;
+            hasNotifiedParent = true;
         }
 
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
