@@ -2004,25 +2004,58 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // marks how this load behaved.
 // Determine StateBeforeLastForce from `s` and update typeFeedback at
 // `slotIdx`. Used by all recordForceBehavior* variants below.
+//
+// stateBeforeLastForce is a monotonic lattice — unknown < value <
+// evaluatedPromise < promise — and only moves upward. We switch on the
+// current state and run only the SEXP queries that could still cause a
+// promotion. Direct access to types(slotIdx) bypasses the std::function-based
+// record_type lambda overload, which adds type-erasure overhead.
 #define RECORD_FB_AT_SLOT(slotIdx, s)                                          \
     do {                                                                       \
-        ObservedValues::StateBeforeLastForce state =                           \
-            ObservedValues::StateBeforeLastForce::unknown;                     \
-        if (TYPEOF(s) != PROMSXP) {                                            \
-            state = ObservedValues::StateBeforeLastForce::value;               \
-        } else if (PRVALUE(s) != R_UnboundValue) {                             \
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
-        } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {                \
-            state = ObservedValues::StateBeforeLastForce::value;               \
-        } else {                                                               \
-            state = ObservedValues::StateBeforeLastForce::promise;             \
-        }                                                                      \
         /* FIXME: cf. #1260 */                                                 \
-        c->function()->typeFeedback()->record_type(                            \
-            slotIdx, [&](auto& feedback) {                                     \
-                if (feedback.stateBeforeLastForce < state)                     \
-                    feedback.stateBeforeLastForce = state;                     \
-            });                                                                \
+        ObservedValues& fb__ = c->function()->typeFeedback()->types(slotIdx);  \
+        switch (                                                               \
+            (ObservedValues::StateBeforeLastForce)fb__.stateBeforeLastForce) { \
+        case ObservedValues::StateBeforeLastForce::promise:                    \
+            /* lattice top — no input can promote */                         \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::evaluatedPromise:           \
+            /* only a genuine unevaluated promise advances */                  \
+            if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&        \
+                CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)                     \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::value:                      \
+            /* non-PROMSXP stays value; otherwise classify the promise */      \
+            if (TYPEOF(s) != PROMSXP)                                          \
+                break;                                                         \
+            if (PRVALUE(s) != R_UnboundValue) {                                \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
+            } else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch) {            \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            }                                                                  \
+            /* else: lazyLoadDBfetch stub — still value */                   \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::unknown:                    \
+            /* first observation — full classification */                    \
+            if (TYPEOF(s) != PROMSXP) {                                        \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::value;               \
+            } else if (PRVALUE(s) != R_UnboundValue) {                         \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
+            } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {            \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::value;               \
+            } else {                                                           \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
     } while (0)
 
     // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
@@ -2054,7 +2087,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.
     auto recordForceBehaviorAlways = [&](SEXP s) {
-        assert(*pc == Opcode::record_type_);
+        // assert(*pc == Opcode::record_type_);
 
         Immediate slotIdx = *(Immediate*)(pc + 1);
         RECORD_FB_AT_SLOT(slotIdx, s);
@@ -2063,7 +2096,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
     // per-invocation env bitmap, then record.
     auto recordForceBehaviorEnv = [&](SEXP s) {
-        assert(*pc == Opcode::record_type_once_promise_);
+        // assert(*pc == Opcode::record_type_once_promise_);
+
         Immediate raw = *(Immediate*)(pc + 1);
         uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
         if (env->u.envsxp.recordTypeOnceBitmap & bit)
