@@ -2060,22 +2060,20 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
     // on the immediately following opcode to decide whether to record and how
-    // to interpret the operand.
+    // to interpret the operand. The record_type_ arm is the hot path —
+    // annotated with __builtin_expect so the compiler lays it out inline and
+    // pushes the rare arms into a cold region. `raw` is read lazily so the
+    // no-match return path doesn't pay for it.
     auto recordForceBehavior = [&](SEXP s) {
-        Immediate raw = *(Immediate*)(pc + 1);
-        uint32_t idx;
-
-        if (*pc == Opcode::record_type_) {
-            idx = raw;
+        if (__builtin_expect(*pc == Opcode::record_type_, 1)) {
+            RECORD_FB_AT_SLOT(*(Immediate*)(pc + 1), s);
         } else if (*pc == Opcode::record_type_once_promise_) {
+            Immediate raw = *(Immediate*)(pc + 1);
             uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
             if (env->u.envsxp.recordTypeOnceBitmap & bit)
                 return;
-            idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
-        } else {
-            return;
+            RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
         }
-        RECORD_FB_AT_SLOT(idx, s);
     };
 
     // auto recordForceBehavior = [&](SEXP s) {
