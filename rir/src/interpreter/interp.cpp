@@ -2063,26 +2063,43 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // to interpret the operand.
     auto recordForceBehavior = [&](SEXP s) {
         Immediate raw = *(Immediate*)(pc + 1);
+        uint32_t idx;
 
-        if (*pc != Opcode::record_type_) {
-            if (*pc == Opcode::record_type_once_) {
-                if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
-                                                 RECORD_TYPE_ONCE_IIDX(raw)))
-                    return;
-            } else if (*pc == Opcode::record_type_once_promise_) {
-                uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-                if (env->u.envsxp.recordTypeOnceBitmap & bit)
-                    return;
-            } else {
+        if (*pc == Opcode::record_type_) {
+            idx = raw;
+        } else if (*pc == Opcode::record_type_once_promise_) {
+            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+            if (env->u.envsxp.recordTypeOnceBitmap & bit)
                 return;
-            }
+            idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
+        } else {
+            return;
         }
-
-        uint32_t idx = (*pc == Opcode::record_type_)
-                           ? raw
-                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
         RECORD_FB_AT_SLOT(idx, s);
     };
+
+    // auto recordForceBehavior = [&](SEXP s) {
+    //     Immediate raw = *(Immediate*)(pc + 1);
+
+    //     if (*pc != Opcode::record_type_) {
+    //         if (*pc == Opcode::record_type_once_) {
+    //             if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
+    //                                              RECORD_TYPE_ONCE_IIDX(raw)))
+    //                 return;
+    //         } else if (*pc == Opcode::record_type_once_promise_) {
+    //             uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+    //             if (env->u.envsxp.recordTypeOnceBitmap & bit)
+    //                 return;
+    //         } else {
+    //             return;
+    //         }
+    //     }
+
+    //     uint32_t idx = (*pc == Opcode::record_type_)
+    //                        ? raw
+    //                        : RECORD_TYPE_ONCE_SLOT_IDX(raw);
+    //     RECORD_FB_AT_SLOT(idx, s);
+    // };
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.

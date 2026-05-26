@@ -2305,10 +2305,10 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
 
     // Remember the FB decision on the allocated slot (if any) so the JIT can
     // reconstruct it later. Skipped for the implicit Always default.
-    if (allocatedSlot != kNoAllocatedSlot &&
-        fbKind != ForceBehaviorKind::Always)
-        ctx.typeFeedbackBuilder.setForceBehaviorKind((uint32_t)allocatedSlot,
-                                                     fbKind);
+    assert(fbKind == ForceBehaviorKind::Always ||
+           allocatedSlot != kNoAllocatedSlot);
+    ctx.typeFeedbackBuilder.setForceBehaviorKind((uint32_t)allocatedSlot,
+                                                 fbKind);
 }
 
 // Lookup
