@@ -2002,8 +2002,33 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
+// Determine StateBeforeLastForce from `s` and update typeFeedback at
+// `slotIdx`. Used by all recordForceBehavior* variants below.
+#define RECORD_FB_AT_SLOT(slotIdx, s)                                          \
+    do {                                                                       \
+        ObservedValues::StateBeforeLastForce state =                           \
+            ObservedValues::StateBeforeLastForce::unknown;                     \
+        if (TYPEOF(s) != PROMSXP) {                                            \
+            state = ObservedValues::StateBeforeLastForce::value;               \
+        } else if (PRVALUE(s) != R_UnboundValue) {                             \
+            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
+        } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {                \
+            state = ObservedValues::StateBeforeLastForce::value;               \
+        } else {                                                               \
+            state = ObservedValues::StateBeforeLastForce::promise;             \
+        }                                                                      \
+        /* FIXME: cf. #1260 */                                                 \
+        c->function()->typeFeedback()->record_type(                            \
+            slotIdx, [&](auto& feedback) {                                     \
+                if (feedback.stateBeforeLastForce < state)                     \
+                    feedback.stateBeforeLastForce = state;                     \
+            });                                                                \
+    } while (0)
+
+    // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
+    // on the immediately following opcode to decide whether to record and how
+    // to interpret the operand.
     auto recordForceBehavior = [&](SEXP s) {
-        // Bail if this load not recorded or we are in already optimized code
         Immediate raw = *(Immediate*)(pc + 1);
 
         if (*pc != Opcode::record_type_) {
@@ -2020,30 +2045,27 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
         }
 
-        ObservedValues::StateBeforeLastForce state =
-            ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else if (PRVALUE(s) != R_UnboundValue) {
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        } else {
-            // This is a lazy loading stub, it replaces the promise with the
-            // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
-                state = ObservedValues::StateBeforeLastForce::value;
-            else
-                state = ObservedValues::StateBeforeLastForce::promise;
-        }
-
         uint32_t idx = (*pc == Opcode::record_type_)
                            ? raw
                            : RECORD_TYPE_ONCE_SLOT_IDX(raw);
-        // FIXME: cf. #1260
-        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
-            if (feedback.stateBeforeLastForce < state) {
-                feedback.stateBeforeLastForce = state;
-            }
-        });
+        RECORD_FB_AT_SLOT(idx, s);
+    };
+
+    // For ldvar_cached_ (RecordAlways): the next instruction is always
+    // record_type_, so unconditionally record.
+    auto recordForceBehaviorAlways = [&](SEXP s) {
+        Immediate slotIdx = *(Immediate*)(pc + 1);
+        RECORD_FB_AT_SLOT(slotIdx, s);
+    };
+
+    // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
+    // per-invocation env bitmap, then record.
+    auto recordForceBehaviorEnv = [&](SEXP s) {
+        Immediate raw = *(Immediate*)(pc + 1);
+        uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+        if (env->u.envsxp.recordTypeOnceBitmap & bit)
+            return;
+        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
     // main loop
@@ -2229,35 +2251,40 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_cached_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate cacheIndex = readImmediate();
-            advanceImmediate();
-            assert(!LazyEnvironment::check(env));
-            SEXP res = cachedGetVar(env, id, cacheIndex, bindingCache);
-            R_Visible = TRUE;
+// Shared body for ldvar_cached_* variants. `record_fb_action` is the FB
+// recording statement (or nothing for the noRecordFB variant).
+#define LDVAR_CACHED_BODY(record_fb_action)                                    \
+    Immediate id = readImmediate();                                            \
+    advanceImmediate();                                                        \
+    Immediate cacheIndex = readImmediate();                                    \
+    advanceImmediate();                                                        \
+    assert(!LazyEnvironment::check(env));                                      \
+    SEXP res = cachedGetVar(env, id, cacheIndex, bindingCache);                \
+    R_Visible = TRUE;                                                          \
+    if (res == R_UnboundValue) {                                               \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));               \
+    } else if (res == R_MissingArg) {                                          \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("argument \"%s\" is missing, with no default",                \
+                 CHAR(PRINTNAME(sym)));                                        \
+    }                                                                          \
+    record_fb_action;                                                          \
+    if (TYPEOF(res) == PROMSXP)                                                \
+        res = evaluatePromise(res);                                            \
+    if (res != R_NilValue)                                                     \
+        ENSURE_NAMED(res);                                                     \
+    ostack_push(res);                                                          \
+    NEXT();
 
-            if (res == R_UnboundValue) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
-            } else if (res == R_MissingArg) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("argument \"%s\" is missing, with no default",
-                         CHAR(PRINTNAME(sym)));
-            }
+        INSTRUCTION(ldvar_cached_){
+            LDVAR_CACHED_BODY(recordForceBehaviorAlways(res))}
 
-            // if promise, evaluate & return
-            recordForceBehavior(res);
-            if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+        INSTRUCTION(ldvar_cached_noRecordFB_){
+            LDVAR_CACHED_BODY(/* skip force-behavior recording */)}
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
-
-            ostack_push(res);
-            NEXT();
-        }
+        INSTRUCTION(ldvar_cached_envRecordFB_){
+            LDVAR_CACHED_BODY(recordForceBehaviorEnv(res))}
 
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(readImmediate());

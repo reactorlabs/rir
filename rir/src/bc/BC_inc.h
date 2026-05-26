@@ -370,7 +370,10 @@ class BC {
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
+    inline static BC ldvarCachedOp(Opcode op, SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
@@ -577,6 +580,8 @@ class BC {
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
         case Opcode::ldvar_cached_:
+        case Opcode::ldvar_cached_noRecordFB_:
+        case Opcode::ldvar_cached_envRecordFB_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             memcpy(&immediate.poolAndCache, pc,

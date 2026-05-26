@@ -3,6 +3,7 @@
 
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "runtime/TypeFeedback.h"
 
 #include <cstdint>
 #include <unordered_map>
@@ -46,9 +47,16 @@ class DefUseAnalysis {
 
     enum class UseKind { NoRecord, RecordOnce, RecordAlways };
 
+    // ForceBehaviorKind is shared with the persistent TypeFeedback layer and
+    // is defined in runtime/TypeFeedback.h. classifyUse never returns EnvBit
+    // directly — emitRecordTypeForVar overrides the kind when the env-bitmap
+    // promise path applies.
+    using ForceBehaviorKind = rir::ForceBehaviorKind;
+
     struct UseClassification {
         UseKind kind;
         int defSlot; // valid when kind == NoRecord; kNoSlot otherwise
+        ForceBehaviorKind forceBehavior;
     };
 
     // A single unified stack of open control-flow scopes (branches AND loops),
@@ -519,7 +527,7 @@ class DefUseAnalysis {
         // invisible to the main code's stvar sequence). Exclude from all
         // optimizations.
         if (isArgAssigned(name))
-            return {UseKind::RecordAlways, kNoSlot};
+            return {UseKind::RecordAlways, kNoSlot, ForceBehaviorKind::Always};
 
         // Only locals/params and stable outer captures are eligible for
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
@@ -527,6 +535,11 @@ class DefUseAnalysis {
         const Def* d = findReachingDef(name);
         const bool optimizable = isFormal(name) || isOuterControlled(name) ||
                                  (isLocalOrParam(name) && d != nullptr);
+
+        // A reaching def from a local stvar means the binding currently holds
+        // the result of an expression evaluation — always a value, never a
+        // promise. Used to pick FBValue vs Infer.
+        const bool hasLocalStvarReach = d != nullptr && isLocalOrParam(name);
 
         if (optimizable || isForLoopVar(name) ||
             (isLocalOrParam(name) && findDominatingDef(name))) {
@@ -539,14 +552,18 @@ class DefUseAnalysis {
             if (udIt != useDefs_.end()) {
                 for (const Def& ud : udIt->second) {
                     if (dominates(ud) && postDominates(ud))
-                        return {UseKind::NoRecord, ud.feedbackSlot};
+                        return {UseKind::NoRecord, ud.feedbackSlot,
+                                hasLocalStvarReach || isForLoopVar(name)
+                                    ? ForceBehaviorKind::FBValue
+                                    : ForceBehaviorKind::Infer};
                 }
             }
         }
 
         if (d && isLocalOrParam(name) && postDominates(*d) &&
             d->feedbackSlot != kNoSlot)
-            return {UseKind::NoRecord, d->feedbackSlot};
+            return {UseKind::NoRecord, d->feedbackSlot,
+                    ForceBehaviorKind::FBValue};
 
         // Unique dominating def from an enclosing loop (doesn't post-dominate):
         // the value changes per enclosing-loop iteration.  RecordOnce is sound;
@@ -561,7 +578,7 @@ class DefUseAnalysis {
         //     must NOT land in the clear range.
         if (d != nullptr && isLocalOrParam(name) && loopDepth_ > 0 &&
             !assignedInInnermostLoop(name) && assignedInEnclosingLoop(name))
-            return {UseKind::RecordOnce, kNoSlot};
+            return {UseKind::RecordOnce, kNoSlot, ForceBehaviorKind::FBValue};
 
         // Stable RecordOnce: var has a dominating def / is formal / outer-
         // controlled, AND is not re-assigned in any enclosing loop.  The
@@ -569,7 +586,9 @@ class DefUseAnalysis {
         // compileGetvar tracks dynamic vs stable bits and the inner loop
         // clears only [first dynamic bit, last+1).
         if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
-            return {UseKind::RecordOnce, kNoSlot};
+            return {UseKind::RecordOnce, kNoSlot,
+                    hasLocalStvarReach ? ForceBehaviorKind::FBValue
+                                       : ForceBehaviorKind::Infer};
 
         // Range-based for-loop iter var with no prior useDefs hit: type is
         // stable across iterations of THIS loop (seq is `:`, `seq_len`, or
@@ -579,9 +598,9 @@ class DefUseAnalysis {
         // different outer iteration can re-record if the seq's element type
         // changed (queried via rangeBasedForLoopVarBit at compileGetvar).
         if (isRangeBasedForLoopVar(name) && loopDepth_ > 0)
-            return {UseKind::RecordOnce, kNoSlot};
+            return {UseKind::RecordOnce, kNoSlot, ForceBehaviorKind::FBValue};
 
-        return {UseKind::RecordAlways, kNoSlot};
+        return {UseKind::RecordAlways, kNoSlot, ForceBehaviorKind::Always};
     }
 
     // ---- AST pre-scan ----

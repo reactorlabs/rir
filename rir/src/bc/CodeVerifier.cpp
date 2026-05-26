@@ -236,6 +236,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp) {
                     Rf_error("RIR Verifier: load/store empty binding name");
             }
             if (*cptr == Opcode::ldvar_cached_ ||
+                *cptr == Opcode::ldvar_cached_noRecordFB_ ||
+                *cptr == Opcode::ldvar_cached_envRecordFB_ ||
                 *cptr == Opcode::stvar_cached_ ||
                 *cptr == Opcode::ldvar_for_update_cache_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);

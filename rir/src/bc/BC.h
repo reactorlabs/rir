@@ -122,14 +122,26 @@ BC BC::ldvarNoForce(SEXP sym) {
     return BC(Opcode::ldvar_noforce_, i);
 }
 
-BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
+BC BC::ldvarCachedOp(Opcode op, SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     assert(cacheSlot != (uint32_t)-1);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
-    return BC(Opcode::ldvar_cached_, i);
+    return BC(op, i);
+}
+
+BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_, sym, cacheSlot);
+}
+
+BC BC::ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_noRecordFB_, sym, cacheSlot);
+}
+
+BC BC::ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_envRecordFB_, sym, cacheSlot);
 }
 
 BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {

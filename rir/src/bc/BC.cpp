@@ -38,6 +38,8 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case Opcode::ldvar_cached_:
+    case Opcode::ldvar_cached_noRecordFB_:
+    case Opcode::ldvar_cached_envRecordFB_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
         cs.insert(immediate.poolAndCache);
@@ -97,7 +99,8 @@ void BC::write(CodeStream& cs) const {
 }
 
 SEXP BC::immediateConst() const {
-    if (is(Opcode::ldvar_cached_) || is(Opcode::stvar_cached_))
+    if (is(Opcode::ldvar_cached_) || is(Opcode::ldvar_cached_noRecordFB_) ||
+        is(Opcode::ldvar_cached_envRecordFB_) || is(Opcode::stvar_cached_))
         return Pool::get(immediate.poolAndCache.poolIndex);
     else
         return Pool::get(immediate.pool);
@@ -132,6 +135,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.pool = Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::ldvar_cached_:
+        case Opcode::ldvar_cached_noRecordFB_:
+        case Opcode::ldvar_cached_envRecordFB_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
@@ -231,6 +236,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             WriteItem(Pool::get(i.pool), refTable, out);
             break;
         case Opcode::ldvar_cached_:
+        case Opcode::ldvar_cached_noRecordFB_:
+        case Opcode::ldvar_cached_envRecordFB_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
@@ -378,6 +385,8 @@ void BC::print(std::ostream& out) const {
         out << CHAR(PRINTNAME(immediateConst()));
         break;
     case Opcode::ldvar_cached_:
+    case Opcode::ldvar_cached_noRecordFB_:
+    case Opcode::ldvar_cached_envRecordFB_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
         out << CHAR(PRINTNAME(immediateConst())) << "{"

@@ -132,6 +132,10 @@ class CodeStream {
         memcpy(&(*code)[immPos], &val, sizeof(uint32_t));
     }
 
+    void patchOpcode(unsigned bcPos, Opcode op) {
+        *reinterpret_cast<Opcode*>(&(*code)[bcPos]) = op;
+    }
+
     void remove(unsigned pc) {
 
 #define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))

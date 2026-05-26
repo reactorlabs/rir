@@ -296,6 +296,11 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                             << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";
                     if (typeFeedback->hasTypeDep(slot))
                         out << " (dep: #" << typeFeedback->typeDep(slot) << ")";
+                    if (typeFeedback->hasForceBehaviorKind(slot))
+                        out << " (fb: "
+                            << forceBehaviorKindName(
+                                   typeFeedback->forceBehaviorKind(slot))
+                            << ")";
                     out << "\n";
                 }
             } else {

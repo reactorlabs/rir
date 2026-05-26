@@ -260,11 +260,13 @@ class CompilerContext {
 
     // Allocate a slot for a NoRecord use and register its dependency on
     // `sourceSlot` so the type info can be propagated before JIT compilation.
-    void registerNoRecordDep(int sourceSlot) {
+    // Returns the new slot index.
+    uint32_t registerNoRecordDep(int sourceSlot) {
         assert(sourceSlot != DefUseAnalysis::kNoSlot &&
                "NoRecord must always reference a valid feedback slot");
         uint32_t slot = typeFeedbackBuilder.addType();
         typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
+        return slot;
     }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
@@ -292,8 +294,10 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext);
+static constexpr unsigned kNoLdvarCached = (unsigned)-1;
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
-                                 SEXP name);
+                                 SEXP name,
+                                 unsigned ldvarCachedPos = kNoLdvarCached);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has
 // already been evaluated: wrap the value at TOS into a promise. This is used in
@@ -2184,8 +2188,10 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
 // Classify the use of `name` and emit the appropriate recording instruction.
 // Falls back to plain recordType() when called from inside a promise context.
+// Sentinel for `ldvarCachedPos` (declared above): no ldvar_cached_ was
+// emitted, don't patch.
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
-                                 SEXP name) {
+                                 SEXP name, unsigned ldvarCachedPos) {
     // if (ctx.isInPromise()) {
     //     cs << ctx.recordType();
     //     return;
@@ -2199,9 +2205,15 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     }
 
     using UseKind = DefUseAnalysis::UseKind;
+    using ForceBehaviorKind = DefUseAnalysis::ForceBehaviorKind;
     auto uc = ctx.classifyUse(name);
+    ForceBehaviorKind fbKind = uc.forceBehavior;
+    // Slot allocated by this call (sentinel = no slot allocated). Filled in by
+    // each branch below; used at the end to register the FB kind in one place.
+    static constexpr int kNoAllocatedSlot = -1;
+    int allocatedSlot = kNoAllocatedSlot;
     if (uc.kind == UseKind::NoRecord) {
-        ctx.registerNoRecordDep(uc.defSlot);
+        allocatedSlot = (int)ctx.registerNoRecordDep(uc.defSlot);
     } else if (ctx.code.top()->isPromiseContext() &&
                ctx.mainBodyCtx_->defUseAnalysis.loopDepth_ > 0 &&
                ctx.cfgBuilder.isSupportedParameter(name) &&
@@ -2215,6 +2227,8 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
         ctx.defUseAnalysis().trackUseDef(name, slot);
         uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
         cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+        fbKind = ForceBehaviorKind::EnvBit;
+        allocatedSlot = slot;
     } else {
         switch (uc.kind) {
         case UseKind::NoRecord:
@@ -2222,6 +2236,7 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
             break; // unreachable: handled above
         case UseKind::RecordOnce: {
             int slot = ctx.typeFeedbackBuilder.addType();
+            allocatedSlot = slot;
             ctx.defUseAnalysis().trackUseDef(name, slot);
             auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
             if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
@@ -2268,6 +2283,32 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
             break;
         }
     }
+
+    // Patch the ldvar_cached_ opcode (if one was emitted) based on the
+    // force-behavior strategy. FBValue and Infer both skip runtime FB
+    // recording — distinguishing them is needed for later JIT-time decisions,
+    // not at the interpreter level.
+    if (ldvarCachedPos != kNoLdvarCached) {
+        switch (fbKind) {
+        case ForceBehaviorKind::FBValue:
+        case ForceBehaviorKind::Infer:
+            cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_noRecordFB_);
+            break;
+        case ForceBehaviorKind::EnvBit:
+            cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_envRecordFB_);
+            break;
+        case ForceBehaviorKind::Always:
+            // Default ldvar_cached_ already emitted; no patch.
+            break;
+        }
+    }
+
+    // Remember the FB decision on the allocated slot (if any) so the JIT can
+    // reconstruct it later. Skipped for the implicit Always default.
+    if (allocatedSlot != kNoAllocatedSlot &&
+        fbKind != ForceBehaviorKind::Always)
+        ctx.typeFeedbackBuilder.setForceBehaviorKind((uint32_t)allocatedSlot,
+                                                     fbKind);
 }
 
 // Lookup
@@ -2278,15 +2319,17 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
     } else if (name == R_MissingArg) {
         cs << BC::push(R_MissingArg);
     } else {
+        unsigned ldvarCachedPos = kNoLdvarCached;
         if (ctx.code.top()->isCached(name)) {
             auto const cache_slot = ctx.code.top()->cacheSlotFor(name);
+            ldvarCachedPos = cs.currentPos();
             cs << BC::ldvarCached(name, cache_slot);
         } else {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
             if (Compiler::recordLessEnabled)
-                emitRecordTypeForVar(ctx, cs, name);
+                emitRecordTypeForVar(ctx, cs, name, ldvarCachedPos);
             else
                 cs << ctx.recordType();
         }

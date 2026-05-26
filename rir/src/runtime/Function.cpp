@@ -87,6 +87,9 @@ void Function::disassemble(std::ostream& out) {
         if (tf->hasTypeDep(i))
             out << "NoRecord Type#" << i << " (dep: #" << tf->typeDep(i)
                 << ")\n";
+        if (tf->hasForceBehaviorKind(i))
+            out << "FB Type#" << i << " ("
+                << forceBehaviorKindName(tf->forceBehaviorKind(i)) << ")\n";
     }
 }
 
