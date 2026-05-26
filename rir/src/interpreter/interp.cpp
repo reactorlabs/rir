@@ -2066,7 +2066,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // no-match return path doesn't pay for it.
     auto recordForceBehavior = [&](SEXP s) {
         uint32_t idx;
-        if (__builtin_expect(*pc == Opcode::record_type_, 1)) {
+        if (*pc == Opcode::record_type_) {
             idx = *(Immediate*)(pc + 1);
         } else if (*pc == Opcode::record_type_once_promise_) {
             Immediate raw = *(Immediate*)(pc + 1);
