@@ -2054,6 +2054,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.
     auto recordForceBehaviorAlways = [&](SEXP s) {
+        assert(*pc == Opcode::record_type_);
+
         Immediate slotIdx = *(Immediate*)(pc + 1);
         RECORD_FB_AT_SLOT(slotIdx, s);
     };
@@ -2061,6 +2063,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
     // per-invocation env bitmap, then record.
     auto recordForceBehaviorEnv = [&](SEXP s) {
+        assert(*pc == Opcode::record_type_once_promise_);
         Immediate raw = *(Immediate*)(pc + 1);
         uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
         if (env->u.envsxp.recordTypeOnceBitmap & bit)
