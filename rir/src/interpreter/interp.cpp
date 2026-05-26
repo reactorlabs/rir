@@ -2065,15 +2065,22 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // pushes the rare arms into a cold region. `raw` is read lazily so the
     // no-match return path doesn't pay for it.
     auto recordForceBehavior = [&](SEXP s) {
+        uint32_t idx;
         if (__builtin_expect(*pc == Opcode::record_type_, 1)) {
-            RECORD_FB_AT_SLOT(*(Immediate*)(pc + 1), s);
+            idx = *(Immediate*)(pc + 1);
         } else if (*pc == Opcode::record_type_once_promise_) {
             Immediate raw = *(Immediate*)(pc + 1);
             uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
             if (env->u.envsxp.recordTypeOnceBitmap & bit)
                 return;
-            RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+            idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
+        } else {
+            return;
         }
+        // Single macro expansion: expanding the large RECORD_FB_AT_SLOT switch
+        // in each arm bloats this lambda (inlined at many ldvar sites) and
+        // pressures the interpreter loop's instruction cache.
+        RECORD_FB_AT_SLOT(idx, s);
     };
 
     // auto recordForceBehavior = [&](SEXP s) {
