@@ -79,6 +79,14 @@ typedef uint32_t Immediate;
             return;                                                            \
     } while (0)
 
+// Case labels for all ldvar_cached_ variants. Use in switch statements so
+// that adding a new variant only requires updating this one macro.
+#define LDVAR_CACHED_OPCODES_CASES                                             \
+    case Opcode::ldvar_cached_:                                                \
+    case Opcode::ldvar_cached_noRecordFB_:                                     \
+    case Opcode::ldvar_cached_envRecordFB_:                                    \
+    case Opcode::ldvar_cached_fbRecordOnce_:
+
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
 
@@ -246,6 +254,15 @@ class BC {
     }
 
     bool is(Opcode aBc) const { return bc == aBc; }
+
+    bool isLdvarCachedKind() const {
+        switch (bc) {
+            LDVAR_CACHED_OPCODES_CASES
+            return true;
+        default:
+            return false;
+        }
+    }
 
     inline size_t size() const {
         // Those are the variable length BC we have
@@ -599,10 +616,7 @@ class BC {
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
-        case Opcode::ldvar_cached_:
-        case Opcode::ldvar_cached_noRecordFB_:
-        case Opcode::ldvar_cached_envRecordFB_:
-        case Opcode::ldvar_cached_fbRecordOnce_:
+            LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             memcpy(&immediate.poolAndCache, pc,

@@ -247,10 +247,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ldvar_:
-    case Opcode::ldvar_cached_:
-    case Opcode::ldvar_cached_noRecordFB_:
-    case Opcode::ldvar_cached_envRecordFB_:
-    case Opcode::ldvar_cached_fbRecordOnce_:
+        LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_for_update_cache_: {
         if (bc.immediateConst() == symbol::c)
