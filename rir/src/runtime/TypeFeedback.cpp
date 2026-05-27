@@ -281,7 +281,6 @@ bool TypeFeedback::isValid(const FeedbackIndex& index) const {
     case FeedbackKind::Test:
         return index.idx < tests_size_;
     case FeedbackKind::Type:
-        std::cerr << "isValid: " << index.idx << " " << types_size_ << "\n";
         return index.idx < types_size_;
     default:
         return false;
