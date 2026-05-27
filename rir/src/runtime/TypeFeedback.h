@@ -38,7 +38,19 @@ struct Function;
 //   Always  — record FB unconditionally at runtime (RecordAlways path).
 //   EnvBit  — record FB gated by the per-invocation env bitmap
 //             (record_type_once_promise_).
-enum class ForceBehaviorKind : uint8_t { FBValue, Infer, Always, EnvBit };
+//   RecordOnce — record FB once per invocation, gated by the per-code
+//             `fired` bitmap (RecordOnce of a formal / outer-controlled var
+//             with no local stvar reach). The first recording is the highest
+//             lattice point the variable reaches (the value may still be an
+//             unforced promise on the first iteration); later iterations are
+//             equal or more precise, so one recording suffices.
+enum class ForceBehaviorKind : uint8_t {
+    FBValue,
+    Infer,
+    Always,
+    EnvBit,
+    RecordOnce
+};
 
 inline const char* forceBehaviorKindName(ForceBehaviorKind k) {
     switch (k) {
@@ -50,6 +62,8 @@ inline const char* forceBehaviorKindName(ForceBehaviorKind k) {
         return "Always";
     case ForceBehaviorKind::EnvBit:
         return "EnvBit";
+    case ForceBehaviorKind::RecordOnce:
+        return "RecordOnce";
     }
     return "?";
 }

@@ -2059,52 +2059,33 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     } while (0)
 
     // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
-    // on the immediately following opcode to decide whether to record and how
-    // to interpret the operand. The record_type_ arm is the hot path —
-    // annotated with __builtin_expect so the compiler lays it out inline and
-    // pushes the rare arms into a cold region. `raw` is read lazily so the
-    // no-match return path doesn't pay for it.
+    // on the immediately following opcode. Handles all three record kinds:
+    //   record_type_              — record FB always
+    //   record_type_once_         — record FB once, gated by the per-code
+    //                               `fired` bitmap
+    //   record_type_once_promise_ — record FB once per invocation, gated by
+    //                               the per-env bitmap
+    // Single RECORD_FB_AT_SLOT expansion: computing `idx` (and bailing) first
+    // keeps the large macro from being duplicated, which would bloat this
+    // lambda (inlined at many ldvar sites) and pressure the interpreter loop's
+    // instruction cache.
     auto recordForceBehavior = [&](SEXP s) {
-        uint32_t idx;
-        if (*pc == Opcode::record_type_) {
-            idx = *(Immediate*)(pc + 1);
-        } else if (*pc == Opcode::record_type_once_promise_) {
-            Immediate raw = *(Immediate*)(pc + 1);
-            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-            if (env->u.envsxp.recordTypeOnceBitmap & bit)
+        Immediate raw = *(Immediate*)(pc + 1);
+        if (*pc != Opcode::record_type_) {
+            if (*pc == Opcode::record_type_once_) {
+                RECORD_TYPE_ONCE_GATE(fired, raw);
+            } else if (*pc == Opcode::record_type_once_promise_) {
+                RECORD_TYPE_ONCE_PROMISE_GATE(
+                    env->u.envsxp.recordTypeOnceBitmap, raw);
+            } else {
                 return;
-            idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
-        } else {
-            return;
+            }
         }
-        // Single macro expansion: expanding the large RECORD_FB_AT_SLOT switch
-        // in each arm bloats this lambda (inlined at many ldvar sites) and
-        // pressures the interpreter loop's instruction cache.
+        uint32_t idx = (*pc == Opcode::record_type_)
+                           ? raw
+                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
         RECORD_FB_AT_SLOT(idx, s);
     };
-
-    // auto recordForceBehavior = [&](SEXP s) {
-    //     Immediate raw = *(Immediate*)(pc + 1);
-
-    //     if (*pc != Opcode::record_type_) {
-    //         if (*pc == Opcode::record_type_once_) {
-    //             if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,
-    //                                              RECORD_TYPE_ONCE_IIDX(raw)))
-    //                 return;
-    //         } else if (*pc == Opcode::record_type_once_promise_) {
-    //             uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-    //             if (env->u.envsxp.recordTypeOnceBitmap & bit)
-    //                 return;
-    //         } else {
-    //             return;
-    //         }
-    //     }
-
-    //     uint32_t idx = (*pc == Opcode::record_type_)
-    //                        ? raw
-    //                        : RECORD_TYPE_ONCE_SLOT_IDX(raw);
-    //     RECORD_FB_AT_SLOT(idx, s);
-    // };
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.
@@ -2121,9 +2102,20 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // assert(*pc == Opcode::record_type_once_promise_);
 
         Immediate raw = *(Immediate*)(pc + 1);
-        uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-        if (env->u.envsxp.recordTypeOnceBitmap & bit)
-            return;
+        RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw);
+        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+    };
+
+    // For ldvar_cached_fbRecordOnce_ (record_type_once_): gate on the per-code
+    // `fired` bitmap so FB is recorded once per invocation. The first recording
+    // captures the highest lattice point the variable reaches (a formal/outer-
+    // controlled var may still be an unforced promise on the first iteration);
+    // later iterations are equal or more precise.
+    auto recordForceBehaviorRecordOnce = [&](SEXP s) {
+        // assert(*pc == Opcode::record_type_once_);
+
+        Immediate raw = *(Immediate*)(pc + 1);
+        RECORD_TYPE_ONCE_GATE(fired, raw);
         RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
@@ -2344,6 +2336,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         INSTRUCTION(ldvar_cached_envRecordFB_){
             LDVAR_CACHED_BODY(recordForceBehaviorEnv(res))}
+
+        INSTRUCTION(ldvar_cached_fbRecordOnce_){
+            LDVAR_CACHED_BODY(recordForceBehaviorRecordOnce(res))}
 
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(readImmediate());

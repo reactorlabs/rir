@@ -144,6 +144,10 @@ BC BC::ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot) {
     return ldvarCachedOp(Opcode::ldvar_cached_envRecordFB_, sym, cacheSlot);
 }
 
+BC BC::ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_fbRecordOnce_, sym, cacheSlot);
+}
+
 BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

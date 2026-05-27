@@ -2212,6 +2212,10 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     // each branch below; used at the end to register the FB kind in one place.
     static constexpr int kNoAllocatedSlot = -1;
     int allocatedSlot = kNoAllocatedSlot;
+    // Whether a record_type_once_ (not the record_type_ fallback) was emitted.
+    // Only the once-variant carries the per-code bitmap the fbRecordOnce ldvar
+    // gates on; the fallback records every time, so FB must record every time.
+    bool emittedRecordTypeOnce = false;
     if (uc.kind == UseKind::NoRecord) {
         allocatedSlot = (int)ctx.registerNoRecordDep(uc.defSlot);
     } else if (ctx.code.top()->isPromiseContext() &&
@@ -2249,6 +2253,7 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                     unsigned bcPos = cs.currentPos();
                     cs << BC::recordTypeOnce((uint32_t)slot, 0);
                     ctx.defUseAnalysis().registerRangeVarUse(name, bcPos, slot);
+                    emittedRecordTypeOnce = true;
                 } else {
                     cs << BC::recordType(slot);
                 }
@@ -2266,6 +2271,7 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                     cs << BC::recordTypeOnce((uint32_t)slot, 0);
                     ctx.defUseAnalysis().registerClearableUse(name, bcPos,
                                                               slot);
+                    emittedRecordTypeOnce = true;
                 } else {
                     cs << BC::recordType(slot);
                 }
@@ -2273,6 +2279,7 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                        bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
                 // Stable: assign bit immediately.
                 cs << BC::recordTypeOnce((uint32_t)slot, bitmapSize++);
+                emittedRecordTypeOnce = true;
             } else {
                 cs << BC::recordType(slot);
             }
@@ -2296,6 +2303,16 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
             break;
         case ForceBehaviorKind::EnvBit:
             cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_envRecordFB_);
+            break;
+        case ForceBehaviorKind::RecordOnce:
+            // Gate FB recording on the per-code bitmap — but only when a
+            // record_type_once_ actually carries that bitmap. If the
+            // record_type_ fallback was emitted (no bit available), the type
+            // is recorded every time, so leave the default ldvar_cached_ to
+            // record FB every time too.
+            if (emittedRecordTypeOnce)
+                cs.patchOpcode(ldvarCachedPos,
+                               Opcode::ldvar_cached_fbRecordOnce_);
             break;
         case ForceBehaviorKind::Always:
             // Default ldvar_cached_ already emitted; no patch.

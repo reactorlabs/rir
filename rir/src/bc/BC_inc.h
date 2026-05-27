@@ -39,6 +39,14 @@ typedef uint32_t Immediate;
     ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
+// Return from the enclosing function/lambda if the fired-bitmap bit is already
+// set (gate only — no recording).
+#define RECORD_TYPE_ONCE_GATE(bitmap, raw)                                     \
+    do {                                                                       \
+        if (RECORD_TYPE_ONCE_BITMAP_TEST((bitmap),                             \
+                                         RECORD_TYPE_ONCE_IIDX(raw)))          \
+            return;                                                            \
+    } while (0)
 // Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
 #define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
 // Mask with 1s in word positions [0..hi] (clears bits from start of word to
@@ -59,6 +67,17 @@ typedef uint32_t Immediate;
 // function's call environment (envsxp_struct::recordTypeOnceBitmap), so the
 // max bit index is 64.
 #define RECORD_TYPE_ONCE_PROMISE_MAX_IIDX 64
+#define RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST(bitmap64, iidx)                   \
+    ((bitmap64) & ((uint64_t)1 << (iidx)))
+// Return from the enclosing function/lambda if the env bitmap bit is already
+// set (gate only — no recording). Use when recording is handled separately
+// (e.g. falls through to a shared RECORD_FB_AT_SLOT below).
+#define RECORD_TYPE_ONCE_PROMISE_GATE(bitmap64, raw)                           \
+    do {                                                                       \
+        if (RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST((bitmap64),                   \
+                                                 RECORD_TYPE_ONCE_IIDX(raw)))  \
+            return;                                                            \
+    } while (0)
 
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
@@ -374,6 +393,7 @@ class BC {
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
@@ -582,6 +602,7 @@ class BC {
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_cached_noRecordFB_:
         case Opcode::ldvar_cached_envRecordFB_:
+        case Opcode::ldvar_cached_fbRecordOnce_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             memcpy(&immediate.poolAndCache, pc,

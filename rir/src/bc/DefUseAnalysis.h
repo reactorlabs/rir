@@ -588,7 +588,7 @@ class DefUseAnalysis {
         if (optimizable && loopDepth_ > 0 && !assignedInEnclosingLoop(name))
             return {UseKind::RecordOnce, kNoSlot,
                     hasLocalStvarReach ? ForceBehaviorKind::FBValue
-                                       : ForceBehaviorKind::Infer};
+                                       : ForceBehaviorKind::RecordOnce};
 
         // Range-based for-loop iter var with no prior useDefs hit: type is
         // stable across iterations of THIS loop (seq is `:`, `seq_len`, or
