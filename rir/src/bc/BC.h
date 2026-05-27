@@ -35,6 +35,30 @@ BC BC::recordType(uint32_t idx) {
     return BC(Opcode::record_type_, i);
 }
 
+BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
+    ImmediateArguments i;
+    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, bitIdx);
+    return BC(Opcode::record_type_once_, i);
+}
+
+BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx) {
+    ImmediateArguments i;
+    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, bitIdx);
+    return BC(Opcode::record_type_once_promise_, i);
+}
+
+BC BC::clearRecordTypeOnceBit(uint32_t bitIdx) {
+    ImmediateArguments i;
+    i.i = bitIdx;
+    return BC(Opcode::clear_record_type_once_bit_, i);
+}
+
+BC BC::clearRecordTypeOnceBitsRange(uint32_t start, uint32_t count) {
+    ImmediateArguments i;
+    i.i = RECORD_TYPE_ONCE_RANGE_PACK(start, count);
+    return BC(Opcode::clear_record_type_once_bits_range_, i);
+}
+
 BC BC::recordTest(uint32_t idx) {
     ImmediateArguments i;
     i.i = idx;
@@ -98,14 +122,30 @@ BC BC::ldvarNoForce(SEXP sym) {
     return BC(Opcode::ldvar_noforce_, i);
 }
 
-BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
+BC BC::ldvarCachedOp(Opcode op, SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     assert(cacheSlot != (uint32_t)-1);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
-    return BC(Opcode::ldvar_cached_, i);
+    return BC(op, i);
+}
+
+BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_, sym, cacheSlot);
+}
+
+BC BC::ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_noRecordFB_, sym, cacheSlot);
+}
+
+BC BC::ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_envRecordFB_, sym, cacheSlot);
+}
+
+BC BC::ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot) {
+    return ldvarCachedOp(Opcode::ldvar_cached_fbRecordOnce_, sym, cacheSlot);
 }
 
 BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {

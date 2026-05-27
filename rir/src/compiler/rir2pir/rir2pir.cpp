@@ -247,7 +247,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::ldvar_:
-    case Opcode::ldvar_cached_:
+        LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_for_update_cache_: {
         if (bc.immediateConst() == symbol::c)
@@ -359,6 +359,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::nop_:
+    case Opcode::clear_record_type_once_bit_:
+    case Opcode::clear_record_type_once_bits_range_:
         break;
 
     case Opcode::pop_:
@@ -399,6 +401,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::record_type_once_promise_:
+    case Opcode::record_type_once_:
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
         auto& feedback = typeFeedback->types(idx);

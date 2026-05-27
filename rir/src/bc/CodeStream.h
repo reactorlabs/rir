@@ -127,6 +127,15 @@ class CodeStream {
 
     unsigned currentSourcesSize() const { return sources.size(); }
 
+    void patchImmediate(unsigned bcPos, uint32_t val) {
+        unsigned immPos = bcPos + sizeof(Opcode);
+        memcpy(&(*code)[immPos], &val, sizeof(uint32_t));
+    }
+
+    void patchOpcode(unsigned bcPos, Opcode op) {
+        *reinterpret_cast<Opcode*>(&(*code)[bcPos]) = op;
+    }
+
     void remove(unsigned pc) {
 
 #define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))

@@ -15,6 +15,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     Function* fun =
         new (payload) Function(functionSize, nullptr, {}, sig, as, nullptr);
     fun->numArgs_ = InInteger(inp);
+    fun->recordTypeOncePromiseCount = (uint16_t)InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     // What this loop does is that it sets the function owned (yet not
     // deserialized) SEXPs to something reasonable so it will not confuse the GC
@@ -50,6 +51,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
+    OutInteger(out, (int)recordTypeOncePromiseCount);
     HashAdd(container(), refTable);
     typeFeedback()->serialize(refTable, out);
     body()->serialize(refTable, out);
@@ -79,6 +81,16 @@ void Function::disassemble(std::ostream& out) {
     out << "invoked: " << invocationCount() << ", deopt: " << deoptCount();
     out << "\n";
     body()->disassemble(out);
+    auto tf = typeFeedback();
+    out << "\n";
+    for (uint32_t i = 0; i < tf->types_size(); ++i) {
+        if (tf->hasTypeDep(i))
+            out << "NoRecord Type#" << i << " (dep: #" << tf->typeDep(i)
+                << ")\n";
+        if (tf->hasForceBehaviorKind(i))
+            out << "FB Type#" << i << " ("
+                << forceBehaviorKindName(tf->forceBehaviorKind(i)) << ")\n";
+    }
 }
 
 static int GLOBAL_SPECIALIZATION_LEVEL =

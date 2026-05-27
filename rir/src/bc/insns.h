@@ -41,8 +41,20 @@ DEF_INSTR(ldvar_noforce_, 1, 0, 1)
 /**
  * ldvar_:: like ldvar.
  * Stores an additional immediate with a unique number for the cache bindings.
+ *
+ * Four variants distinguish the force-behavior recording strategy:
+ *   ldvar_cached_              — RecordAlways: unconditionally record FB
+ *   ldvar_cached_noRecordFB_   — FBValue/Infer: skip FB recording entirely
+ *   ldvar_cached_envRecordFB_  — record_type_once_promise_: gate FB recording
+ *                                on the env bitmap
+ *   ldvar_cached_fbRecordOnce_ — RecordOnce of a formal/outer-controlled var:
+ *                                record FB once, gated by the per-code `fired`
+ *                                bitmap of the following record_type_once_
  */
 DEF_INSTR(ldvar_cached_, 2, 0, 1)
+DEF_INSTR(ldvar_cached_noRecordFB_, 2, 0, 1)
+DEF_INSTR(ldvar_cached_envRecordFB_, 2, 0, 1)
+DEF_INSTR(ldvar_cached_fbRecordOnce_, 2, 0, 1)
 
 /**
  * ldvar_:: like ldvar.
@@ -445,7 +457,11 @@ DEF_INSTR(ret_, 0, 1, 0)
  */
 DEF_INSTR(record_call_, 1, 1, 1)
 DEF_INSTR(record_type_, 1, 1, 1)
+DEF_INSTR(record_type_once_, 1, 1, 1)
+DEF_INSTR(record_type_once_promise_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
+DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
+DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)
 
 DEF_INSTR(int3_, 0, 0, 0)
 

@@ -74,6 +74,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
 
         // Change the input closure inplace
         Compiler::compileClosure(what);
+        // rirDisassemble(what, R_TrueValue);
 
         return what;
     } else {
@@ -81,6 +82,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
             what = VECTOR_ELT(CDR(what), 0);
         }
         SEXP result = Compiler::compileExpression(what);
+        // rirDisassemble(result, R_TrueValue);
         return result;
     }
 }

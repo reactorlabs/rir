@@ -13,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 
@@ -22,6 +23,13 @@ class Compiler {
     SEXP formals;
     SEXP closureEnv;
 
+    // Variables from any enclosing function in our "realm" (controlled env
+    // chain). Superset of outerImmutable. Enables RecordOnce.
+    std::unordered_set<SEXP> outerControlled;
+    // Strict subset: values that truly won't change during this function's
+    // lifetime. Reserved for future cross-invocation optimizations.
+    std::unordered_set<SEXP> outerImmutable;
+
     Preserve preserve;
 
     explicit Compiler(SEXP exp)
@@ -29,8 +37,12 @@ class Compiler {
         preserve(exp);
     }
 
-    Compiler(SEXP exp, SEXP formals, SEXP env)
-        : exp(exp), formals(formals), closureEnv(env) {
+    Compiler(SEXP exp, SEXP formals, SEXP env,
+             std::unordered_set<SEXP> outerImmutable = {},
+             std::unordered_set<SEXP> outerControlled = {})
+        : exp(exp), formals(formals), closureEnv(env),
+          outerControlled(std::move(outerControlled)),
+          outerImmutable(std::move(outerImmutable)) {
         preserve(exp);
         preserve(formals);
         preserve(env);
@@ -42,17 +54,25 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
+    static bool recordLessEnabled;
+
+    static bool isRecordLessEnabled() { return profile && recordLessEnabled; }
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);
         return c.finalize();
     }
 
-    // Compile a function which is not yet closed
-    static SEXP compileFunction(SEXP ast, SEXP formals) {
+    // Compile a function which is not yet closed.
+    // `outerImmutable` / `outerControlled` are capture sets from the enclosing
+    // compiler; pass empty (default) for top-level compilations.
+    static SEXP compileFunction(SEXP ast, SEXP formals,
+                                std::unordered_set<SEXP> outerImmutable = {},
+                                std::unordered_set<SEXP> outerControlled = {}) {
         Protect p;
 
-        Compiler c(ast, formals, nullptr);
+        Compiler c(ast, formals, nullptr, std::move(outerImmutable),
+                   std::move(outerControlled));
         auto res = p(c.finalize());
 
         // Allocate a new vtable.

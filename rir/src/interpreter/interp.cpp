@@ -1885,9 +1885,11 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
 }
 
 const bool pir::Parameter::ENABLE_OSR = false;
+
 // const bool pir::Parameter::ENABLE_OSR =
 //     (!getenv("PIR_OSR") || *getenv("PIR_OSR") != '0') &&
 //     (!getenv("PIR_ENABLE") || (std::string(getenv("PIR_ENABLE")) != "off"));
+
 static size_t osrLimit =
     getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
@@ -1981,40 +1983,141 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = c->code();
     }
 
-    // This is used in loads for recording if the loaded value was a promise
-    // and if it was forced. Looks at the next instruction, if it's a force,
-    // marks how this load behaved.
-    auto recordForceBehavior = [&](SEXP s) {
-        // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_)
-            return;
-
-        ObservedValues::StateBeforeLastForce state =
-            ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else if (PRVALUE(s) != R_UnboundValue) {
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        } else {
-            // This is a lazy loading stub, it replaces the promise with the
-            // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
-                state = ObservedValues::StateBeforeLastForce::value;
-            else
-                state = ObservedValues::StateBeforeLastForce::promise;
-        }
-
-        auto idx = *(Immediate*)(pc + 1);
-        // FIXME: cf. #1260
-        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
-            if (feedback.stateBeforeLastForce < state) {
-                feedback.stateBeforeLastForce = state;
-            }
-        });
-    };
-
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
+    uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
+    if (c->recordTypeOnceCount > 0) {
+        memset(fired, 0,
+               RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
+                   sizeof(uint64_t));
+    }
+
+    // Per-function-invocation bitmap for record_type_once_promise_. Lives in
+    // the call env so it persists across promise forces. Zero only on a real
+    // call entry (not on promise forces / deopt resumes), using the main
+    // body's count as the authority.
+    if (callCtxt && function->recordTypeOncePromiseCount > 0)
+        env->u.envsxp.recordTypeOnceBitmap = 0;
+
+        // This is used in loads for recording if the loaded value was a promise
+        // and if it was forced. Looks at the next instruction, if it's a force,
+        // marks how this load behaved.
+// Determine StateBeforeLastForce from `s` and update typeFeedback at
+// `slotIdx`. Used by all recordForceBehavior* variants below.
+//
+// stateBeforeLastForce is a monotonic lattice — unknown < value <
+// evaluatedPromise < promise — and only moves upward. We switch on the
+// current state and run only the SEXP queries that could still cause a
+// promotion. Direct access to types(slotIdx) bypasses the std::function-based
+// record_type lambda overload, which adds type-erasure overhead.
+#define RECORD_FB_AT_SLOT(slotIdx, s)                                          \
+    do {                                                                       \
+        /* FIXME: cf. #1260 */                                                 \
+        ObservedValues& fb__ = c->function()->typeFeedback()->types(slotIdx);  \
+        switch (                                                               \
+            (ObservedValues::StateBeforeLastForce)fb__.stateBeforeLastForce) { \
+        case ObservedValues::StateBeforeLastForce::promise:                    \
+            /* lattice top — no input can promote */                         \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::evaluatedPromise:           \
+            /* only a genuine unevaluated promise advances */                  \
+            if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&        \
+                CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)                     \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::value:                      \
+            /* non-PROMSXP stays value; otherwise classify the promise */      \
+            if (TYPEOF(s) != PROMSXP)                                          \
+                break;                                                         \
+            if (PRVALUE(s) != R_UnboundValue) {                                \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
+            } else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch) {            \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            }                                                                  \
+            /* else: lazyLoadDBfetch stub — still value */                   \
+            break;                                                             \
+        case ObservedValues::StateBeforeLastForce::unknown:                    \
+            /* first observation — full classification */                    \
+            if (TYPEOF(s) != PROMSXP) {                                        \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::value;               \
+            } else if (PRVALUE(s) != R_UnboundValue) {                         \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
+            } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {            \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::value;               \
+            } else {                                                           \
+                fb__.stateBeforeLastForce =                                    \
+                    ObservedValues::StateBeforeLastForce::promise;             \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
+    } while (0)
+
+    // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
+    // on the immediately following opcode. Handles all three record kinds:
+    //   record_type_              — record FB always
+    //   record_type_once_         — record FB once, gated by the per-code
+    //                               `fired` bitmap
+    //   record_type_once_promise_ — record FB once per invocation, gated by
+    //                               the per-env bitmap
+    // Single RECORD_FB_AT_SLOT expansion: computing `idx` (and bailing) first
+    // keeps the large macro from being duplicated, which would bloat this
+    // lambda (inlined at many ldvar sites) and pressure the interpreter loop's
+    // instruction cache.
+    auto recordForceBehavior = [&](SEXP s) {
+        Immediate raw = *(Immediate*)(pc + 1);
+        if (*pc != Opcode::record_type_) {
+            if (*pc == Opcode::record_type_once_) {
+                RECORD_TYPE_ONCE_GATE(fired, raw);
+            } else if (*pc == Opcode::record_type_once_promise_) {
+                RECORD_TYPE_ONCE_PROMISE_GATE(
+                    env->u.envsxp.recordTypeOnceBitmap, raw);
+            } else {
+                return;
+            }
+        }
+        uint32_t idx = (*pc == Opcode::record_type_)
+                           ? raw
+                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
+        RECORD_FB_AT_SLOT(idx, s);
+    };
+
+    // For ldvar_cached_ (RecordAlways): the next instruction is always
+    // record_type_, so unconditionally record.
+    auto recordForceBehaviorAlways = [&](SEXP s) {
+        // assert(*pc == Opcode::record_type_);
+
+        Immediate slotIdx = *(Immediate*)(pc + 1);
+        RECORD_FB_AT_SLOT(slotIdx, s);
+    };
+
+    // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
+    // per-invocation env bitmap, then record.
+    auto recordForceBehaviorEnv = [&](SEXP s) {
+        // assert(*pc == Opcode::record_type_once_promise_);
+
+        Immediate raw = *(Immediate*)(pc + 1);
+        RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw);
+        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+    };
+
+    // For ldvar_cached_fbRecordOnce_ (record_type_once_): gate on the per-code
+    // `fired` bitmap so FB is recorded once per invocation. The first recording
+    // captures the highest lattice point the variable reaches (a formal/outer-
+    // controlled var may still be an unforced promise on the first iteration);
+    // later iterations are equal or more precise.
+    auto recordForceBehaviorRecordOnce = [&](SEXP s) {
+        // assert(*pc == Opcode::record_type_once_);
+
+        Immediate raw = *(Immediate*)(pc + 1);
+        RECORD_TYPE_ONCE_GATE(fired, raw);
+        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+    };
 
     // main loop
     BEGIN_MACHINE {
@@ -2199,35 +2302,43 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_cached_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate cacheIndex = readImmediate();
-            advanceImmediate();
-            assert(!LazyEnvironment::check(env));
-            SEXP res = cachedGetVar(env, id, cacheIndex, bindingCache);
-            R_Visible = TRUE;
+// Shared body for ldvar_cached_* variants. `record_fb_action` is the FB
+// recording statement (or nothing for the noRecordFB variant).
+#define LDVAR_CACHED_BODY(record_fb_action)                                    \
+    Immediate id = readImmediate();                                            \
+    advanceImmediate();                                                        \
+    Immediate cacheIndex = readImmediate();                                    \
+    advanceImmediate();                                                        \
+    assert(!LazyEnvironment::check(env));                                      \
+    SEXP res = cachedGetVar(env, id, cacheIndex, bindingCache);                \
+    R_Visible = TRUE;                                                          \
+    if (res == R_UnboundValue) {                                               \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));               \
+    } else if (res == R_MissingArg) {                                          \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("argument \"%s\" is missing, with no default",                \
+                 CHAR(PRINTNAME(sym)));                                        \
+    }                                                                          \
+    record_fb_action;                                                          \
+    if (TYPEOF(res) == PROMSXP)                                                \
+        res = evaluatePromise(res);                                            \
+    if (res != R_NilValue)                                                     \
+        ENSURE_NAMED(res);                                                     \
+    ostack_push(res);                                                          \
+    NEXT();
 
-            if (res == R_UnboundValue) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
-            } else if (res == R_MissingArg) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("argument \"%s\" is missing, with no default",
-                         CHAR(PRINTNAME(sym)));
-            }
+        INSTRUCTION(ldvar_cached_){
+            LDVAR_CACHED_BODY(recordForceBehaviorAlways(res))}
 
-            // if promise, evaluate & return
-            recordForceBehavior(res);
-            if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+        INSTRUCTION(ldvar_cached_noRecordFB_){
+            LDVAR_CACHED_BODY(/* skip force-behavior recording */)}
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+        INSTRUCTION(ldvar_cached_envRecordFB_){
+            LDVAR_CACHED_BODY(recordForceBehaviorEnv(res))}
 
-            ostack_push(res);
-            NEXT();
-        }
+        INSTRUCTION(ldvar_cached_fbRecordOnce_){
+            LDVAR_CACHED_BODY(recordForceBehaviorRecordOnce(res))}
 
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(readImmediate());
@@ -2341,6 +2452,73 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_) {
+            uint32_t raw = readImmediate();
+            advanceImmediate();
+            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
+            uint64_t& word = RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx);
+            uint64_t mask = RECORD_TYPE_ONCE_MASK(bitIdx);
+            if (!(word & mask)) {
+                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                          ostack_top());
+                word |= mask;
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_promise_) {
+            uint32_t raw = readImmediate();
+            advanceImmediate();
+            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+            uint64_t& bitmap = env->u.envsxp.recordTypeOnceBitmap;
+            if (!(bitmap & bit)) {
+                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                          ostack_top());
+                bitmap |= bit;
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(clear_record_type_once_bit_) {
+            uint32_t bitIdx = readImmediate();
+            advanceImmediate();
+            RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx) &=
+                ~RECORD_TYPE_ONCE_MASK(bitIdx);
+            NEXT();
+        }
+
+        INSTRUCTION(clear_record_type_once_bits_range_) {
+            uint32_t packed = readImmediate();
+            advanceImmediate();
+            uint32_t start = RECORD_TYPE_ONCE_RANGE_START(packed);
+            uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(packed);
+            // Naive bit-by-bit (reference):
+            // for (uint32_t b = start; b < start + count; b++)
+            //     RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
+            //         ~RECORD_TYPE_ONCE_MASK(b);
+            uint32_t end = start + count; // exclusive
+            uint32_t startWord = RECORD_TYPE_ONCE_WORD_IDX(start);
+            uint32_t endWord = RECORD_TYPE_ONCE_WORD_IDX(end - 1);
+            if (startWord == endWord) {
+                // All bits fall within one word: build a single mask.
+                uint64_t& word = fired[startWord];
+                word &= ~RECORD_TYPE_ONCE_CLEAR_MASK(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(start),
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
+            } else {
+                // Partial first word: clear bits [start&63 .. 63].
+                fired[startWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_FROM(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(start));
+                // Full middle words.
+                for (uint32_t w = startWord + 1; w < endWord; w++)
+                    fired[w] = 0;
+                // Partial last word: clear bits [0 .. (end-1)&63].
+                fired[endWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_TO(
+                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
+            }
             NEXT();
         }
 

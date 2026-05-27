@@ -19,6 +19,74 @@
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
+// Macros for packing/unpacking the immediate of record_type_once_:
+// low 16 bits = slotIdx (TypeFeedback slot), high 16 bits = iidx (bit index
+// into the per-invocation fixed bitmap).
+#define RECORD_TYPE_ONCE_BITMAP_ELEMS 8
+#define RECORD_TYPE_ONCE_MAX_IIDX (RECORD_TYPE_ONCE_BITMAP_ELEMS * 64)
+#define RECORD_TYPE_ONCE_VALID_SLOT_IDX(idx) ((idx) <= 0xFFFF)
+#define RECORD_TYPE_ONCE_SLOT_IDX(imm) ((imm)&0xFFFF)
+#define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
+#define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
+#define RECORD_TYPE_ONCE_BITMAP_WORDS(count) (((count) + 63) >> 6)
+// Index of the 64-bit word that contains bit iidx.
+#define RECORD_TYPE_ONCE_WORD_IDX(iidx) ((iidx) >> 6)
+// Bit position of iidx within its word (0-63).
+#define RECORD_TYPE_ONCE_BIT_IN_WORD(iidx) ((iidx)&63)
+#define RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx)                             \
+    ((bitmap)[RECORD_TYPE_ONCE_WORD_IDX(iidx)])
+#define RECORD_TYPE_ONCE_MASK(iidx)                                            \
+    ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
+#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
+    (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
+// Return from the enclosing function/lambda if the fired-bitmap bit is already
+// set (gate only — no recording).
+#define RECORD_TYPE_ONCE_GATE(bitmap, raw)                                     \
+    do {                                                                       \
+        if (RECORD_TYPE_ONCE_BITMAP_TEST((bitmap),                             \
+                                         RECORD_TYPE_ONCE_IIDX(raw)))          \
+            return;                                                            \
+    } while (0)
+// Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
+#define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
+// Mask with 1s in word positions [0..hi] (clears bits from start of word to
+// hi).
+#define RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi) (~(uint64_t)0 >> (63 - (hi)))
+// Mask with 1s in word positions [lo..hi].
+#define RECORD_TYPE_ONCE_CLEAR_MASK(lo, hi)                                    \
+    (RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) & RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi))
+
+// Macros for packing/unpacking the immediate of
+// clear_record_type_once_bits_range_: low 16 bits = start bit index, high 16
+// bits = count
+#define RECORD_TYPE_ONCE_RANGE_PACK(start, count) (((count) << 16) | (start))
+#define RECORD_TYPE_ONCE_RANGE_START(imm) ((imm)&0xFFFF)
+#define RECORD_TYPE_ONCE_RANGE_COUNT(imm) ((imm) >> 16)
+
+// record_type_once_promise_ uses a persistent 64-bit bitmap stored in the
+// function's call environment (envsxp_struct::recordTypeOnceBitmap), so the
+// max bit index is 64.
+#define RECORD_TYPE_ONCE_PROMISE_MAX_IIDX 64
+#define RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST(bitmap64, iidx)                   \
+    ((bitmap64) & ((uint64_t)1 << (iidx)))
+// Return from the enclosing function/lambda if the env bitmap bit is already
+// set (gate only — no recording). Use when recording is handled separately
+// (e.g. falls through to a shared RECORD_FB_AT_SLOT below).
+#define RECORD_TYPE_ONCE_PROMISE_GATE(bitmap64, raw)                           \
+    do {                                                                       \
+        if (RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST((bitmap64),                   \
+                                                 RECORD_TYPE_ONCE_IIDX(raw)))  \
+            return;                                                            \
+    } while (0)
+
+// Case labels for all ldvar_cached_ variants. Use in switch statements so
+// that adding a new variant only requires updating this one macro.
+#define LDVAR_CACHED_OPCODES_CASES                                             \
+    case Opcode::ldvar_cached_:                                                \
+    case Opcode::ldvar_cached_noRecordFB_:                                     \
+    case Opcode::ldvar_cached_envRecordFB_:                                    \
+    case Opcode::ldvar_cached_fbRecordOnce_:
+
 // type  signed immediate values (unboxed ints)
 typedef uint32_t SignedImmediate;
 
@@ -187,6 +255,15 @@ class BC {
 
     bool is(Opcode aBc) const { return bc == aBc; }
 
+    bool isLdvarCachedKind() const {
+        switch (bc) {
+            LDVAR_CACHED_OPCODES_CASES
+            return true;
+        default:
+            return false;
+        }
+    }
+
     inline size_t size() const {
         // Those are the variable length BC we have
         if (bc == Opcode::named_call_ || bc == Opcode::call_dots_)
@@ -266,7 +343,8 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_ ||
+               bc == Opcode::record_type_once_promise_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -314,6 +392,11 @@ class BC {
     inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
+    inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
+    inline static BC recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx);
+    inline static BC clearRecordTypeOnceBit(uint32_t bitIdx);
+    inline static BC clearRecordTypeOnceBitsRange(uint32_t start,
+                                                  uint32_t count);
     inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
@@ -323,7 +406,11 @@ class BC {
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
+    inline static BC ldvarCachedOp(Opcode op, SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
@@ -529,7 +616,7 @@ class BC {
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
-        case Opcode::ldvar_cached_:
+            LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             memcpy(&immediate.poolAndCache, pc,
@@ -566,6 +653,10 @@ class BC {
         case Opcode::record_call_:
         case Opcode::record_test_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
+        case Opcode::record_type_once_promise_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

@@ -28,7 +28,8 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           NumLocals),
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
       stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      codeSize(cs), srcLength(sourceLength), extraPoolSize(0),
+      recordTypeOnceCount(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
@@ -123,6 +124,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
+    code->recordTypeOnceCount = (uint16_t)InInteger(inp);
     SEXP extraPool = ReadItem(refTable, inp);
     PROTECT(extraPool);
     auto hasArgReorder = InInteger(inp);
@@ -170,6 +172,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, codeSize);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
+    OutInteger(out, (int)recordTypeOnceCount);
     WriteItem(getEntry(0), refTable, out);
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))
@@ -269,14 +272,37 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 if (bc.bc == Opcode::record_call_) {
                     typeFeedback->callees(bc.immediate.i).print(out, fun);
                     out << " ] Call#";
+                    out << bc.immediate.i << "\n";
                 } else if (bc.bc == Opcode::record_test_) {
                     typeFeedback->test(bc.immediate.i).print(out);
                     out << " ] Test#";
+                    out << bc.immediate.i << "\n";
                 } else {
-                    typeFeedback->types(bc.immediate.i).print(out);
-                    out << " ] Type#";
+                    bool isOnce = bc.bc == Opcode::record_type_once_;
+                    bool isOncePromise =
+                        bc.bc == Opcode::record_type_once_promise_;
+                    uint32_t slot =
+                        (isOnce || isOncePromise)
+                            ? RECORD_TYPE_ONCE_SLOT_IDX(bc.immediate.i)
+                            : bc.immediate.i;
+                    typeFeedback->types(slot).print(out);
+                    const char* tag = isOnce ? " ] TypeOnce#"
+                                             : isOncePromise
+                                                   ? " ] TypeOncePromise#"
+                                                   : " ] Type#";
+                    out << tag << slot;
+                    if (isOnce || isOncePromise)
+                        out << " (bit: #"
+                            << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";
+                    if (typeFeedback->hasTypeDep(slot))
+                        out << " (dep: #" << typeFeedback->typeDep(slot) << ")";
+                    if (typeFeedback->hasForceBehaviorKind(slot))
+                        out << " (fb: "
+                            << forceBehaviorKindName(
+                                   typeFeedback->forceBehaviorKind(slot))
+                            << ")";
+                    out << "\n";
                 }
-                out << bc.immediate.i << "\n";
             } else {
                 bc.print(out);
             }

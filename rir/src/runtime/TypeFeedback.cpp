@@ -12,6 +12,8 @@
 
 namespace rir {
 
+constexpr uint32_t TypeFeedback::NoDep;
+
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     REC_HOOK(bool isSuccesful = false);
@@ -171,9 +173,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         types.push_back(std::move(tmp));
     }
 
-    auto res = TypeFeedback::create(callees, tests, types);
-
-    return res;
+    return TypeFeedback::create(callees, tests, types);
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -233,14 +233,38 @@ uint32_t TypeFeedback::Builder::addCallee() { return ncallees_++; }
 
 uint32_t TypeFeedback::Builder::addTest() { return ntests_++; }
 
-uint32_t TypeFeedback::Builder::addType() { return ntypes_++; }
+uint32_t TypeFeedback::Builder::addType() {
+    typeDeps_.push_back(NoDep);
+    forceBehaviorKinds_.push_back(
+        static_cast<uint8_t>(ForceBehaviorKind::Always));
+    return ntypes_++;
+}
+
+void TypeFeedback::Builder::resetTypesTo(unsigned n) {
+    assert(n <= ntypes_);
+    ntypes_ = n;
+    typeDeps_.resize(n);
+    forceBehaviorKinds_.resize(n);
+}
+
+void TypeFeedback::Builder::setTypeDep(uint32_t slot, uint32_t source) {
+    assert(slot < typeDeps_.size());
+    typeDeps_[slot] = source;
+}
+
+void TypeFeedback::Builder::setForceBehaviorKind(uint32_t slot,
+                                                 ForceBehaviorKind kind) {
+    assert(slot < forceBehaviorKinds_.size());
+    forceBehaviorKinds_[slot] = static_cast<uint8_t>(kind);
+}
 
 TypeFeedback* TypeFeedback::Builder::build() {
     std::vector<ObservedCallees> callees(ncallees_, ObservedCallees{});
     std::vector<ObservedTest> tests(ntests_, ObservedTest{});
     std::vector<ObservedValues> types(ntypes_, ObservedValues{});
 
-    return TypeFeedback::create(callees, tests, types);
+    return TypeFeedback::create(callees, tests, types, typeDeps_,
+                                forceBehaviorKinds_);
 }
 
 TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
@@ -250,38 +274,47 @@ void FeedbackOrigin::function(Function* fun) {
     function_ = fun;
 }
 bool TypeFeedback::isValid(const FeedbackIndex& index) const {
+
     switch (index.kind) {
     case FeedbackKind::Call:
         return index.idx < callees_size_;
     case FeedbackKind::Test:
         return index.idx < tests_size_;
     case FeedbackKind::Type:
+        std::cerr << "isValid: " << index.idx << " " << types_size_ << "\n";
         return index.idx < types_size_;
     default:
         return false;
     }
 }
 
-TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
-                                   const std::vector<ObservedTest>& tests,
-                                   const std::vector<ObservedValues>& types) {
+TypeFeedback*
+TypeFeedback::create(const std::vector<ObservedCallees>& callees,
+                     const std::vector<ObservedTest>& tests,
+                     const std::vector<ObservedValues>& types,
+                     const std::vector<uint32_t>& typeDeps,
+                     const std::vector<uint8_t>& forceBehaviorKinds) {
     size_t dataSize = callees.size() * sizeof(ObservedCallees) +
                       tests.size() * sizeof(ObservedTest) +
-                      types.size() * sizeof(ObservedValues);
+                      types.size() * sizeof(ObservedValues) +
+                      types.size() * sizeof(uint32_t) +
+                      types.size() * sizeof(uint8_t);
 
     size_t objSize = sizeof(TypeFeedback) + dataSize;
 
     SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
 
-    TypeFeedback* res =
-        new (INTEGER(store)) TypeFeedback(callees, tests, types);
+    TypeFeedback* res = new (INTEGER(store))
+        TypeFeedback(callees, tests, types, typeDeps, forceBehaviorKinds);
 
     return res;
 }
 
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
-                           const std::vector<ObservedValues>& types)
+                           const std::vector<ObservedValues>& types,
+                           const std::vector<uint32_t>& typeDeps,
+                           const std::vector<uint8_t>& forceBehaviorKinds)
     : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
       tests_size_(tests.size()), types_size_(types.size()) {
 
@@ -292,6 +325,11 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     callees_ = (ObservedCallees*)slots_;
     tests_ = (ObservedTest*)(slots_ + callees_mem_size);
     types_ = (ObservedValues*)(slots_ + callees_mem_size + tests_mem_size);
+    typeDeps_ = (uint32_t*)(slots_ + callees_mem_size + tests_mem_size +
+                            types_mem_size);
+    forceBehaviorKinds_ =
+        (uint8_t*)(slots_ + callees_mem_size + tests_mem_size + types_mem_size +
+                   types_size_ * sizeof(uint32_t));
 
     if (callees_size_) {
         memcpy(callees_, callees.data(), callees_mem_size);
@@ -303,6 +341,28 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
 
     if (types_size_) {
         memcpy(types_, types.data(), types_mem_size);
+        if (!typeDeps.empty()) {
+            assert(typeDeps.size() == types_size_);
+            memcpy(typeDeps_, typeDeps.data(), types_size_ * sizeof(uint32_t));
+        } else {
+            std::fill(typeDeps_, typeDeps_ + types_size_, NoDep);
+        }
+        if (!forceBehaviorKinds.empty()) {
+            assert(forceBehaviorKinds.size() == types_size_);
+            memcpy(forceBehaviorKinds_, forceBehaviorKinds.data(),
+                   types_size_ * sizeof(uint8_t));
+        } else {
+            std::fill(forceBehaviorKinds_, forceBehaviorKinds_ + types_size_,
+                      static_cast<uint8_t>(ForceBehaviorKind::Always));
+        }
+    }
+}
+
+void TypeFeedback::propagateDeps() {
+    for (size_t i = 0; i < types_size_; ++i) {
+        if (typeDeps_[i] != NoDep) {
+            types_[i] = types_[typeDeps_[i]];
+        }
     }
 }
 const char* FeedbackIndex::name() const {

@@ -37,7 +37,7 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.pool);
         return;
 
-    case Opcode::ldvar_cached_:
+        LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
         cs.insert(immediate.poolAndCache);
@@ -82,6 +82,10 @@ void BC::write(CodeStream& cs) const {
     case Opcode::record_call_:
     case Opcode::record_test_:
     case Opcode::record_type_:
+    case Opcode::record_type_once_:
+    case Opcode::record_type_once_promise_:
+    case Opcode::clear_record_type_once_bit_:
+    case Opcode::clear_record_type_once_bits_range_:
         cs.insert(immediate.i);
         return;
 
@@ -93,7 +97,7 @@ void BC::write(CodeStream& cs) const {
 }
 
 SEXP BC::immediateConst() const {
-    if (is(Opcode::ldvar_cached_) || is(Opcode::stvar_cached_))
+    if (isLdvarCachedKind() || is(Opcode::stvar_cached_))
         return Pool::get(immediate.poolAndCache.poolIndex);
     else
         return Pool::get(immediate.pool);
@@ -127,7 +131,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::missing_:
             i.pool = Pool::insert(ReadItem(refTable, inp));
             break;
-        case Opcode::ldvar_cached_:
+            LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
@@ -162,7 +166,11 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
+        case Opcode::record_type_once_promise_:
         case Opcode::record_test_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -222,7 +230,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::missing_:
             WriteItem(Pool::get(i.pool), refTable, out);
             break;
-        case Opcode::ldvar_cached_:
+            LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
             WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
@@ -253,7 +261,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
+        case Opcode::record_type_once_:
+        case Opcode::record_type_once_promise_:
         case Opcode::record_test_:
+        case Opcode::clear_record_type_once_bit_:
+        case Opcode::clear_record_type_once_bits_range_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -365,7 +377,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
         break;
-    case Opcode::ldvar_cached_:
+        LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_cache_:
     case Opcode::stvar_cached_:
         out << CHAR(PRINTNAME(immediateConst())) << "{"
@@ -391,6 +403,21 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_call_:
         out << "#" << immediate.i;
         break;
+    case Opcode::record_type_once_:
+        out << "#" << immediate.i << "[once]";
+        break;
+    case Opcode::record_type_once_promise_:
+        out << "#" << immediate.i << "[once-promise]";
+        break;
+    case Opcode::clear_record_type_once_bit_:
+        out << "bit#" << immediate.i << "[clear]";
+        break;
+    case Opcode::clear_record_type_once_bits_range_: {
+        uint32_t start = RECORD_TYPE_ONCE_RANGE_START(immediate.i);
+        uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(immediate.i);
+        out << "bits[" << start << "+" << count << "][clear]";
+        break;
+    }
 
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)

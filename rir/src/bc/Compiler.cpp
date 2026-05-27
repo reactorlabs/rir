@@ -7,6 +7,9 @@
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
+#include "bc/CompilerCFG.h"
+#include "bc/DefUseAnalysis.h"
+#include "bc/LoopScopeGuards.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
@@ -60,85 +63,53 @@ static bool containsLoop(SEXP exp) {
 
 class CompilerContext {
   public:
-    class LoopContext {
-      public:
-        BC::Label next_;
-        BC::Label break_;
-        bool context_needed_ = false;
-        LoopContext(BC::Label next_, BC::Label break_)
-            : next_(next_), break_(break_) {}
-    };
+    using LoopContext = rir::LoopContext;
+    using CodeContext = rir::CodeContext;
 
-    class CodeContext {
-      public:
-        typedef size_t CacheSlotNumber;
-        static constexpr CacheSlotNumber BindingCacheDisabled = (size_t)-1;
-
-        CodeStream cs;
-        std::stack<LoopContext> loops;
-        CodeContext* parent;
-        std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
-
-        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : cs(fun, ast), parent(p) {}
-        virtual ~CodeContext() {}
-        bool inLoop() { return !loops.empty() || (parent && parent->inLoop()); }
-        BC::Label loopNext() {
-            assert(!loops.empty());
-            return loops.top().next_;
-        }
-        BC::Label loopBreak() {
-            assert(!loops.empty());
-            return loops.top().break_;
-        }
-        void setContextNeeded() {
-            if (loops.empty() && parent)
-                parent->setContextNeeded();
-            else
-                loops.top().context_needed_ = true;
-        }
-        size_t isCached(SEXP name) {
-            assert(loadsSlotInCache.size() <= MAX_CACHE_SIZE);
-            auto f = loadsSlotInCache.find(name);
-            return f != loadsSlotInCache.end() &&
-                   f->second != BindingCacheDisabled;
-        }
-        size_t nCached = 0;
-        size_t cacheSlotFor(SEXP name) {
-            auto f = loadsSlotInCache.find(name);
-            if (f != loadsSlotInCache.end())
-                return f->second;
-            if (nCached >= MAX_CACHE_SIZE)
-                return BindingCacheDisabled;
-            return loadsSlotInCache.emplace(name, nCached++).first->second;
-        }
-        virtual bool loopIsLocal() { return !loops.empty(); }
-        virtual bool isPromiseContext() { return false; }
-    };
-
-    class PromiseContext : public CodeContext {
-
-      public:
-        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : CodeContext(ast, fun, p) {}
-        bool loopIsLocal() override {
-            if (loops.empty()) {
-                parent->setContextNeeded();
-                return false;
-            }
-            return true;
-        }
-
-        bool isPromiseContext() override { return true; }
-    };
+    using PromiseContext = rir::PromiseContext;
 
     std::stack<CodeContext*> code;
+    CodeContext* mainBodyCtx_ = nullptr;
 
     CodeStream& cs() { return code.top()->cs; }
+    DefUseAnalysis& defUseAnalysis() { return code.top()->defUseAnalysis; }
+    const DefUseAnalysis& defUseAnalysis() const {
+        return code.top()->defUseAnalysis;
+    }
 
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
+    CompilerCFGBuilder cfgBuilder;
+    uint32_t recordTypeOncePromiseBitmapSize = 0;
+
+    // Formals + body-assigned variables (minus inner-<<--assigned ones).
+    // Populated once in Compiler::finalize() before any context is pushed.
+    std::unordered_set<SEXP> functionLocalOrParam_;
+
+    // Variables from enclosing scopes in our "realm": when a local def has not
+    // run, ldvar falls through to a controlled env, not to global. Superset
+    // of outerImmutable_. Enables RecordOnce. Names that are also locally
+    // assigned by formals of this function are excluded (formal completely
+    // shadows the outer name).
+    std::unordered_set<SEXP> outerControlled_;
+
+    // Strict subset of outerControlled_: values that truly do not change during
+    // this function's lifetime. Names locally body-assigned here are excluded.
+    // Reserved for future cross-invocation optimizations.
+    std::unordered_set<SEXP> outerImmutable_;
+
+    // Pre-scan results retained for use at inner-function call sites when
+    // computing the `safeForInner` capture set to hand to nested compilations.
+    std::unordered_set<SEXP> formalNames_;
+    std::unordered_map<SEXP, int> bodyAssignedCount_;
+    std::unordered_set<SEXP> innerSuperAssigned_;
+    std::unordered_set<SEXP> forLoopVars_;
+
+    // // Variables that appear in pure-read (value) position in the function
+    // body.
+    // // Used to gate the post-subassign record_type_ emission.
+    // std::unordered_set<SEXP> readVars_;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -146,6 +117,10 @@ class CompilerContext {
     ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
+
+    DefUseAnalysis::UseClassification classifyUse(SEXP name) const {
+        return defUseAnalysis().classifyUse(name);
+    }
 
     LoopContext& loop() { return code.top()->loops.top(); }
 
@@ -172,21 +147,90 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        code.push(
-            new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
+        std::unordered_set<SEXP> argAssigned;
+        if (Compiler::recordLessEnabled)
+            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
+        DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
+                           &outerImmutable_, &formalNames_,
+                           std::move(argAssigned));
+        code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
+                                  std::move(dua)));
+        if (!mainBodyCtx_)
+            mainBodyCtx_ = code.top();
     }
 
     bool isInPromise() { return pushedPromiseContexts > 0; }
 
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
+        std::unordered_set<SEXP> argAssigned;
+        if (Compiler::recordLessEnabled)
+            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
+        DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
+                           &outerImmutable_, &formalNames_,
+                           std::move(argAssigned));
+        // Inherit the enclosing loop depth so the first use of a local/param
+        // inside a promise compiled within a loop gets RecordOnce rather than
+        // RecordAlways.
+        // if (!code.empty())
+        //    dua.loopDepth_ = code.top()->defUseAnalysis.loopDepth_;
+        code.push(new PromiseContext(
+            ast, fun, code.empty() ? nullptr : code.top(), std::move(dua)));
+    }
 
-        code.push(
-            new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
+    struct CaptureInfo {
+        std::unordered_set<SEXP> immutable;
+        std::unordered_set<SEXP> controlled;
+    };
+
+    // Build the two capture sets to hand off to a function literal being
+    // compiled at the current point of this function's body.
+    //
+    // `controlled`: everything in our realm — the inner function can rely on
+    // fallthrough going to a controlled env rather than global.
+    // `immutable`: strict subset — values that won't change during the inner
+    // function's lifetime (enables future cross-invocation optimizations).
+    CaptureInfo computeCapturesForInner() const {
+        CaptureInfo result;
+        const auto& dua = code.top()->defUseAnalysis;
+
+        // Carry-through: outer captures remain valid for the inner function.
+        for (SEXP s : outerImmutable_) {
+            result.immutable.insert(s);
+            result.controlled.insert(s);
+        }
+        for (SEXP s : outerControlled_)
+            result.controlled.insert(s);
+
+        // Own formals: always bound at call time → controlled.
+        // Immutable only if never body-assigned (so the binding never changes)
+        // and not <<-escaped from an inner function.
+        for (SEXP f : formalNames_) {
+            result.controlled.insert(f);
+            if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
+                result.immutable.insert(f);
+        }
+
+        // Own body-locals: live in the current function's local env →
+        // controlled. Immutable only if assigned exactly once, not a for-loop
+        // variable, not
+        // <<-escaped, and the single def dominates this compilation point.
+        for (auto& kv : bodyAssignedCount_) {
+            if (!innerSuperAssigned_.count(kv.first))
+                result.controlled.insert(kv.first);
+            if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
+                !innerSuperAssigned_.count(kv.first) &&
+                dua.hasDominatingDef(kv.first))
+                result.immutable.insert(kv.first);
+        }
+
+        return result;
     }
 
     Code* pop() {
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
+        res->recordTypeOnceCount =
+            (uint16_t)code.top()->recordTypeOnceBitmapSize;
         if (code.top()->isPromiseContext())
             pushedPromiseContexts--;
         delete code.top();
@@ -205,6 +249,25 @@ class CompilerContext {
     }
 
     BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
+
+    BC recordTypeTracked(SEXP name) {
+        int slot = typeFeedbackBuilder.addType();
+        defUseAnalysis().trackUseDef(name, slot);
+        return BC::recordType(slot);
+    }
+
+    unsigned typeSlotCount() const { return typeFeedbackBuilder.typeCount(); }
+
+    // Allocate a slot for a NoRecord use and register its dependency on
+    // `sourceSlot` so the type info can be propagated before JIT compilation.
+    // Returns the new slot index.
+    uint32_t registerNoRecordDep(int sourceSlot) {
+        assert(sourceSlot != DefUseAnalysis::kNoSlot &&
+               "NoRecord must always reference a valid feedback slot");
+        uint32_t slot = typeFeedbackBuilder.addType();
+        typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
+        return slot;
+    }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 
@@ -231,6 +294,10 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext);
+static constexpr unsigned kNoLdvarCached = (unsigned)-1;
+static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
+                                 SEXP name,
+                                 unsigned ldvarCachedPos = kNoLdvarCached);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has
 // already been evaluated: wrap the value at TOS into a promise. This is used in
@@ -253,7 +320,8 @@ static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                             int skipArgs = 0, int eager = 0);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
-                  std::function<void()> compileBody, bool peelLoop = false) {
+                  std::function<void()> compileBody, SEXP bodyAst,
+                  bool peelLoop = false) {
     CodeStream& cs = ctx.cs();
 
     BC::Label nextBranch = cs.mkLabel();
@@ -263,18 +331,43 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     unsigned beginLoopPos = cs.currentPos();
     cs << BC::beginloop(breakBranch);
 
+    if (Compiler::isRecordLessEnabled()) {
+        std::unordered_map<SEXP, int> bodyDefs;
+        DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
+        ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
+        // enterLoopContext: track that we're in a loop (for RecordOnce) but
+        // keep the scope stack at the outer scope — so the condition can be
+        // classified as NoRecord when a pre-loop def post-dominates it.
+        ctx.defUseAnalysis().enterLoopContext();
+    }
+
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
+        auto savedDefs = (Compiler::isRecordLessEnabled())
+                             ? ctx.defUseAnalysis().saveState()
+                             : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterLoopScope();
         compileBody();
+        if (Compiler::isRecordLessEnabled()) {
+            ctx.defUseAnalysis().exitLoop();
+            ctx.defUseAnalysis().restoreState(std::move(savedDefs));
+        }
     }
 
     cs << nextBranch;
     compileCond();
     cs << BC::brfalse(breakBranch);
 
+    if (Compiler::isRecordLessEnabled())
+        ctx.defUseAnalysis().enterLoopScope();
     compileBody();
+    if (Compiler::isRecordLessEnabled()) {
+        ctx.defUseAnalysis().exitLoop();
+        ctx.defUseAnalysis().clearLoopBodyDefs();
+    }
     cs << BC::br(nextBranch) << breakBranch;
 
     if (ctx.loopNeedsContext()) {
@@ -291,6 +384,38 @@ void emitGuardForNamePrimitive(CodeStream& cs, SEXP fun) {
         cs << BC::guardNamePrimitive(fun);
     }
 }
+
+// True when `seq` is an AST call to `:`, `seq_len`, or `seq_along` — these are
+// the seq forms whose elements all have the same SEXP type, so a for-loop's
+// iter var has stable type across iterations.
+static bool isRangeBasedSeq(SEXP seq) {
+    if (TYPEOF(seq) != LANGSXP)
+        return false;
+    SEXP fun = CAR(seq);
+    if (TYPEOF(fun) != SYMSXP)
+        return false;
+    return fun == symbol::Colon || fun == symbol::seq_len ||
+           fun == symbol::seq_along;
+}
+
+// RAII-style helper for range-based for-loop iter-var instrumentation.
+// Construction does the "before loop body" work (emit clear placeholder if
+// nested, push range-based var, push dynamic-bit tracking entry); finish()
+// does the "after loop body" work (patch or remove placeholder using the
+// tracked dynamic bit range, pop range-based var).
+//
+// clearActive    — emit a clear_record_type_once_bits_range_ placeholder before
+//                  the loop body when nested. True for ALL loop kinds when
+//                  recordLess is enabled, so bits for outer-scope-def variables
+//                  are cleared on each outer iteration.
+// rangeVarActive — push/pop sym as a range-based for-loop iter var. True only
+//                  for `:` / seq_len / seq_along sequences.
+//
+// Stable bits are excluded from the clear range: when compileGetvar allocates
+// a RecordOnce bit, it tells DefUseAnalysis whether the bit is dynamic
+// (variable re-assigned in some enclosing loop / range-based iter var) or
+// stable. The clear range covers only [first dynamic bit, last+1), so stable
+// bits at either end persist for the whole invocation.
 
 /**
  * Try to convert this loop into a C-style for loop. If it fails or must compile
@@ -412,6 +537,15 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
+    if (Compiler::isRecordLessEnabled())
+        ctx.defUseAnalysis().pushForLoopVar(sym);
+    // compileSimpleFor always handles `:` — always range-based.
+    RangeBasedIterVarScope rangeScope(
+        ctx.code.top(), sym,
+        /*active=*/Compiler::isRecordLessEnabled());
+    ClearableScopeGuard clearScope(ctx.code.top(),
+                                   Compiler::isRecordLessEnabled());
+
     // while
     compileWhile(
         ctx,
@@ -435,7 +569,13 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             compileExpr(ctx, body, true);
             // }
         },
-        !containsLoop(body));
+        body, !containsLoop(body));
+
+    rangeScope.finish();
+    clearScope.finish();
+    if (Compiler::isRecordLessEnabled())
+        ctx.defUseAnalysis().popForLoopVar(sym);
+
     cs << BC::popn(3);
     if (!voidContext)
         cs << BC::push(R_NilValue) << BC::invisible();
@@ -473,11 +613,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     // TODO: this is not sound... There are other ways to call remove... What we
     // should do instead is trap do_remove in gnur and clear the cache!
     if (fun == symbol::remove || fun == symbol::rm) {
-        CompilerContext::CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
-        CompilerContext::CodeContext::CacheSlotNumber max = 0;
+        CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
+        CodeContext::CacheSlotNumber max = 0;
         for (auto c : ctx.code.top()->loadsSlotInCache) {
             auto i = c.second;
-            if (i == CompilerContext::CodeContext::BindingCacheDisabled)
+            if (i == CodeContext::BindingCacheDisabled)
                 continue;
             if (i < min)
                 min = i;
@@ -491,7 +631,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            auto dt = Compiler::compileFunction(args[1], args[0]);
+            CompilerContext::CaptureInfo captures;
+            if (Compiler::recordLessEnabled)
+                captures = ctx.computeCapturesForInner();
+            auto dt = Compiler::compileFunction(args[1], args[0],
+                                                std::move(captures.immutable),
+                                                std::move(captures.controlled));
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
@@ -564,7 +709,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(args[0]);
         cs << BC::dup() << BC::brfalse(nextBranch);
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
         cs.addSrc(args[1]);
@@ -588,7 +737,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         cs << BC::dup() << BC::brtrue(nextBranch);
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
         cs.addSrc(ast);
@@ -672,6 +825,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // 2) Specialcase normal assignment (ie. "i <- expr")
         if (TYPEOF(lhs) == SYMSXP) {
             emitGuardForNamePrimitive(cs, fun);
+            unsigned typesBefore = Compiler::profile ? ctx.typeSlotCount() : 0;
             compileExpr(ctx, rhs);
             if (!voidContext) {
                 // No ensureNamed needed, stvar already ensures named
@@ -685,6 +839,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
+                if (Compiler::isRecordLessEnabled()) {
+                    // The last type slot allocated while compiling rhs (if
+                    // any) captures the type of the value being stored —
+                    // use it as the def's feedback slot.
+                    int defSlot = (ctx.typeSlotCount() > typesBefore)
+                                      ? (int)ctx.typeSlotCount() - 1
+                                      : DefUseAnalysis::kNoSlot;
+                    ctx.defUseAnalysis().trackDef(lhs, defSlot);
+                }
             }
             return true;
         }
@@ -794,16 +957,22 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             if (superAssign) {
                 cs << BC::ldvarSuper(target);
+                if (Compiler::profile)
+                    cs << ctx.recordType();
             } else {
-                if (ctx.code.top()->isCached(target))
+                if (ctx.code.top()->isCached(target)) {
                     cs << BC::ldvarForUpdateCached(
                         target, ctx.code.top()->cacheSlotFor(target));
-                else
+                } else {
                     cs << BC::ldvarForUpdate(target);
+                }
+                if (Compiler::profile) {
+                    if (Compiler::recordLessEnabled)
+                        emitRecordTypeForVar(ctx, cs, target);
+                    else
+                        cs << ctx.recordType();
+                }
             }
-
-            if (Compiler::profile)
-                cs << ctx.recordType();
 
             if (maybeChanges(target, *idx) ||
                 (dims > 1 && maybeChanges(target, *(idx + 1))) ||
@@ -839,11 +1008,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (superAssign) {
                 cs << BC::stvarSuper(target);
             } else {
-                if (ctx.code.top()->isCached(target))
+
+                if (ctx.code.top()->isCached(target)) {
                     cs << BC::stvarCached(target,
                                           ctx.code.top()->cacheSlotFor(target));
-                else
+                } else {
                     cs << BC::stvar(target);
+                }
+                if (Compiler::isRecordLessEnabled())
+                    ctx.defUseAnalysis().trackDef(target,
+                                                  DefUseAnalysis::kNoSlot);
             }
 
             if (!voidContext)
@@ -1006,7 +1180,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::callDots(load_arg_res.numArgs, load_arg_res.names,
                                    farrow_ast, load_arg_res.assumptions);
             } else {
-                assert(load_arg_res.hasNames);
                 cs << BC::call(load_arg_res.numArgs, load_arg_res.names,
                                farrow_ast, load_arg_res.assumptions);
             }
@@ -1073,12 +1246,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::invisible();
             }
         } else {
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().enterBranch();
             compileExpr(ctx, args[2], voidContext);
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().exitBranch();
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1], voidContext);
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
 
         cs << nextBranch;
         return true;
@@ -1106,6 +1287,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().markReturn();
         if (ctx.inLoop() || ctx.isInPromise())
             cs << BC::return_();
         else
@@ -1171,14 +1354,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << objBranch;
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         {
             LoadArgsResult dummy;
             compileLoadArgs(ctx, ast, fun, args_, dummy, voidContext, 1);
         }
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << nonObjBranch;
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, *idx);
         if (dims == 3) {
             compileExpr(ctx, *(idx + 1));
@@ -1186,6 +1375,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else if (dims == 2) {
             compileExpr(ctx, *(idx + 1));
         }
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << contBranch;
@@ -1233,14 +1424,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
         compileWhile(
             ctx,
             [&ctx, &cs, &cond]() {
                 compileExpr(ctx, cond);
                 cs << BC::asbool();
             },
-            [&ctx, &body]() { compileExpr(ctx, body, true); },
+            [&ctx, &body]() { compileExpr(ctx, body, true); }, body,
             !containsLoop(body));
+        clearScope.finish();
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
@@ -1262,13 +1456,33 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         unsigned beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
+        if (Compiler::isRecordLessEnabled()) {
+            ctx.defUseAnalysis().enterLoop();
+            std::unordered_map<SEXP, int> bodyDefs;
+            DefUseAnalysis::collectAssignedVars(body, bodyDefs);
+            ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
+        }
+
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
+
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+            auto savedDefs = (Compiler::isRecordLessEnabled())
+                                 ? ctx.defUseAnalysis().saveState()
+                                 : DefUseAnalysis::DefsSnapshot{};
             compileExpr(ctx, body, true);
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
+        clearScope.finish();
+        if (Compiler::isRecordLessEnabled()) {
+            ctx.defUseAnalysis().clearLoopBodyDefs();
+            ctx.defUseAnalysis().exitLoop();
+        }
         cs << BC::br(nextBranch) << breakBranch;
 
         if (ctx.loopNeedsContext()) {
@@ -1332,14 +1546,36 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::stvar(sym);
         };
 
+        bool rangeBased =
+            Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
+        RangeBasedIterVarScope rangeScope(ctx.code.top(), sym,
+                                          /*active=*/rangeBased);
+        ClearableScopeGuard clearScope(ctx.code.top(),
+                                       Compiler::isRecordLessEnabled());
+
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
+
+        if (Compiler::isRecordLessEnabled()) {
+            ctx.defUseAnalysis().enterLoop();
+            ctx.defUseAnalysis().pushForLoopVar(sym);
+            std::unordered_map<SEXP, int> bodyDefs;
+            DefUseAnalysis::collectAssignedVars(body, bodyDefs);
+            // The for loop also assigns sym on each iteration
+            bodyDefs[sym]++;
+            ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
+        }
 
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
+            auto savedDefs = (Compiler::isRecordLessEnabled())
+                                 ? ctx.defUseAnalysis().saveState()
+                                 : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
             compileExpr(ctx, body, true);
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
@@ -1347,6 +1583,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // Compile the loop body
         compileExpr(ctx, body, true);
+        rangeScope.finish();
+        clearScope.finish();
+        if (Compiler::isRecordLessEnabled()) {
+            ctx.defUseAnalysis().clearLoopBodyDefs();
+            ctx.defUseAnalysis().popForLoopVar(sym);
+            ctx.defUseAnalysis().exitLoop();
+        }
         cs << BC::br(nextBranch) << breakBranch;
 
         if (ctx.loopNeedsContext()) {
@@ -1375,6 +1618,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
         }
@@ -1390,6 +1635,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
+            if (Compiler::isRecordLessEnabled())
+                ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
         }
@@ -1576,7 +1823,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 continue;
             } else {
                 cs << BC::pop();
+                if (Compiler::isRecordLessEnabled())
+                    ctx.defUseAnalysis().enterBranch();
                 compileExpr(ctx, expressions[j++]);
+                if (Compiler::isRecordLessEnabled())
+                    ctx.defUseAnalysis().exitBranch();
                 cs << BC::br(contBr);
             }
         }
@@ -1895,6 +2146,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     };
 
     LoadArgsResult info;
+    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
+        ctx.defUseAnalysis().enterBranch();
     if (fun == symbol::forceAndCall) {
         // forceAndCall is a special with signature `function(n, FUN, ...)`
         // The first two args are eager
@@ -1908,15 +2161,21 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadArgs(ctx, ast, fun, args, info, voidContext);
     }
     compileCall(info);
+    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
+        ctx.defUseAnalysis().exitBranch();
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().enterBranch();
         LoadArgsResult infoEager;
         compileLoadArgs(ctx, ast, fun, args, infoEager, voidContext, 0,
                         RList(args).length());
 
         compileCall(infoEager);
+        if (Compiler::isRecordLessEnabled())
+            ctx.defUseAnalysis().exitBranch();
 
         cs << theEnd;
     }
@@ -1927,6 +2186,151 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         cs << ctx.recordType();
 }
 
+// Classify the use of `name` and emit the appropriate recording instruction.
+// Falls back to plain recordType() when called from inside a promise context.
+// Sentinel for `ldvarCachedPos` (declared above): no ldvar_cached_ was
+// emitted, don't patch.
+static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
+                                 SEXP name, unsigned ldvarCachedPos) {
+    // if (ctx.isInPromise()) {
+    //     cs << ctx.recordType();
+    //     return;
+    // }
+
+    // No main body context yet (compiling default formal arguments): skip
+    // promise-specific optimizations and fall through to the normal path.
+    if (!ctx.mainBodyCtx_) {
+        cs << ctx.recordType();
+        return;
+    }
+
+    using UseKind = DefUseAnalysis::UseKind;
+    using ForceBehaviorKind = DefUseAnalysis::ForceBehaviorKind;
+    auto uc = ctx.classifyUse(name);
+    ForceBehaviorKind fbKind = uc.forceBehavior;
+    // Slot allocated by this call (sentinel = no slot allocated). Filled in by
+    // each branch below; used at the end to register the FB kind in one place.
+    static constexpr int kNoAllocatedSlot = -1;
+    int allocatedSlot = kNoAllocatedSlot;
+    // Whether a record_type_once_ (not the record_type_ fallback) was emitted.
+    // Only the once-variant carries the per-code bitmap the fbRecordOnce ldvar
+    // gates on; the fallback records every time, so FB must record every time.
+    bool emittedRecordTypeOnce = false;
+    if (uc.kind == UseKind::NoRecord) {
+        allocatedSlot = (int)ctx.registerNoRecordDep(uc.defSlot);
+    } else if (ctx.code.top()->isPromiseContext() &&
+               ctx.mainBodyCtx_->defUseAnalysis.loopDepth_ > 0 &&
+               ctx.cfgBuilder.isSupportedParameter(name) &&
+               ctx.recordTypeOncePromiseBitmapSize <
+                   RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
+        // Variable free in a promise that is a parameter of the
+        // enclosing function (never assigned, not shadowed, used
+        // in a loop) — record once per function invocation via the
+        // persistent bitmap in the call env.
+        int slot = ctx.typeFeedbackBuilder.addType();
+        ctx.defUseAnalysis().trackUseDef(name, slot);
+        uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
+        cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
+        fbKind = ForceBehaviorKind::EnvBit;
+        allocatedSlot = slot;
+    } else {
+        switch (uc.kind) {
+        case UseKind::NoRecord:
+            assert(false && "no record unreachable");
+            break; // unreachable: handled above
+        case UseKind::RecordOnce: {
+            int slot = ctx.typeFeedbackBuilder.addType();
+            allocatedSlot = slot;
+            ctx.defUseAnalysis().trackUseDef(name, slot);
+            auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
+            if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
+                // Deferred: bit assigned later when outermost
+                // range-based scope finishes.
+                int total = (int)bitmapSize +
+                            ctx.defUseAnalysis().rangeVarTotalPending();
+                if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                    unsigned bcPos = cs.currentPos();
+                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    ctx.defUseAnalysis().registerRangeVarUse(name, bcPos, slot);
+                    emittedRecordTypeOnce = true;
+                } else {
+                    cs << BC::recordType(slot);
+                }
+            } else if (ctx.defUseAnalysis().assignedInEnclosingLoop(name) &&
+                       ctx.defUseAnalysis().hasClearableScope()) {
+                // Dynamic: re-assigned in an enclosing loop.
+                // Defer bit assignment to the innermost clearable
+                // scope so stable bits never interleave with the
+                // clear range.
+                int total = (int)bitmapSize +
+                            ctx.defUseAnalysis().rangeVarTotalPending();
+                if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                    total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
+                    unsigned bcPos = cs.currentPos();
+                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    ctx.defUseAnalysis().registerClearableUse(name, bcPos,
+                                                              slot);
+                    emittedRecordTypeOnce = true;
+                } else {
+                    cs << BC::recordType(slot);
+                }
+            } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
+                       bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
+                // Stable: assign bit immediately.
+                cs << BC::recordTypeOnce((uint32_t)slot, bitmapSize++);
+                emittedRecordTypeOnce = true;
+            } else {
+                cs << BC::recordType(slot);
+            }
+            break;
+        }
+        case UseKind::RecordAlways:
+            cs << ctx.recordTypeTracked(name);
+            break;
+        }
+    }
+
+    // Patch the ldvar_cached_ opcode (if one was emitted) based on the
+    // force-behavior strategy. FBValue and Infer both skip runtime FB
+    // recording — distinguishing them is needed for later JIT-time decisions,
+    // not at the interpreter level.
+    if (ldvarCachedPos != kNoLdvarCached) {
+        switch (fbKind) {
+        case ForceBehaviorKind::FBValue:
+        case ForceBehaviorKind::Infer:
+            cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_noRecordFB_);
+            break;
+        case ForceBehaviorKind::EnvBit:
+            cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_envRecordFB_);
+            break;
+        case ForceBehaviorKind::RecordOnce:
+            // Gate FB recording on the per-code bitmap — but only when a
+            // record_type_once_ actually carries that bitmap. If the
+            // record_type_ fallback was emitted (no bit available), the type
+            // is recorded every time, so leave the default ldvar_cached_ to
+            // record FB every time too.
+            if (emittedRecordTypeOnce)
+                cs.patchOpcode(ldvarCachedPos,
+                               Opcode::ldvar_cached_fbRecordOnce_);
+            break;
+        case ForceBehaviorKind::Always:
+            // Default ldvar_cached_ already emitted; no patch.
+            break;
+        }
+    }
+
+    // Remember the FB decision on the allocated slot (if any) so the JIT can
+    // reconstruct it later. Skipped for the implicit Always default.
+    assert(fbKind == ForceBehaviorKind::Always ||
+           allocatedSlot != kNoAllocatedSlot);
+    if (fbKind != ForceBehaviorKind::Always &&
+        allocatedSlot != kNoAllocatedSlot) {
+        ctx.typeFeedbackBuilder.setForceBehaviorKind((uint32_t)allocatedSlot,
+                                                     fbKind);
+    }
+}
+
 // Lookup
 void compileGetvar(CompilerContext& ctx, SEXP name) {
     CodeStream& cs = ctx.cs();
@@ -1935,14 +2339,20 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
     } else if (name == R_MissingArg) {
         cs << BC::push(R_MissingArg);
     } else {
+        unsigned ldvarCachedPos = kNoLdvarCached;
         if (ctx.code.top()->isCached(name)) {
             auto const cache_slot = ctx.code.top()->cacheSlotFor(name);
+            ldvarCachedPos = cs.currentPos();
             cs << BC::ldvarCached(name, cache_slot);
         } else {
             cs << BC::ldvar(name);
         }
-        if (Compiler::profile)
-            cs << ctx.recordType();
+        if (Compiler::profile) {
+            if (Compiler::recordLessEnabled)
+                emitRecordTypeForVar(ctx, cs, name, ldvarCachedPos);
+            else
+                cs << ctx.recordType();
+        }
     }
 }
 
@@ -2028,6 +2438,46 @@ SEXP Compiler::finalize() {
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
+    if (Compiler::recordLessEnabled) {
+        ctx.cfgBuilder.configure(formals, exp);
+
+        // Pre-scan the function body. Stored on ctx for reuse at inner-
+        // function call sites when computing safe captures to hand off.
+        DefUseAnalysis::collectAssignedVars(exp, ctx.bodyAssignedCount_);
+        DefUseAnalysis::collectInnerSuperAssigned(exp, ctx.innerSuperAssigned_);
+        DefUseAnalysis::collectForLoopVars(exp, ctx.forLoopVars_);
+        // DefUseAnalysis::collectPureReadVars(exp, ctx.readVars_);
+
+        for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
+            if (arg.tag() != R_NilValue && TYPEOF(arg.tag()) == SYMSXP)
+                ctx.formalNames_.insert(arg.tag());
+
+        // outerImmutable_: incoming immutable captures, minus names shadowed by
+        // this function's own formals (formal completely hides the outer name)
+        // or body-assigned here (local assignment breaks immutability).
+        for (SEXP s : outerImmutable)
+            if (!ctx.formalNames_.count(s) && !ctx.bodyAssignedCount_.count(s))
+                ctx.outerImmutable_.insert(s);
+
+        // outerControlled_: incoming controlled captures (superset of
+        // immutable), minus names shadowed by this function's own formals.
+        // Body-assigned names stay: when the local def hasn't run, ldvar falls
+        // through to the controlled outer env, not to global.
+        for (SEXP s : outerControlled)
+            if (!ctx.formalNames_.count(s))
+                ctx.outerControlled_.insert(s);
+
+        // functionLocalOrParam_: own formals + body-assigned, minus any var
+        // <<-assigned in an inner function (those can mutate without a
+        // visible local stvar).
+        for (SEXP f : ctx.formalNames_)
+            if (!ctx.innerSuperAssigned_.count(f))
+                ctx.functionLocalOrParam_.insert(f);
+        for (auto& kv : ctx.bodyAssignedCount_)
+            if (!ctx.innerSuperAssigned_.count(kv.first))
+                ctx.functionLocalOrParam_.insert(kv.first);
+    }
+
     // Compile formals (if any) and create signature
     for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_MissingArg) {
@@ -2048,7 +2498,7 @@ SEXP Compiler::finalize() {
             for (auto n : RList(CDR(e))) {
                 if (CAR(e) == symbol::rm) {
                     ctx.code.top()->loadsSlotInCache[n] =
-                        CompilerContext::CodeContext::BindingCacheDisabled;
+                        CodeContext::BindingCacheDisabled;
                 } else if (TYPEOF(n) == SYMSXP) {
                     ctx.code.top()->cacheSlotFor(n);
                 } else {
@@ -2064,6 +2514,8 @@ SEXP Compiler::finalize() {
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
+    function.function()->recordTypeOncePromiseCount =
+        (uint16_t)ctx.recordTypeOncePromiseBitmapSize;
     UNPROTECT(1);
 
 #ifdef ENABLE_SLOWASSERT
@@ -2082,5 +2534,7 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 bool Compiler::loopPeelingEnabled = true;
+
+bool Compiler::recordLessEnabled = true;
 
 } // namespace rir
