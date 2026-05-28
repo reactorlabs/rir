@@ -1922,119 +1922,123 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
     return nullptr;
 }
 
-// Per-env persistent bitmap for record_type_once_promise_. Kept off the env
-// SEXP (which would enlarge every SEXPREC node) by storing it in a global map
-// keyed by env. unordered_map guarantees pointer stability to stored values
-// across rehashes — only erase invalidates, and we only erase from the
-// finalizer once the env dies. So the cached &it->second in evalRirCode stays
-// valid for the whole invocation. The C finalizer is registered on the env,
-// so the bitmap lives exactly as long as the env — including across function
-// exit when promises escape via captured closures. Single-threaded R
-// interpreter, so no locking needed.
-//
-// The map uses a custom pool allocator (below) so that the per-call insert is
-// a free-list pop, not a malloc. The bucket array is reserved at startup so
-// the steady-state working set fits in one allocation without rehashes.
+// // Per-env persistent bitmap for record_type_once_promise_. Kept off the env
+// // SEXP (which would enlarge every SEXPREC node) by storing it in a global
+// map
+// // keyed by env. unordered_map guarantees pointer stability to stored values
+// // across rehashes — only erase invalidates, and we only erase from the
+// // finalizer once the env dies. So the cached &it->second in evalRirCode
+// stays
+// // valid for the whole invocation. The C finalizer is registered on the env,
+// // so the bitmap lives exactly as long as the env — including across function
+// // exit when promises escape via captured closures. Single-threaded R
+// // interpreter, so no locking needed.
+// //
+// // The map uses a custom pool allocator (below) so that the per-call insert
+// is
+// // a free-list pop, not a malloc. The bucket array is reserved at startup so
+// // the steady-state working set fits in one allocation without rehashes.
 
-// Fixed-size slab pool: 1024 slots × 64 bytes. 64 bytes is comfortably above
-// libstdc++'s _Hash_node<pair<const SEXP, uint64_t>> (≈32 B). Overflow past
-// the slab falls back to ::operator new — a slow path; bump N_SLOTS if it's
-// ever hit in practice. Bucket-array allocs (n > 1) bypass the pool.
-struct EnvBitmapPool {
-    static constexpr size_t SLOT_SIZE = 64;
-    static constexpr size_t N_SLOTS = 1024;
+// // Fixed-size slab pool: 1024 slots × 64 bytes. 64 bytes is comfortably above
+// // libstdc++'s _Hash_node<pair<const SEXP, uint64_t>> (≈32 B). Overflow past
+// // the slab falls back to ::operator new — a slow path; bump N_SLOTS if it's
+// // ever hit in practice. Bucket-array allocs (n > 1) bypass the pool.
+// struct EnvBitmapPool {
+//     static constexpr size_t SLOT_SIZE = 64;
+//     static constexpr size_t N_SLOTS = 1024;
 
-    struct alignas(alignof(std::max_align_t)) Slot {
-        unsigned char bytes[SLOT_SIZE];
-    };
+//     struct alignas(alignof(std::max_align_t)) Slot {
+//         unsigned char bytes[SLOT_SIZE];
+//     };
 
-    Slot slab[N_SLOTS];
-    Slot* freeHead;
+//     Slot slab[N_SLOTS];
+//     Slot* freeHead;
 
-    EnvBitmapPool() {
-        for (size_t i = 0; i + 1 < N_SLOTS; ++i)
-            *reinterpret_cast<Slot**>(&slab[i]) = &slab[i + 1];
-        *reinterpret_cast<Slot**>(&slab[N_SLOTS - 1]) = nullptr;
-        freeHead = &slab[0];
-    }
+//     EnvBitmapPool() {
+//         for (size_t i = 0; i + 1 < N_SLOTS; ++i)
+//             *reinterpret_cast<Slot**>(&slab[i]) = &slab[i + 1];
+//         *reinterpret_cast<Slot**>(&slab[N_SLOTS - 1]) = nullptr;
+//         freeHead = &slab[0];
+//     }
 
-    bool owns(void* p) const { return p >= &slab[0] && p < &slab[N_SLOTS]; }
+//     bool owns(void* p) const { return p >= &slab[0] && p < &slab[N_SLOTS]; }
 
-    void* allocate() {
-        if (!freeHead)
-            return ::operator new(SLOT_SIZE);
-        Slot* s = freeHead;
-        freeHead = *reinterpret_cast<Slot**>(s);
-        return s;
-    }
+//     void* allocate() {
+//         if (!freeHead)
+//             return ::operator new(SLOT_SIZE);
+//         Slot* s = freeHead;
+//         freeHead = *reinterpret_cast<Slot**>(s);
+//         return s;
+//     }
 
-    void deallocate(void* p) {
-        if (owns(p)) {
-            Slot* s = static_cast<Slot*>(p);
-            *reinterpret_cast<Slot**>(s) = freeHead;
-            freeHead = s;
-        } else {
-            ::operator delete(p);
-        }
-    }
-};
+//     void deallocate(void* p) {
+//         if (owns(p)) {
+//             Slot* s = static_cast<Slot*>(p);
+//             *reinterpret_cast<Slot**>(s) = freeHead;
+//             freeHead = s;
+//         } else {
+//             ::operator delete(p);
+//         }
+//     }
+// };
 
-static EnvBitmapPool g_envBitmapPool;
+// static EnvBitmapPool g_envBitmapPool;
 
-template <typename T>
-class EnvBitmapPoolAllocator {
-  public:
-    using value_type = T;
-    template <typename U>
-    struct rebind {
-        using other = EnvBitmapPoolAllocator<U>;
-    };
+// template <typename T>
+// class EnvBitmapPoolAllocator {
+//   public:
+//     using value_type = T;
+//     template <typename U>
+//     struct rebind {
+//         using other = EnvBitmapPoolAllocator<U>;
+//     };
 
-    EnvBitmapPoolAllocator() noexcept = default;
-    template <typename U>
-    EnvBitmapPoolAllocator(const EnvBitmapPoolAllocator<U>&) noexcept {}
+//     EnvBitmapPoolAllocator() noexcept = default;
+//     template <typename U>
+//     EnvBitmapPoolAllocator(const EnvBitmapPoolAllocator<U>&) noexcept {}
 
-    T* allocate(size_t n) {
-        const size_t bytes = n * sizeof(T);
-        if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
-            return static_cast<T*>(g_envBitmapPool.allocate());
-        return static_cast<T*>(::operator new(bytes));
-    }
+//     T* allocate(size_t n) {
+//         const size_t bytes = n * sizeof(T);
+//         if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
+//             return static_cast<T*>(g_envBitmapPool.allocate());
+//         return static_cast<T*>(::operator new(bytes));
+//     }
 
-    void deallocate(T* p, size_t n) noexcept {
-        const size_t bytes = n * sizeof(T);
-        if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
-            g_envBitmapPool.deallocate(p);
-        else
-            ::operator delete(p);
-    }
-};
+//     void deallocate(T* p, size_t n) noexcept {
+//         const size_t bytes = n * sizeof(T);
+//         if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
+//             g_envBitmapPool.deallocate(p);
+//         else
+//             ::operator delete(p);
+//     }
+// };
 
-template <typename T, typename U>
-bool operator==(const EnvBitmapPoolAllocator<T>&,
-                const EnvBitmapPoolAllocator<U>&) noexcept {
-    return true;
-}
-template <typename T, typename U>
-bool operator!=(const EnvBitmapPoolAllocator<T>&,
-                const EnvBitmapPoolAllocator<U>&) noexcept {
-    return false;
-}
+// template <typename T, typename U>
+// bool operator==(const EnvBitmapPoolAllocator<T>&,
+//                 const EnvBitmapPoolAllocator<U>&) noexcept {
+//     return true;
+// }
+// template <typename T, typename U>
+// bool operator!=(const EnvBitmapPoolAllocator<T>&,
+//                 const EnvBitmapPoolAllocator<U>&) noexcept {
+//     return false;
+// }
 
-using EnvRecordTypeOnceBitmapMap =
-    std::unordered_map<SEXP, uint64_t, std::hash<SEXP>, std::equal_to<SEXP>,
-                       EnvBitmapPoolAllocator<std::pair<SEXP const, uint64_t>>>;
+// using EnvRecordTypeOnceBitmapMap =
+//     std::unordered_map<SEXP, uint64_t, std::hash<SEXP>, std::equal_to<SEXP>,
+//                        EnvBitmapPoolAllocator<std::pair<SEXP const,
+//                        uint64_t>>>;
 
-static constexpr size_t kEnvRecordTypeOnceBitmapsReserve = 1024;
-static EnvRecordTypeOnceBitmapMap g_envRecordTypeOnceBitmaps;
-static const bool g_envRecordTypeOnceBitmapsReserved = [] {
-    g_envRecordTypeOnceBitmaps.reserve(kEnvRecordTypeOnceBitmapsReserve);
-    return true;
-}();
+// static constexpr size_t kEnvRecordTypeOnceBitmapsReserve = 1024;
+// static EnvRecordTypeOnceBitmapMap g_envRecordTypeOnceBitmaps;
+// static const bool g_envRecordTypeOnceBitmapsReserved = [] {
+//     g_envRecordTypeOnceBitmaps.reserve(kEnvRecordTypeOnceBitmapsReserve);
+//     return true;
+// }();
 
-static void envRecordTypeOnceBitmapFinalize(SEXP env) {
-    g_envRecordTypeOnceBitmaps.erase(env);
-}
+// static void envRecordTypeOnceBitmapFinalize(SEXP env) {
+//     g_envRecordTypeOnceBitmaps.erase(env);
+// }
 
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                  Opcode* initialPC, BindingCache* cache) {
@@ -2107,31 +2111,35 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                    sizeof(uint64_t));
     }
 
-    // Per-env persistent bitmap for record_type_once_promise_. Looked up once
-    // here and cached in `envRecordTypeOnceBitmap` so the hot gate sites pay a
-    // single pointer dereference (same cost as the previous in-SEXP field).
-    // Allocated lazily on first encounter of this env; freed by the finalizer
-    // when the env is collected. Zeroed only on real call entry — promise
-    // forces and deopt resumes preserve the existing bits.
-    uint64_t* envRecordTypeOnceBitmap = nullptr;
-    if (function->recordTypeOncePromiseCount > 0) {
-        auto it = g_envRecordTypeOnceBitmaps.find(env);
-        if (it == g_envRecordTypeOnceBitmaps.end()) {
-            // First sighting of this env: insert zeroed bitmap, register
-            // finalizer to erase the entry when the env is collected.
-            it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
-            R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize, FALSE);
-        } else if (callCtxt) {
-            // Real call entry on a known env: reset for the new invocation.
-            // Promise force / deopt resume falls through and preserves bits.
-            it->second = 0;
-        }
-        envRecordTypeOnceBitmap = &it->second;
-    }
+    // // Per-env persistent bitmap for record_type_once_promise_. Looked up
+    // once
+    // // here and cached in `envRecordTypeOnceBitmap` so the hot gate sites pay
+    // a
+    // // single pointer dereference (same cost as the previous in-SEXP field).
+    // // Allocated lazily on first encounter of this env; freed by the
+    // finalizer
+    // // when the env is collected. Zeroed only on real call entry — promise
+    // // forces and deopt resumes preserve the existing bits.
+    // uint64_t* envRecordTypeOnceBitmap = nullptr;
+    // if (function->recordTypeOncePromiseCount > 0) {
+    //     auto it = g_envRecordTypeOnceBitmaps.find(env);
+    //     if (it == g_envRecordTypeOnceBitmaps.end()) {
+    //         // First sighting of this env: insert zeroed bitmap, register
+    //         // finalizer to erase the entry when the env is collected.
+    //         it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
+    //         R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize,
+    //         FALSE);
+    //     } else if (callCtxt) {
+    //         // Real call entry on a known env: reset for the new invocation.
+    //         // Promise force / deopt resume falls through and preserves bits.
+    //         it->second = 0;
+    //     }
+    //     envRecordTypeOnceBitmap = &it->second;
+    // }
 
-        // This is used in loads for recording if the loaded value was a promise
-        // and if it was forced. Looks at the next instruction, if it's a force,
-        // marks how this load behaved.
+    // This is used in loads for recording if the loaded value was a promise
+    // and if it was forced. Looks at the next instruction, if it's a force,
+    // marks how this load behaved.
 // Determine StateBeforeLastForce from `s` and update typeFeedback at
 // `slotIdx`. Used by all recordForceBehavior* variants below.
 //
@@ -2205,7 +2213,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (*pc == Opcode::record_type_once_) {
                 RECORD_TYPE_ONCE_GATE(fired, raw);
             } else if (*pc == Opcode::record_type_once_promise_) {
-                RECORD_TYPE_ONCE_PROMISE_GATE(*envRecordTypeOnceBitmap, raw);
+
             } else {
                 return;
             }
@@ -2227,13 +2235,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
     // per-invocation env bitmap, then record.
-    auto recordForceBehaviorEnv = [&](SEXP s) {
-        // assert(*pc == Opcode::record_type_once_promise_);
+    // auto recordForceBehaviorEnv = [&](SEXP s) {
+    //     // assert(*pc == Opcode::record_type_once_promise_);
 
-        Immediate raw = *(Immediate*)(pc + 1);
-        RECORD_TYPE_ONCE_PROMISE_GATE(*envRecordTypeOnceBitmap, raw);
-        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
-    };
+    //     Immediate raw = *(Immediate*)(pc + 1);
+    //     RECORD_TYPE_ONCE_PROMISE_GATE(*envRecordTypeOnceBitmap, raw);
+    //     RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+    // };
 
     // For ldvar_cached_fbRecordOnce_ (record_type_once_): gate on the per-code
     // `fired` bitmap so FB is recorded once per invocation. The first recording
@@ -2464,7 +2472,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             LDVAR_CACHED_BODY(/* skip force-behavior recording */)}
 
         INSTRUCTION(ldvar_cached_envRecordFB_){
-            LDVAR_CACHED_BODY(recordForceBehaviorEnv(res))}
+            LDVAR_CACHED_BODY(recordForceBehaviorAlways(res))}
 
         INSTRUCTION(ldvar_cached_fbRecordOnce_){
             LDVAR_CACHED_BODY(recordForceBehaviorRecordOnce(res))}
@@ -2599,15 +2607,14 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_type_once_promise_) {
+
             uint32_t raw = readImmediate();
             advanceImmediate();
-            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-            uint64_t& bitmap = *envRecordTypeOnceBitmap;
-            if (!(bitmap & bit)) {
-                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
-                                          ostack_top());
-                bitmap |= bit;
-            }
+            // uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
+
+            typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                      ostack_top());
+
             NEXT();
         }
 
