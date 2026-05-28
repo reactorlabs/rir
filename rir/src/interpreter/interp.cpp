@@ -1932,12 +1932,101 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 // exit when promises escape via captured closures. Single-threaded R
 // interpreter, so no locking needed.
 //
-// Reserved up front to absorb the steady-state working set in one bucket
-// allocation and avoid rehash latency spikes as inserts trickle in. 1024 is
-// generous for typical call depth + escaped-env counts; oversizing is cheap
-// (~8 KB bucket array), undersizing just costs the rehashes you'd pay anyway.
+// The map uses a custom pool allocator (below) so that the per-call insert is
+// a free-list pop, not a malloc. The bucket array is reserved at startup so
+// the steady-state working set fits in one allocation without rehashes.
+
+// Fixed-size slab pool: 1024 slots × 64 bytes. 64 bytes is comfortably above
+// libstdc++'s _Hash_node<pair<const SEXP, uint64_t>> (≈32 B). Overflow past
+// the slab falls back to ::operator new — a slow path; bump N_SLOTS if it's
+// ever hit in practice. Bucket-array allocs (n > 1) bypass the pool.
+struct EnvBitmapPool {
+    static constexpr size_t SLOT_SIZE = 64;
+    static constexpr size_t N_SLOTS = 1024;
+
+    struct alignas(alignof(std::max_align_t)) Slot {
+        unsigned char bytes[SLOT_SIZE];
+    };
+
+    Slot slab[N_SLOTS];
+    Slot* freeHead;
+
+    EnvBitmapPool() {
+        for (size_t i = 0; i + 1 < N_SLOTS; ++i)
+            *reinterpret_cast<Slot**>(&slab[i]) = &slab[i + 1];
+        *reinterpret_cast<Slot**>(&slab[N_SLOTS - 1]) = nullptr;
+        freeHead = &slab[0];
+    }
+
+    bool owns(void* p) const { return p >= &slab[0] && p < &slab[N_SLOTS]; }
+
+    void* allocate() {
+        if (!freeHead)
+            return ::operator new(SLOT_SIZE);
+        Slot* s = freeHead;
+        freeHead = *reinterpret_cast<Slot**>(s);
+        return s;
+    }
+
+    void deallocate(void* p) {
+        if (owns(p)) {
+            Slot* s = static_cast<Slot*>(p);
+            *reinterpret_cast<Slot**>(s) = freeHead;
+            freeHead = s;
+        } else {
+            ::operator delete(p);
+        }
+    }
+};
+
+static EnvBitmapPool g_envBitmapPool;
+
+template <typename T>
+class EnvBitmapPoolAllocator {
+  public:
+    using value_type = T;
+    template <typename U>
+    struct rebind {
+        using other = EnvBitmapPoolAllocator<U>;
+    };
+
+    EnvBitmapPoolAllocator() noexcept = default;
+    template <typename U>
+    EnvBitmapPoolAllocator(const EnvBitmapPoolAllocator<U>&) noexcept {}
+
+    T* allocate(size_t n) {
+        const size_t bytes = n * sizeof(T);
+        if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
+            return static_cast<T*>(g_envBitmapPool.allocate());
+        return static_cast<T*>(::operator new(bytes));
+    }
+
+    void deallocate(T* p, size_t n) noexcept {
+        const size_t bytes = n * sizeof(T);
+        if (n == 1 && bytes <= EnvBitmapPool::SLOT_SIZE)
+            g_envBitmapPool.deallocate(p);
+        else
+            ::operator delete(p);
+    }
+};
+
+template <typename T, typename U>
+bool operator==(const EnvBitmapPoolAllocator<T>&,
+                const EnvBitmapPoolAllocator<U>&) noexcept {
+    return true;
+}
+template <typename T, typename U>
+bool operator!=(const EnvBitmapPoolAllocator<T>&,
+                const EnvBitmapPoolAllocator<U>&) noexcept {
+    return false;
+}
+
+using EnvRecordTypeOnceBitmapMap =
+    std::unordered_map<SEXP, uint64_t, std::hash<SEXP>, std::equal_to<SEXP>,
+                       EnvBitmapPoolAllocator<std::pair<SEXP const, uint64_t>>>;
+
 static constexpr size_t kEnvRecordTypeOnceBitmapsReserve = 1024;
-static std::unordered_map<SEXP, uint64_t> g_envRecordTypeOnceBitmaps;
+static EnvRecordTypeOnceBitmapMap g_envRecordTypeOnceBitmaps;
 static const bool g_envRecordTypeOnceBitmapsReserved = [] {
     g_envRecordTypeOnceBitmaps.reserve(kEnvRecordTypeOnceBitmapsReserve);
     return true;
