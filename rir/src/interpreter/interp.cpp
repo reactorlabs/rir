@@ -2113,20 +2113,59 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // Allocated lazily on first encounter of this env; freed by the finalizer
     // when the env is collected. Zeroed only on real call entry — promise
     // forces and deopt resumes preserve the existing bits.
+    // uint64_t* envRecordTypeOnceBitmap = nullptr;
+    // if (function->recordTypeOncePromiseCount > 0) {
+    //     auto it = g_envRecordTypeOnceBitmaps.find(env);
+    //     if (it == g_envRecordTypeOnceBitmaps.end()) {
+    //         // First sighting of this env: insert zeroed bitmap, register
+    //         // finalizer to erase the entry when the env is collected.
+    //         it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
+    //         R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize,
+    //         FALSE);
+    //     } else if (callCtxt) {
+    //         // Real call entry on a known env: reset for the new invocation.
+    //         // Promise force / deopt resume falls through and preserves bits.
+    //         it->second = 0;
+    //     }
+    //     envRecordTypeOnceBitmap = &it->second;
+    // }
+
     uint64_t* envRecordTypeOnceBitmap = nullptr;
     if (function->recordTypeOncePromiseCount > 0) {
-        auto it = g_envRecordTypeOnceBitmaps.find(env);
-        if (it == g_envRecordTypeOnceBitmaps.end()) {
-            // First sighting of this env: insert zeroed bitmap, register
-            // finalizer to erase the entry when the env is collected.
-            it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
-            R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize, FALSE);
-        } else if (callCtxt) {
-            // Real call entry on a known env: reset for the new invocation.
-            // Promise force / deopt resume falls through and preserves bits.
-            it->second = 0;
+
+        if (callCtxt != nullptr) {
+            auto it = g_envRecordTypeOnceBitmaps.find(env);
+
+            if (it == g_envRecordTypeOnceBitmaps.end()) {
+                // First sighting of this env: insert zeroed bitmap, register
+                // finalizer to erase the entry when the env is collected.
+                it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
+                R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize,
+                                       FALSE);
+            } else {
+                // Real call entry on a known env: reset for the new invocation.
+                // Promise force / deopt resume falls through and preserves
+                // bits.
+                it->second = 0;
+            }
+        } else {
+            // callCtxt == nullptr covers two cases:
+            //   1. Promise force from evaluatePromise — `env` is PRENV(prom),
+            //      which is the call env of the enclosing function, already
+            //      inserted by its real-call entry.
+            //   2. Top-level entry from rirEval / evalRirCodeExtCaller — R's
+            //      interpreter calls into a RIR-compiled body directly, so
+            //      this is the first time we see this env.
+            // Insert lazily if missing, but never zero (preserve bits across
+            // promise force; harmless for fresh top-level entries).
+            auto it = g_envRecordTypeOnceBitmaps.find(env);
+            if (it == g_envRecordTypeOnceBitmaps.end()) {
+                it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
+                R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize,
+                                       FALSE);
+            }
+            envRecordTypeOnceBitmap = &it->second;
         }
-        envRecordTypeOnceBitmap = &it->second;
     }
 
         // This is used in loads for recording if the loaded value was a promise
