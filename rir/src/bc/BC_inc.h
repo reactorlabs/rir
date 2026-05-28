@@ -63,9 +63,11 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_RANGE_START(imm) ((imm)&0xFFFF)
 #define RECORD_TYPE_ONCE_RANGE_COUNT(imm) ((imm) >> 16)
 
-// record_type_once_promise_ uses a persistent 64-bit bitmap stored in the
-// function's call environment (envsxp_struct::recordTypeOnceBitmap), so the
-// max bit index is 64.
+// record_type_once_promise_ uses a persistent 64-bit bitmap associated with
+// the function's call environment. The bitmap lives in a global side table
+// (g_envRecordTypeOnceBitmaps in interp.cpp), keyed by env, with the entry
+// freed by a C finalizer registered on the env so its lifetime matches the
+// env's. Max bit index is 64.
 #define RECORD_TYPE_ONCE_PROMISE_MAX_IIDX 64
 #define RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST(bitmap64, iidx)                   \
     ((bitmap64) & ((uint64_t)1 << (iidx)))

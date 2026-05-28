@@ -22,6 +22,7 @@
 #include <deque>
 #include <libintl.h>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 
 extern "C" {
@@ -1921,6 +1922,31 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
     return nullptr;
 }
 
+// Per-env persistent bitmap for record_type_once_promise_. Kept off the env
+// SEXP (which would enlarge every SEXPREC node) by storing it in a global map
+// keyed by env. unordered_map guarantees pointer stability to stored values
+// across rehashes — only erase invalidates, and we only erase from the
+// finalizer once the env dies. So the cached &it->second in evalRirCode stays
+// valid for the whole invocation. The C finalizer is registered on the env,
+// so the bitmap lives exactly as long as the env — including across function
+// exit when promises escape via captured closures. Single-threaded R
+// interpreter, so no locking needed.
+//
+// Reserved up front to absorb the steady-state working set in one bucket
+// allocation and avoid rehash latency spikes as inserts trickle in. 1024 is
+// generous for typical call depth + escaped-env counts; oversizing is cheap
+// (~8 KB bucket array), undersizing just costs the rehashes you'd pay anyway.
+static constexpr size_t kEnvRecordTypeOnceBitmapsReserve = 1024;
+static std::unordered_map<SEXP, uint64_t> g_envRecordTypeOnceBitmaps;
+static const bool g_envRecordTypeOnceBitmapsReserved = [] {
+    g_envRecordTypeOnceBitmaps.reserve(kEnvRecordTypeOnceBitmapsReserve);
+    return true;
+}();
+
+static void envRecordTypeOnceBitmapFinalize(SEXP env) {
+    g_envRecordTypeOnceBitmaps.erase(env);
+}
+
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                  Opcode* initialPC, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
@@ -1992,12 +2018,27 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                    sizeof(uint64_t));
     }
 
-    // Per-function-invocation bitmap for record_type_once_promise_. Lives in
-    // the call env so it persists across promise forces. Zero only on a real
-    // call entry (not on promise forces / deopt resumes), using the main
-    // body's count as the authority.
-    if (callCtxt && function->recordTypeOncePromiseCount > 0)
-        env->u.envsxp.recordTypeOnceBitmap = 0;
+    // Per-env persistent bitmap for record_type_once_promise_. Looked up once
+    // here and cached in `envRecordTypeOnceBitmap` so the hot gate sites pay a
+    // single pointer dereference (same cost as the previous in-SEXP field).
+    // Allocated lazily on first encounter of this env; freed by the finalizer
+    // when the env is collected. Zeroed only on real call entry — promise
+    // forces and deopt resumes preserve the existing bits.
+    uint64_t* envRecordTypeOnceBitmap = nullptr;
+    if (function->recordTypeOncePromiseCount > 0) {
+        auto it = g_envRecordTypeOnceBitmaps.find(env);
+        if (it == g_envRecordTypeOnceBitmaps.end()) {
+            // First sighting of this env: insert zeroed bitmap, register
+            // finalizer to erase the entry when the env is collected.
+            it = g_envRecordTypeOnceBitmaps.emplace(env, 0ULL).first;
+            R_RegisterCFinalizerEx(env, envRecordTypeOnceBitmapFinalize, FALSE);
+        } else if (callCtxt) {
+            // Real call entry on a known env: reset for the new invocation.
+            // Promise force / deopt resume falls through and preserves bits.
+            it->second = 0;
+        }
+        envRecordTypeOnceBitmap = &it->second;
+    }
 
         // This is used in loads for recording if the loaded value was a promise
         // and if it was forced. Looks at the next instruction, if it's a force,
@@ -2075,8 +2116,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (*pc == Opcode::record_type_once_) {
                 RECORD_TYPE_ONCE_GATE(fired, raw);
             } else if (*pc == Opcode::record_type_once_promise_) {
-                RECORD_TYPE_ONCE_PROMISE_GATE(
-                    env->u.envsxp.recordTypeOnceBitmap, raw);
+                RECORD_TYPE_ONCE_PROMISE_GATE(*envRecordTypeOnceBitmap, raw);
             } else {
                 return;
             }
@@ -2102,7 +2142,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // assert(*pc == Opcode::record_type_once_promise_);
 
         Immediate raw = *(Immediate*)(pc + 1);
-        RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw);
+        RECORD_TYPE_ONCE_PROMISE_GATE(*envRecordTypeOnceBitmap, raw);
         RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
@@ -2473,7 +2513,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             uint32_t raw = readImmediate();
             advanceImmediate();
             uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-            uint64_t& bitmap = env->u.envsxp.recordTypeOnceBitmap;
+            uint64_t& bitmap = *envRecordTypeOnceBitmap;
             if (!(bitmap & bit)) {
                 typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
                                           ostack_top());
