@@ -20,7 +20,7 @@
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
-#include <R_ext/RS.h> /* for Memzero */
+#include <R_ext/RS.h> /*  for Memzero */
 
 #include "llvm/IR/Attributes.h"
 
