@@ -266,7 +266,14 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_;
+               bc == Opcode::record_type_
+#ifdef RECORD_LESS_ENABLED
+               || bc == Opcode::record_type_simple_ ||
+               bc == Opcode::record_type_leaf_ ||
+               bc == Opcode::record_type_root_inner_ ||
+               bc == Opcode::record_type_inner_node_
+#endif
+            ;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -566,6 +573,12 @@ class BC {
         case Opcode::record_call_:
         case Opcode::record_test_:
         case Opcode::record_type_:
+#ifdef RECORD_LESS_ENABLED
+        case Opcode::record_type_simple_:
+        case Opcode::record_type_leaf_:
+        case Opcode::record_type_root_inner_:
+        case Opcode::record_type_inner_node_:
+#endif
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

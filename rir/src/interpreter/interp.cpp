@@ -2339,10 +2339,39 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_) {
             Immediate idx = readImmediate();
             advanceImmediate();
-            SEXP t = ostack_top();
-            typeFeedback->record_type(idx, t);
+            typeFeedback->record_type(idx, ostack_top());
             NEXT();
         }
+
+#ifdef RECORD_LESS_ENABLED
+        INSTRUCTION(record_type_simple_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            typeFeedback->record_type_simple(idx, ostack_top());
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_leaf_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            typeFeedback->record_type_leaf(idx, ostack_top());
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_root_inner_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            typeFeedback->record_type_root_inner(idx, ostack_top());
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_inner_node_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            typeFeedback->record_type_inner_node(idx, ostack_top());
+            NEXT();
+        }
+#endif
 
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT

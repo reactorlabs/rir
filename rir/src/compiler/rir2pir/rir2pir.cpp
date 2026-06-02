@@ -399,6 +399,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+#ifdef RECORD_LESS_ENABLED
+    case Opcode::record_type_simple_:
+    case Opcode::record_type_leaf_:
+    case Opcode::record_type_root_inner_:
+    case Opcode::record_type_inner_node_:
+#endif
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
         auto& feedback = typeFeedback->types(idx);

@@ -196,31 +196,12 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-    inline void record(SEXP e) {
+    // Shared core: update all observed-value flags from e.
 
-        // root  leaf
-        // 0    0      inner node           A B
-        // 0    1      leaf (n>1)           B
-        // 1    0      root (n>1)           A
-        // 1    1      variable lookup      -
-
-        // negatives in fast path
-        // leaf:  B    (check for object and get false, don't notify parent)
-        // inner node: A (don't record)
-
-        // postives in fast path
-        // leaf: -
-        // inner node: skips recording
-
-#ifdef RECORD_LESS_ENABLED
-        // A: inner nodes are suppressed by default in expr-tree mode
-        if (shouldNotRecord)
-            return;
-#endif
-
+    __attribute__((always_inline)) void doRecord(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
-        // Set attribs flag for every object even if the SEXP does  not
+        // Set attribs flag for every object even if the SEXP does not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
         // the case in some very specific cases:
@@ -245,16 +226,66 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
+        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
+    }
+
 #ifdef RECORD_LESS_ENABLED
-        // B: if leaf sees an object, enable parent to record too
+    inline void notifyParent() {
         if (object && parent && !hasNotifiedParent) {
             parent->shouldNotRecord = false;
             hasNotifiedParent = true;
         }
+    }
 #endif
 
-        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
+    // Generic entry used by the standard record_type_ instruction (flag off:
+    // plain doRecord).
+    inline void record(SEXP e) {
+#ifdef RECORD_LESS_ENABLED
+        if (shouldNotRecord)
+            return; // A
+        doRecord(e);
+        notifyParent(); // B
+#else
+        doRecord(e);
+#endif
     }
+
+  public:
+    // Four specializations corresponding to the expression-tree node type.
+    // Only compiled when RECORD_LESS_ENABLED; callers select the right one
+    // at compile time (different record_ opcodes / TypeFeedback entry points).
+    //
+    //  root  leaf   case
+    //   0     0     inner node:       A (skip if suppressed) + doRecord + B
+    //   (notify parent) 0     1     leaf with parent: doRecord + B (never
+    //   skipped, but notifies parent) 1     0     root inner:       A +
+    //   doRecord           (no parent to notify) 1     1     variable lookup:
+    //   doRecord               (no A, no B)
+
+#ifdef RECORD_LESS_ENABLED
+    inline void recordInnerNode(SEXP e) {
+        if (shouldNotRecord)
+            return; // A
+        doRecord(e);
+        notifyParent(); // B
+    }
+
+    inline void recordLeaf(SEXP e) { // root=0, leaf=1
+        doRecord(e);
+        notifyParent(); // B
+    }
+
+    inline void recordRootInner(SEXP e) { // root=1, leaf=0
+        if (shouldNotRecord)
+            return; // A
+        doRecord(e);
+    }
+
+    inline void recordSimple(SEXP e) { // root=1, leaf=1 — plain variable lookup
+        doRecord(e);
+    }
+#endif
 };
 
 #ifndef RECORD_LESS_ENABLED
@@ -408,10 +439,29 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(test(idx), idx, owner_));
     }
 
-    void record_type(uint32_t idx, const SEXP e) {
+    inline void record_type(uint32_t idx, const SEXP e) {
         types(idx).record(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
+
+#ifdef RECORD_LESS_ENABLED
+    inline void record_type_inner_node(uint32_t idx, const SEXP e) {
+        types(idx).recordInnerNode(e);
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
+    }
+    inline void record_type_leaf(uint32_t idx, const SEXP e) {
+        types(idx).recordLeaf(e);
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
+    }
+    inline void record_type_root_inner(uint32_t idx, const SEXP e) {
+        types(idx).recordRootInner(e);
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
+    }
+    inline void record_type_simple(uint32_t idx, const SEXP e) {
+        types(idx).recordSimple(e);
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
+    }
+#endif
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
         ObservedValues& slot = types(idx);

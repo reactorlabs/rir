@@ -145,6 +145,7 @@ class CompilerContext {
 #ifdef RECORD_LESS_ENABLED
     std::stack<std::vector<uint32_t>> slotsStack;
     std::map<uint32_t, uint32_t> parents;
+    std::vector<Code*> allCodes_;
 #endif
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
@@ -198,6 +199,9 @@ class CompilerContext {
             pushedPromiseContexts--;
         delete code.top();
         code.pop();
+#ifdef RECORD_LESS_ENABLED
+        allCodes_.push_back(res);
+#endif
         return res;
     }
 
@@ -252,20 +256,52 @@ class CompilerContext {
 
 #ifdef RECORD_LESS_ENABLED
     void setTypeFeedbackParents(TypeFeedback& tf) {
+        // Set up parent pointers in TypeFeedback.
         for (auto& kv : parents) {
             tf.types(kv.first).parent = &tf.types(kv.second);
         }
 
-        // determine leaves
-        std::set<int> values;
+        // parentSlots: slots that have children (not leaves).
+        // childSlots:  slots that have a parent (not roots).
+        std::set<uint32_t> parentSlots;
+        std::set<uint32_t> childSlots;
         for (const auto& kv : parents) {
-            values.insert(kv.second);
+            childSlots.insert(kv.first);
+            parentSlots.insert(kv.second);
         }
 
         for (size_t i = 0; i < tf.types_size(); i++) {
             auto& slot = tf.types(i);
-            slot.isLeaf = values.find(i) == values.end();
+            slot.isLeaf = parentSlots.find(i) == parentSlots.end();
             slot.shouldNotRecord = !slot.isLeaf;
+        }
+
+        // Patch record_type_ opcodes in every Code object to the appropriate
+        // specialized variant based on (isRoot, isLeaf):
+        //   leaf + !root → record_type_leaf_
+        //   !leaf + root → record_type_root_inner_
+        //   !leaf + !root → record_type_inner_node_
+        //   leaf + root  → record_type_ (unchanged, plain doRecord)
+        for (Code* code : allCodes_) {
+            Opcode* pc = code->code();
+            Opcode* end = code->endCode();
+            while (pc < end) {
+                if (*pc == Opcode::record_type_) {
+                    uint32_t idx;
+                    memcpy(&idx, pc + 1, sizeof(idx));
+                    bool isLeaf = parentSlots.find(idx) == parentSlots.end();
+                    bool isRoot = childSlots.find(idx) == childSlots.end();
+                    if (isLeaf && isRoot)
+                        *pc = Opcode::record_type_simple_;
+                    else if (isLeaf && !isRoot)
+                        *pc = Opcode::record_type_leaf_;
+                    else if (!isLeaf && isRoot)
+                        *pc = Opcode::record_type_root_inner_;
+                    else
+                        *pc = Opcode::record_type_inner_node_;
+                }
+                pc = BC::next(pc);
+            }
         }
     }
 #endif

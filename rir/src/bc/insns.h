@@ -445,6 +445,18 @@ DEF_INSTR(ret_, 0, 1, 0)
  */
 DEF_INSTR(record_call_, 1, 1, 1)
 DEF_INSTR(record_type_, 1, 1, 1)
+/* Specialized record_type_ variants emitted by the compiler under
+ * RECORD_LESS_ENABLED. Correspond to the four expression-tree node cases (root
+ * x leaf): record_type_leaf_:       root=0, leaf=1 — doRecord + B (notify
+ * parent) record_type_root_inner_: root=1, leaf=0 — A (skip if suppressed) +
+ * doRecord record_type_inner_node_: root=0, leaf=0 — A + doRecord + B
+ * The plain record_type_ covers root=1, leaf=1 (simple variable lookup). */
+#ifdef RECORD_LESS_ENABLED
+DEF_INSTR(record_type_simple_, 1, 1, 1)
+DEF_INSTR(record_type_leaf_, 1, 1, 1)
+DEF_INSTR(record_type_root_inner_, 1, 1, 1)
+DEF_INSTR(record_type_inner_node_, 1, 1, 1)
+#endif
 DEF_INSTR(record_test_, 1, 1, 1)
 
 DEF_INSTR(int3_, 0, 0, 0)
