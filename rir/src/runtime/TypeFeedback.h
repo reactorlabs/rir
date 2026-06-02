@@ -194,10 +194,14 @@ struct ObservedValues {
         //     > .Internal(inspect(mf[["x"]]))
         //     @56546cb06390 14 REALSXP g0c3 [OBJ,NAM(2)] (len=3, tl=0) 41,42,43
 
-        notScalar = notScalar || (TYPEOF(e) != S4SXP && XLENGTH(e) != 1);
-        object = object || Rf_isObject(e);
-        attribs = attribs || object || ATTRIB(e) != R_NilValue;
-        notFastVecelt = notFastVecelt || !fastVeceltOk(e);
+        if (!notScalar)
+            notScalar = TYPEOF(e) != S4SXP && XLENGTH(e) != 1;
+        if (!object)
+            object = Rf_isObject(e);
+        if (!attribs)
+            attribs = object || ATTRIB(e) != R_NilValue;
+        if (!notFastVecelt)
+            notFastVecelt = !fastVeceltOk(e);
 
         uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes) {
