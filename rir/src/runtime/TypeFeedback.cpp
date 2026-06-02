@@ -227,11 +227,13 @@ void ObservedValues::print(std::ostream& out) const {
         out << "<?>";
     }
 
+#ifdef RECORD_LESS_ENABLED
     out << " @ " << this;
     if (parent) {
         out << " -> " << parent;
     }
-    out << ", should record: " << shouldRecord;
+    out << ", should not record: " << shouldNotRecord;
+#endif
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }

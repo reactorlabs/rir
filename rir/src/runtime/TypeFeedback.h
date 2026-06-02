@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "Rinternals.h"
+#include "bc/recordless.h"
 #include "common.h"
 #include "interpreter/profiler.h"
 #include "recording_hooks.h"
@@ -163,19 +164,27 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
+    // byte 0: existing flags
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
     uint8_t notScalar : 1;
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-
-    ObservedValues* parent;
-    bool isLeaf;
-    bool shouldRecord;
-    bool hasNotifiedParent;
-
+#ifdef RECORD_LESS_ENABLED
+    // byte 1: expression-tree flags (5 bits spare)
+    uint8_t isLeaf : 1;
+    uint8_t shouldNotRecord : 1;
+    uint8_t hasNotifiedParent : 1;
+#endif
+    // bytes 2-4 (or 1-3 without recordless): type observations
     std::array<uint8_t, MaxTypes> seen;
+#ifdef RECORD_LESS_ENABLED
+    // bytes 5-7: implicit padding to 8-byte align the pointer below
+    ObservedValues* parent;
+    // total with recordless:    1+1+3+3(pad)+8 = 16 bytes
+    // total without recordless: 1+3 = 4 bytes (matches original static_assert)
+#endif
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
@@ -203,10 +212,11 @@ struct ObservedValues {
         // leaf: -
         // inner node: skips recording
 
-        // A
-        // shouldRecord = true;
-        if (!shouldRecord)
+#ifdef RECORD_LESS_ENABLED
+        // A: inner nodes are suppressed by default in expr-tree mode
+        if (shouldNotRecord)
             return;
+#endif
 
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
@@ -235,18 +245,22 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        // B
+#ifdef RECORD_LESS_ENABLED
+        // B: if leaf sees an object, enable parent to record too
         if (object && parent && !hasNotifiedParent) {
-            parent->shouldRecord = true;
+            parent->shouldNotRecord = false;
             hasNotifiedParent = true;
         }
+#endif
 
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 };
 
-// static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
-//               "Size needs to fit inside a record_ bc immediate args");
+#ifndef RECORD_LESS_ENABLED
+static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+              "Size needs to fit inside a record_ bc immediate args");
+#endif
 
 enum class Opcode : uint8_t;
 

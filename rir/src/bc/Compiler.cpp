@@ -7,6 +7,7 @@
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
+#include "bc/recordless.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
@@ -141,8 +142,10 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
 
+#ifdef RECORD_LESS_ENABLED
     std::stack<std::vector<uint32_t>> slotsStack;
     std::map<uint32_t, uint32_t> parents;
+#endif
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -208,9 +211,17 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    void popNodeForSlotsIfEmpty() {
-        if (slotsStack.top().empty()) {
-            slotsStack.pop();
+#ifdef RECORD_LESS_ENABLED
+    void popNodeForSlots() {
+        // Always pop the inner vector for this LANGSXP. If it still has
+        // unhandled child slots (non-profiled call — no recordType(true) was
+        // emitted), propagate them to the enclosing level so they are not
+        // orphaned and don't corrupt the stack.
+        auto slots = std::move(slotsStack.top());
+        slotsStack.pop();
+        if (!slots.empty() && !slotsStack.empty()) {
+            for (auto s : slots)
+                slotsStack.top().push_back(s);
         }
     }
 
@@ -218,24 +229,28 @@ class CompilerContext {
 
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
-        // std::cerr << "\n"
-        //           << " slotsStack size: " << slotsStack.size() << "\n";
-
-        // std::cerr << "\n"
-        //           << " registerSlot " << slotIdx << "\n";
+#ifdef RECORD_LESS_DEBUG
+        std::cerr << "\n slotsStack size: " << slotsStack.size() << "\n";
+        std::cerr << "\n registerSlot " << slotIdx << "\n";
+#endif
 
         auto& currentSlots = slotsStack.top();
         if (!isParent) {
             currentSlots.push_back(slotIdx);
         } else {
+            // Link all current children to this parent slot, then replace the
+            // current level with just this slot. Do NOT pop — popNodeForSlots()
+            // in compileExpr is the single owner of the push/pop balance.
             for (auto child : currentSlots) {
                 parents[child] = slotIdx;
             }
-            slotsStack.pop();
-            slotsStack.top().push_back(slotIdx);
+            currentSlots.clear();
+            currentSlots.push_back(slotIdx);
         }
     }
+#endif
 
+#ifdef RECORD_LESS_ENABLED
     void setTypeFeedbackParents(TypeFeedback& tf) {
         for (auto& kv : parents) {
             tf.types(kv.first).parent = &tf.types(kv.second);
@@ -250,15 +265,21 @@ class CompilerContext {
         for (size_t i = 0; i < tf.types_size(); i++) {
             auto& slot = tf.types(i);
             slot.isLeaf = values.find(i) == values.end();
-            slot.shouldRecord = slot.isLeaf;
+            slot.shouldNotRecord = !slot.isLeaf;
         }
     }
+#endif
 
+#ifdef RECORD_LESS_ENABLED
     BC recordType(bool isParent = false) {
         auto slotIdx = typeFeedbackBuilder.addType();
-        registerSlot(slotIdx, isParent);
+        if (!slotsStack.empty())
+            registerSlot(slotIdx, isParent);
         return BC::recordType(slotIdx);
     }
+#else
+    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
+#endif
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 
@@ -602,7 +623,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
+#ifdef RECORD_LESS_ENABLED
             cs << ctx.recordType(true);
+#else
+            cs << ctx.recordType();
+#endif
 
         return true;
     }
@@ -2012,17 +2037,23 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         // Function application
     case LANGSXP: {
 
+#if defined(RECORD_LESS_ENABLED) && defined(RECORD_LESS_DEBUG)
         std::cerr << "pushing slot node for expr: \n";
         Rf_PrintValue(exp);
         std::cerr << "\n\n";
+#endif
 
+#ifdef RECORD_LESS_ENABLED
         ctx.pushNewNodeForSlots();
+#endif
 
         auto fun = CAR(exp);
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
 
-        ctx.popNodeForSlotsIfEmpty();
+#ifdef RECORD_LESS_ENABLED
+        ctx.popNodeForSlots();
+#endif
 
     } break;
         // Variable lookup
@@ -2126,7 +2157,9 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
+#ifdef RECORD_LESS_ENABLED
     ctx.setTypeFeedbackParents(*feedback);
+#endif
 
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
