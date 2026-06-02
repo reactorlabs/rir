@@ -2344,13 +2344,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
 #ifdef RECORD_LESS_ENABLED
-        INSTRUCTION(record_type_simple_) {
-            Immediate idx = readImmediate();
-            advanceImmediate();
-            typeFeedback->record_type_simple(idx, ostack_top());
-            NEXT();
-        }
-
         INSTRUCTION(record_type_leaf_) {
             Immediate idx = readImmediate();
             advanceImmediate();

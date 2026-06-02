@@ -291,9 +291,7 @@ class CompilerContext {
                     memcpy(&idx, pc + 1, sizeof(idx));
                     bool isLeaf = parentSlots.find(idx) == parentSlots.end();
                     bool isRoot = childSlots.find(idx) == childSlots.end();
-                    if (isLeaf && isRoot)
-                        *pc = Opcode::record_type_simple_;
-                    else if (isLeaf && !isRoot)
+                    if (isLeaf)
                         *pc = Opcode::record_type_leaf_;
                     else if (!isLeaf && isRoot)
                         *pc = Opcode::record_type_root_inner_;

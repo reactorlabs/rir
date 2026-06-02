@@ -282,9 +282,6 @@ struct ObservedValues {
         doRecord(e);
     }
 
-    inline void recordSimple(SEXP e) { // root=1, leaf=1 — plain variable lookup
-        doRecord(e);
-    }
 #endif
 };
 
@@ -455,10 +452,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     }
     inline void record_type_root_inner(uint32_t idx, const SEXP e) {
         types(idx).recordRootInner(e);
-        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
-    }
-    inline void record_type_simple(uint32_t idx, const SEXP e) {
-        types(idx).recordSimple(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 #endif

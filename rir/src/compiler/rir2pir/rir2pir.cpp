@@ -400,7 +400,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
 #ifdef RECORD_LESS_ENABLED
-    case Opcode::record_type_simple_:
     case Opcode::record_type_leaf_:
     case Opcode::record_type_root_inner_:
     case Opcode::record_type_inner_node_:

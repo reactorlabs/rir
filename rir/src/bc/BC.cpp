@@ -83,7 +83,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::record_test_:
     case Opcode::record_type_:
 #ifdef RECORD_LESS_ENABLED
-    case Opcode::record_type_simple_:
     case Opcode::record_type_leaf_:
     case Opcode::record_type_root_inner_:
     case Opcode::record_type_inner_node_:
@@ -169,7 +168,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::record_call_:
         case Opcode::record_type_:
 #ifdef RECORD_LESS_ENABLED
-        case Opcode::record_type_simple_:
         case Opcode::record_type_leaf_:
         case Opcode::record_type_root_inner_:
         case Opcode::record_type_inner_node_:
@@ -266,7 +264,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::record_call_:
         case Opcode::record_type_:
 #ifdef RECORD_LESS_ENABLED
-        case Opcode::record_type_simple_:
         case Opcode::record_type_leaf_:
         case Opcode::record_type_root_inner_:
         case Opcode::record_type_inner_node_:
@@ -407,7 +404,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_test_:
     case Opcode::record_type_:
 #ifdef RECORD_LESS_ENABLED
-    case Opcode::record_type_simple_:
     case Opcode::record_type_leaf_:
     case Opcode::record_type_root_inner_:
     case Opcode::record_type_inner_node_:
