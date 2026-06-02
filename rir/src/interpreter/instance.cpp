@@ -44,7 +44,8 @@ void context_init() {
     getterPlaceholderSym = Rf_install("*.placeholder.getter.*");
     quoteSym = Rf_install("quote");
 
-    auto pir = getenv("PIR_ENABLE");
+    // auto pir = getenv("PIR_ENABLE");
+    char pir[] = "off";
 
     c->closureCompiler = [](SEXP closure, SEXP name) {
         return rirCompile(closure, R_NilValue);
