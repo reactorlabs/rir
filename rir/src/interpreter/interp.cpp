@@ -1994,28 +1994,55 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         if (*pc != Opcode::record_type_)
             return;
 
-        ObservedValues::StateBeforeLastForce state =
-            ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else if (PRVALUE(s) != R_UnboundValue) {
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        } else {
-            // This is a lazy loading stub, it replaces the promise with the
-            // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
-                state = ObservedValues::StateBeforeLastForce::value;
-            else
-                state = ObservedValues::StateBeforeLastForce::promise;
-        }
-
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        // Access the feedback slot directly (cached typeFeedback) and update
-        // stateBeforeLastForce — no std::function / lambda indirection.
-        ObservedValues& feedback = typeFeedback->types(idx);
-        if (feedback.stateBeforeLastForce < state) {
-            feedback.stateBeforeLastForce = state;
+        // stateBeforeLastForce is a monotonic lattice (unknown < value <
+        // evaluatedPromise < promise). Switch on the CURRENT state and run only
+        // the SEXP queries that could still promote it — once at the `promise`
+        // top, no input can advance it, so we do no work. Direct slot access
+        // via the cached typeFeedback (no std::function / lambda indirection).
+        ObservedValues& fb__ = typeFeedback->types(idx);
+        switch (
+            (ObservedValues::StateBeforeLastForce)fb__.stateBeforeLastForce) {
+        case ObservedValues::StateBeforeLastForce::promise:
+            /* lattice top — no input can promote */
+            break;
+        case ObservedValues::StateBeforeLastForce::evaluatedPromise:
+            /* only a genuine unevaluated promise advances */
+            if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&
+                CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::promise;
+            break;
+        case ObservedValues::StateBeforeLastForce::value:
+            /* non-PROMSXP stays value; otherwise classify the promise */
+            if (TYPEOF(s) != PROMSXP)
+                break;
+            if (PRVALUE(s) != R_UnboundValue) {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;
+            } else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch) {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::promise;
+            }
+            /* else: lazyLoadDBfetch stub — still value */
+            break;
+        case ObservedValues::StateBeforeLastForce::unknown:
+            /* first observation — full classification */
+            if (TYPEOF(s) != PROMSXP) {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::value;
+            } else if (PRVALUE(s) != R_UnboundValue) {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::evaluatedPromise;
+            } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::value;
+            } else {
+                fb__.stateBeforeLastForce =
+                    ObservedValues::StateBeforeLastForce::promise;
+            }
+            break;
         }
     };
 
