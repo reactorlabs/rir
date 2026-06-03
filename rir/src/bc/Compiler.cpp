@@ -1321,8 +1321,24 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
         cs.addSrc(ast);
         if (!voidContext) {
-            if (Compiler::profile)
+            if (Compiler::profile) {
+#ifdef RECORD_LESS_ENABLED
+                // `[` (Bracket) is type-preserving: x[...] has the same
+                // SEXPTYPE as x for non-object x, so its result type is
+                // inferable from the lhs leaf — record it as an inner node
+                // (elidable). If x is ever an object (S3/S4 `[` dispatch can
+                // return anything), the lhs leaf's notifyParent re-enables this
+                // record. `[[` (DoubleBracket) extracts an *element* whose type
+                // varies (e.g. list(3,"hello")[[i]]) and is not inferable, so
+                // it must keep recording.
+                if (fun == symbol::Bracket)
+                    cs << ctx.recordType(true);
+                else
+                    cs << ctx.recordType();
+#else
                 cs << ctx.recordType();
+#endif
+            }
             cs << BC::visible();
         } else {
             cs << BC::pop();

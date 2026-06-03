@@ -231,7 +231,10 @@ void ObservedValues::print(std::ostream& out) const {
     if (parent) {
         out << " -> " << parent;
     }
-    out << ", should not record: " << shouldNotRecord;
+    // Cast the uint8_t bitfields to int: streaming a uint8_t (= unsigned char)
+    // prints a character glyph (0x00/0x01 control chars), not the digits 0/1.
+    out << ", isLeaf: " << (int)isLeaf
+        << ", should not record: " << (int)shouldNotRecord;
 #endif
 }
 
