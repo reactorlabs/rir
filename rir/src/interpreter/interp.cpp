@@ -1983,6 +1983,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = c->code();
     }
 
+    // Cached once here so the hot recordForceBehavior path reuses them instead
+    // of recomputing c->function()->typeFeedback() per call (baseline fix).
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
     uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
@@ -2002,61 +2004,30 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // This is used in loads for recording if the loaded value was a promise
         // and if it was forced. Looks at the next instruction, if it's a force,
         // marks how this load behaved.
-// Determine StateBeforeLastForce from `s` and update typeFeedback at
-// `slotIdx`. Used by all recordForceBehavior* variants below.
-//
-// stateBeforeLastForce is a monotonic lattice — unknown < value <
-// evaluatedPromise < promise — and only moves upward. We switch on the
-// current state and run only the SEXP queries that could still cause a
-// promotion. Direct access to types(slotIdx) bypasses the std::function-based
-// record_type lambda overload, which adds type-erasure overhead.
-#define RECORD_FB_AT_SLOT(slotIdx, s)                                          \
-    do {                                                                       \
-        /* FIXME: cf. #1260 */                                                 \
-        ObservedValues& fb__ = c->function()->typeFeedback()->types(slotIdx);  \
-        switch (                                                               \
-            (ObservedValues::StateBeforeLastForce)fb__.stateBeforeLastForce) { \
-        case ObservedValues::StateBeforeLastForce::promise:                    \
-            /* lattice top — no input can promote */                         \
-            break;                                                             \
-        case ObservedValues::StateBeforeLastForce::evaluatedPromise:           \
-            /* only a genuine unevaluated promise advances */                  \
-            if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&        \
-                CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)                     \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::promise;             \
-            break;                                                             \
-        case ObservedValues::StateBeforeLastForce::value:                      \
-            /* non-PROMSXP stays value; otherwise classify the promise */      \
-            if (TYPEOF(s) != PROMSXP)                                          \
-                break;                                                         \
-            if (PRVALUE(s) != R_UnboundValue) {                                \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
-            } else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch) {            \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::promise;             \
-            }                                                                  \
-            /* else: lazyLoadDBfetch stub — still value */                   \
-            break;                                                             \
-        case ObservedValues::StateBeforeLastForce::unknown:                    \
-            /* first observation — full classification */                    \
-            if (TYPEOF(s) != PROMSXP) {                                        \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::value;               \
-            } else if (PRVALUE(s) != R_UnboundValue) {                         \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::evaluatedPromise;    \
-            } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {            \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::value;               \
-            } else {                                                           \
-                fb__.stateBeforeLastForce =                                    \
-                    ObservedValues::StateBeforeLastForce::promise;             \
-            }                                                                  \
-            break;                                                             \
-        }                                                                      \
-    } while (0)
+    // Determine StateBeforeLastForce from `s` and update typeFeedback at
+    // `slotIdx`. Used by all recordForceBehavior* variants below. Classify the
+    // load, then move the slot up the monotonic lattice (unknown < value <
+    // evaluatedPromise < promise). Direct types(slotIdx) access via the cached
+    // typeFeedback (no std::function indirection). Was a macro purely to force
+    // inlining; always_inline does that with identical semantics.
+    auto recordFbAtSlot = [&](uint32_t slotIdx, SEXP s)
+        __attribute__((always_inline)) {
+        // FIXME: cf. #1260
+        ObservedValues::StateBeforeLastForce state =
+            ObservedValues::StateBeforeLastForce::unknown;
+        if (TYPEOF(s) != PROMSXP) {
+            state = ObservedValues::StateBeforeLastForce::value;
+        } else if (PRVALUE(s) != R_UnboundValue) {
+            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
+        } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {
+            state = ObservedValues::StateBeforeLastForce::value;
+        } else {
+            state = ObservedValues::StateBeforeLastForce::promise;
+        }
+        ObservedValues& fb__ = typeFeedback->types(slotIdx);
+        if (fb__.stateBeforeLastForce < state)
+            fb__.stateBeforeLastForce = state;
+    };
 
     // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
     // on the immediately following opcode. Handles all three record kinds:
@@ -2065,11 +2036,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     //                               `fired` bitmap
     //   record_type_once_promise_ — record FB once per invocation, gated by
     //                               the per-env bitmap
-    // Single RECORD_FB_AT_SLOT expansion: computing `idx` (and bailing) first
-    // keeps the large macro from being duplicated, which would bloat this
-    // lambda (inlined at many ldvar sites) and pressure the interpreter loop's
-    // instruction cache.
-    auto recordForceBehavior = [&](SEXP s) {
+    // Single recordFbAtSlot call: computing `idx` (and bailing) first avoids
+    // duplicating the classification at each ldvar site. always_inline keeps
+    // both this lambda and recordFbAtSlot inlined regardless of the function's
+    // inlining budget (baseline fix).
+    auto recordForceBehavior = [&](SEXP s) __attribute__((always_inline)) {
         Immediate raw = *(Immediate*)(pc + 1);
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
@@ -2084,26 +2055,27 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         uint32_t idx = (*pc == Opcode::record_type_)
                            ? raw
                            : RECORD_TYPE_ONCE_SLOT_IDX(raw);
-        RECORD_FB_AT_SLOT(idx, s);
+        recordFbAtSlot(idx, s);
     };
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.
-    auto recordForceBehaviorAlways = [&](SEXP s) {
+    auto recordForceBehaviorAlways = [&](SEXP s)
+        __attribute__((always_inline)) {
         // assert(*pc == Opcode::record_type_);
 
         Immediate slotIdx = *(Immediate*)(pc + 1);
-        RECORD_FB_AT_SLOT(slotIdx, s);
+        recordFbAtSlot(slotIdx, s);
     };
 
     // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
     // per-invocation env bitmap, then record.
-    auto recordForceBehaviorEnv = [&](SEXP s) {
+    auto recordForceBehaviorEnv = [&](SEXP s) __attribute__((always_inline)) {
         // assert(*pc == Opcode::record_type_once_promise_);
 
         Immediate raw = *(Immediate*)(pc + 1);
         RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw);
-        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+        recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
     // For ldvar_cached_fbRecordOnce_ (record_type_once_): gate on the per-code
@@ -2111,12 +2083,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // captures the highest lattice point the variable reaches (a formal/outer-
     // controlled var may still be an unforced promise on the first iteration);
     // later iterations are equal or more precise.
-    auto recordForceBehaviorRecordOnce = [&](SEXP s) {
+    auto recordForceBehaviorRecordOnce = [&](SEXP s)
+        __attribute__((always_inline)) {
         // assert(*pc == Opcode::record_type_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
         RECORD_TYPE_ONCE_GATE(fired, raw);
-        RECORD_FB_AT_SLOT(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+        recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
     // main loop
