@@ -423,7 +423,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
-    ObservedValues& types(uint32_t idx);
+    // Defined here (not in the .cpp) and force-inlined: it's on the hot
+    // recordForceBehavior / record_type_ path, called once per recorded load.
+    __attribute__((always_inline)) ObservedValues& types(uint32_t idx) {
+        return types_[idx];
+    }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
