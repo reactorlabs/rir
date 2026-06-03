@@ -53,7 +53,8 @@ DEF_INSTR(ldvar_noforce_, 1, 0, 1)
  */
 DEF_INSTR(ldvar_cached_, 2, 0, 1)
 DEF_INSTR(ldvar_cached_noRecordFB_, 2, 0, 1)
-DEF_INSTR(ldvar_cached_envRecordFB_, 2, 0, 1)
+// DEF_INSTR(ldvar_cached_envRecordFB_, 2, 0, 1)  // env-bitmap optimization
+// disabled
 DEF_INSTR(ldvar_cached_fbRecordOnce_, 2, 0, 1)
 
 /**
@@ -458,7 +459,8 @@ DEF_INSTR(ret_, 0, 1, 0)
 DEF_INSTR(record_call_, 1, 1, 1)
 DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_type_once_, 1, 1, 1)
-DEF_INSTR(record_type_once_promise_, 1, 1, 1)
+// DEF_INSTR(record_type_once_promise_, 1, 1, 1)  // env-bitmap optimization
+// disabled
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)

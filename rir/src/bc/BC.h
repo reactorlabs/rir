@@ -41,11 +41,8 @@ BC BC::recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx) {
     return BC(Opcode::record_type_once_, i);
 }
 
-BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx) {
-    ImmediateArguments i;
-    i.i = RECORD_TYPE_ONCE_PACK(slotIdx, bitIdx);
-    return BC(Opcode::record_type_once_promise_, i);
-}
+// BC BC::recordTypeOncePromise disabled — opcode removed
+// BC BC::recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx) { ... }
 
 BC BC::clearRecordTypeOnceBit(uint32_t bitIdx) {
     ImmediateArguments i;
@@ -140,9 +137,8 @@ BC BC::ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot) {
     return ldvarCachedOp(Opcode::ldvar_cached_noRecordFB_, sym, cacheSlot);
 }
 
-BC BC::ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot) {
-    return ldvarCachedOp(Opcode::ldvar_cached_envRecordFB_, sym, cacheSlot);
-}
+// BC BC::ldvarCachedEnvRecordFB disabled — opcode removed
+// BC BC::ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot) { ... }
 
 BC BC::ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot) {
     return ldvarCachedOp(Opcode::ldvar_cached_fbRecordOnce_, sym, cacheSlot);

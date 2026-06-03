@@ -84,7 +84,6 @@ typedef uint32_t Immediate;
 #define LDVAR_CACHED_OPCODES_CASES                                             \
     case Opcode::ldvar_cached_:                                                \
     case Opcode::ldvar_cached_noRecordFB_:                                     \
-    case Opcode::ldvar_cached_envRecordFB_:                                    \
     case Opcode::ldvar_cached_fbRecordOnce_:
 
 // type  signed immediate values (unboxed ints)
@@ -343,8 +342,8 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_ || bc == Opcode::record_type_once_ ||
-               bc == Opcode::record_type_once_promise_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_;
+        // || bc == Opcode::record_type_once_promise_;  // disabled
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -393,7 +392,7 @@ class BC {
     inline static BC recordBinop();
     inline static BC recordType(uint32_t idx);
     inline static BC recordTypeOnce(uint32_t slotIdx, uint32_t bitIdx);
-    inline static BC recordTypeOncePromise(uint32_t slotIdx, uint32_t bitIdx);
+    // inline static BC recordTypeOncePromise — disabled
     inline static BC clearRecordTypeOnceBit(uint32_t bitIdx);
     inline static BC clearRecordTypeOnceBitsRange(uint32_t start,
                                                   uint32_t count);
@@ -409,7 +408,7 @@ class BC {
     inline static BC ldvarCachedOp(Opcode op, SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarCachedNoRecordFB(SEXP sym, uint32_t cacheSlot);
-    inline static BC ldvarCachedEnvRecordFB(SEXP sym, uint32_t cacheSlot);
+    // inline static BC ldvarCachedEnvRecordFB — disabled
     inline static BC ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
@@ -654,7 +653,7 @@ class BC {
         case Opcode::record_test_:
         case Opcode::record_type_:
         case Opcode::record_type_once_:
-        case Opcode::record_type_once_promise_:
+        // case Opcode::record_type_once_promise_:  // disabled
         case Opcode::clear_record_type_once_bit_:
         case Opcode::clear_record_type_once_bits_range_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));

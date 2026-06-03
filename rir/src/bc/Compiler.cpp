@@ -2218,21 +2218,8 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     bool emittedRecordTypeOnce = false;
     if (uc.kind == UseKind::NoRecord) {
         allocatedSlot = (int)ctx.registerNoRecordDep(uc.defSlot);
-    } else if (ctx.code.top()->isPromiseContext() &&
-               ctx.mainBodyCtx_->defUseAnalysis.loopDepth_ > 0 &&
-               ctx.cfgBuilder.isSupportedParameter(name) &&
-               ctx.recordTypeOncePromiseBitmapSize <
-                   RECORD_TYPE_ONCE_PROMISE_MAX_IIDX) {
-        // Variable free in a promise that is a parameter of the
-        // enclosing function (never assigned, not shadowed, used
-        // in a loop) — record once per function invocation via the
-        // persistent bitmap in the call env.
-        int slot = ctx.typeFeedbackBuilder.addType();
-        ctx.defUseAnalysis().trackUseDef(name, slot);
-        uint32_t bitIdx = ctx.recordTypeOncePromiseBitmapSize++;
-        cs << BC::recordTypeOncePromise((uint32_t)slot, bitIdx);
-        fbKind = ForceBehaviorKind::EnvBit;
-        allocatedSlot = slot;
+        // record_type_once_promise_ / ldvar_cached_envRecordFB_ disabled:
+        // } else if (ctx.code.top()->isPromiseContext() && ...) { EnvBit ... }
     } else {
         switch (uc.kind) {
         case UseKind::NoRecord:
@@ -2301,8 +2288,8 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
         case ForceBehaviorKind::Infer:
             cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_noRecordFB_);
             break;
-        case ForceBehaviorKind::EnvBit:
-            cs.patchOpcode(ldvarCachedPos, Opcode::ldvar_cached_envRecordFB_);
+        case ForceBehaviorKind::EnvBit: // disabled — falls through to Always
+                                        // (record every time)
             break;
         case ForceBehaviorKind::RecordOnce:
             // Gate FB recording on the per-code bitmap — but only when a
@@ -2514,8 +2501,8 @@ SEXP Compiler::finalize() {
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
-    function.function()->recordTypeOncePromiseCount =
-        (uint16_t)ctx.recordTypeOncePromiseBitmapSize;
+    // function.function()->recordTypeOncePromiseCount =
+    //     (uint16_t)ctx.recordTypeOncePromiseBitmapSize;  // disabled
     UNPROTECT(1);
 
 #ifdef ENABLE_SLOWASSERT

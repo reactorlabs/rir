@@ -280,7 +280,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 } else {
                     bool isOnce = bc.bc == Opcode::record_type_once_;
                     bool isOncePromise =
-                        bc.bc == Opcode::record_type_once_promise_;
+                        false; // record_type_once_promise_ disabled
                     uint32_t slot =
                         (isOnce || isOncePromise)
                             ? RECORD_TYPE_ONCE_SLOT_IDX(bc.immediate.i)

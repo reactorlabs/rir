@@ -1994,16 +1994,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                    sizeof(uint64_t));
     }
 
-    // Per-function-invocation bitmap for record_type_once_promise_. Lives in
-    // the call env so it persists across promise forces. Zero only on a real
-    // call entry (not on promise forces / deopt resumes), using the main
-    // body's count as the authority.
-    if (callCtxt && function->recordTypeOncePromiseCount > 0)
-        env->u.envsxp.recordTypeOnceBitmap = 0;
+    // Per-function-invocation bitmap for record_type_once_promise_ — disabled:
+    // record_type_once_promise_ / ldvar_cached_envRecordFB_ are not emitted;
+    // promise-context free variables record always via the normal path.
+    // if (callCtxt && function->recordTypeOncePromiseCount > 0)
+    //     env->u.envsxp.recordTypeOnceBitmap = 0;
 
-        // This is used in loads for recording if the loaded value was a promise
-        // and if it was forced. Looks at the next instruction, if it's a force,
-        // marks how this load behaved.
+    // This is used in loads for recording if the loaded value was a promise
+    // and if it was forced. Looks at the next instruction, if it's a force,
+    // marks how this load behaved.
     // Determine StateBeforeLastForce from `s` and update typeFeedback at
     // `slotIdx`. Used by all recordForceBehavior* variants below. Classify the
     // load, then move the slot up the monotonic lattice (unknown < value <
@@ -2045,9 +2044,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
                 RECORD_TYPE_ONCE_GATE(fired, raw);
-            } else if (*pc == Opcode::record_type_once_promise_) {
-                RECORD_TYPE_ONCE_PROMISE_GATE(
-                    env->u.envsxp.recordTypeOnceBitmap, raw);
+                // } else if (*pc == Opcode::record_type_once_promise_) {
+                //     RECORD_TYPE_ONCE_PROMISE_GATE(
+                //         env->u.envsxp.recordTypeOnceBitmap, raw);
             } else {
                 return;
             }
@@ -2068,15 +2067,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         recordFbAtSlot(slotIdx, s);
     };
 
-    // For ldvar_cached_envRecordFB_ (record_type_once_promise_): gate on the
-    // per-invocation env bitmap, then record.
-    auto recordForceBehaviorEnv = [&](SEXP s) __attribute__((always_inline)) {
-        // assert(*pc == Opcode::record_type_once_promise_);
-
-        Immediate raw = *(Immediate*)(pc + 1);
-        RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw);
-        recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
-    };
+    // ldvar_cached_envRecordFB_ / record_type_once_promise_ disabled.
 
     // For ldvar_cached_fbRecordOnce_ (record_type_once_): gate on the per-code
     // `fired` bitmap so FB is recorded once per invocation. The first recording
@@ -2307,8 +2298,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(ldvar_cached_noRecordFB_){
             LDVAR_CACHED_BODY(/* skip force-behavior recording */)}
 
-        INSTRUCTION(ldvar_cached_envRecordFB_){
-            LDVAR_CACHED_BODY(recordForceBehaviorEnv(res))}
+        // INSTRUCTION(ldvar_cached_envRecordFB_) disabled — opcode removed
 
         INSTRUCTION(ldvar_cached_fbRecordOnce_){
             LDVAR_CACHED_BODY(recordForceBehaviorRecordOnce(res))}
@@ -2442,18 +2432,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(record_type_once_promise_) {
-            uint32_t raw = readImmediate();
-            advanceImmediate();
-            uint64_t bit = (uint64_t)1 << RECORD_TYPE_ONCE_IIDX(raw);
-            uint64_t& bitmap = env->u.envsxp.recordTypeOnceBitmap;
-            if (!(bitmap & bit)) {
-                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
-                                          ostack_top());
-                bitmap |= bit;
-            }
-            NEXT();
-        }
+        // INSTRUCTION(record_type_once_promise_) disabled — opcode removed
 
         INSTRUCTION(clear_record_type_once_bit_) {
             uint32_t bitIdx = readImmediate();
