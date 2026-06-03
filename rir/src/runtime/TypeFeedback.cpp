@@ -181,8 +181,7 @@ ObservedCallees& TypeFeedback::callees(uint32_t idx) {
 }
 
 ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
-
-ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
+// TypeFeedback::types() is defined inline in the header (hot path).
 
 void ObservedTest::print(std::ostream& out) const {
     switch (seen) {
