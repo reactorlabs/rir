@@ -39,8 +39,6 @@ struct Parameter {
     static bool ENABLE_PIR2RIR;
 
     static const bool ENABLE_OSR;
-
-    static bool RECORDLESS;
 };
 
 } // namespace pir
