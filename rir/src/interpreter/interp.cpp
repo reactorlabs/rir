@@ -1989,7 +1989,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
-    auto recordForceBehavior = [&](SEXP s) {
+    auto recordForceBehavior = [&](SEXP s) __attribute__((always_inline)) {
         // Bail if this load not recorded or we are in already optimized code
         if (*pc != Opcode::record_type_)
             return;
