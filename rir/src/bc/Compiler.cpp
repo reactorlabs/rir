@@ -386,8 +386,8 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
            << BC::call(2, fullAst, assumptions);
         if (voidContext)
             cs << BC::pop();
-        else if (Compiler::profile)
-            cs << ctx.recordType();
+        // else if (Compiler::profile)
+        //     cs << ctx.recordType();  // no-record baseline
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -395,11 +395,13 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // } else {
 
     // m' <- colonCastLhs(m')
-    cs << BC::swap() << BC::colonCastLhs() << ctx.recordType()
+    cs << BC::swap()
+       << BC::colonCastLhs() /* << ctx.recordType() // no-record baseline */
        << BC::ensureNamed() << BC::swap();
 
     // n' <- colonCastRhs(m', n')
-    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordType();
+    cs << BC::colonCastRhs()
+       << BC::ensureNamed() /* << ctx.recordType() // no-record baseline */;
 
     // step <- if (m' <= n') 1L else -1L
     cs << BC::dup2() << BC::le();
@@ -547,8 +549,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (voidContext)
             cs << BC::pop();
-        else if (Compiler::profile)
-            cs << ctx.recordType();
+        // else if (Compiler::profile)
+        //     cs << ctx.recordType();  // no-record baseline
 
         return true;
     }
@@ -802,8 +804,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::ldvarForUpdate(target);
             }
 
-            if (Compiler::profile)
-                cs << ctx.recordType();
+            // if (Compiler::profile)
+            //     cs << ctx.recordType();  // no-record baseline
 
             if (maybeChanges(target, *idx) ||
                 (dims > 1 && maybeChanges(target, *(idx + 1))) ||
@@ -1026,7 +1028,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // The return value, RHS, is TOS
                 cs << BC::invisible();
                 if (Compiler::profile) {
-                    cs << ctx.recordType();
+                    // cs << ctx.recordType();  // no-record baseline
                 }
             }
 
@@ -1206,8 +1208,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
         cs.addSrc(ast);
         if (!voidContext) {
-            if (Compiler::profile)
-                cs << ctx.recordType();
+            // if (Compiler::profile)
+            //     cs << ctx.recordType();  // no-record baseline
             cs << BC::visible();
         } else {
             cs << BC::pop();
@@ -1923,8 +1925,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     if (voidContext)
         cs << BC::pop();
-    else if (Compiler::profile)
-        cs << ctx.recordType();
+    // else if (Compiler::profile)
+    //     cs << ctx.recordType();  // no-record baseline
 }
 
 // Lookup
@@ -1941,8 +1943,8 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
         } else {
             cs << BC::ldvar(name);
         }
-        if (Compiler::profile)
-            cs << ctx.recordType();
+        // if (Compiler::profile)
+        //     cs << ctx.recordType();  // no-record baseline
     }
 }
 
