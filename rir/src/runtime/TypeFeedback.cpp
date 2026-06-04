@@ -226,7 +226,7 @@ void ObservedValues::print(std::ostream& out) const {
         out << "<?>";
     }
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     out << " @ " << this;
     if (parent) {
         out << " -> " << parent;

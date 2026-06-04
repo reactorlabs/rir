@@ -267,7 +267,7 @@ class BC {
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
                bc == Opcode::record_type_
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
                || bc == Opcode::record_type_simple_ ||
                bc == Opcode::record_type_leaf_ ||
                bc == Opcode::record_type_root_inner_ ||
@@ -573,7 +573,7 @@ class BC {
         case Opcode::record_call_:
         case Opcode::record_test_:
         case Opcode::record_type_:
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         case Opcode::record_type_simple_:
         case Opcode::record_type_leaf_:
         case Opcode::record_type_root_inner_:

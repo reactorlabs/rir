@@ -451,7 +451,7 @@ DEF_INSTR(record_type_, 1, 1, 1)
  * parent) record_type_root_inner_: root=1, leaf=0 — A (skip if suppressed) +
  * doRecord record_type_inner_node_: root=0, leaf=0 — A + doRecord + B
  * The plain record_type_ covers root=1, leaf=1 (simple variable lookup). */
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
 DEF_INSTR(record_type_simple_, 1, 1, 1)
 DEF_INSTR(record_type_leaf_, 1, 1, 1)
 DEF_INSTR(record_type_root_inner_, 1, 1, 1)
