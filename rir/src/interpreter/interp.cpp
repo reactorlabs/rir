@@ -1984,34 +1984,34 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
-    auto recordForceBehavior = [&](SEXP s) {
-        // Bail if this load not recorded or we are in already optimized code
-        if (*pc != Opcode::record_type_)
-            return;
+    // auto recordForceBehavior = [&](SEXP s) {
+    //     // Bail if this load not recorded or we are in already optimized code
+    //     if (*pc != Opcode::record_type_)
+    //         return;
 
-        ObservedValues::StateBeforeLastForce state =
-            ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else if (PRVALUE(s) != R_UnboundValue) {
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        } else {
-            // This is a lazy loading stub, it replaces the promise with the
-            // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
-                state = ObservedValues::StateBeforeLastForce::value;
-            else
-                state = ObservedValues::StateBeforeLastForce::promise;
-        }
+    //     ObservedValues::StateBeforeLastForce state =
+    //         ObservedValues::StateBeforeLastForce::unknown;
+    //     if (TYPEOF(s) != PROMSXP) {
+    //         state = ObservedValues::StateBeforeLastForce::value;
+    //     } else if (PRVALUE(s) != R_UnboundValue) {
+    //         state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
+    //     } else {
+    //         // This is a lazy loading stub, it replaces the promise with the
+    //         // actual value. From now on it will be a value...
+    //         if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
+    //             state = ObservedValues::StateBeforeLastForce::value;
+    //         else
+    //             state = ObservedValues::StateBeforeLastForce::promise;
+    //     }
 
-        auto idx = *(Immediate*)(pc + 1);
-        // FIXME: cf. #1260
-        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
-            if (feedback.stateBeforeLastForce < state) {
-                feedback.stateBeforeLastForce = state;
-            }
-        });
-    };
+    //     auto idx = *(Immediate*)(pc + 1);
+    //     // FIXME: cf. #1260
+    //     c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
+    //         if (feedback.stateBeforeLastForce < state) {
+    //             feedback.stateBeforeLastForce = state;
+    //         }
+    //     });
+    // };
 
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
@@ -2089,7 +2089,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
@@ -2131,7 +2131,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
@@ -2153,7 +2153,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP res = Rf_findVar(sym, env);
             R_Visible = TRUE;
 
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
 
             if (res == R_UnboundValue) {
                 Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
@@ -2218,7 +2218,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
@@ -2243,7 +2243,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
@@ -2267,7 +2267,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            // recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
