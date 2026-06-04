@@ -171,7 +171,7 @@ struct ObservedValues {
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     // byte 1: expression-tree flags (5 bits spare)
     uint8_t isLeaf : 1;
     uint8_t shouldNotRecord : 1;
@@ -179,7 +179,7 @@ struct ObservedValues {
 #endif
     // bytes 2-4 (or 1-3 without recordless): type observations
     std::array<uint8_t, MaxTypes> seen;
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     // bytes 5-7: implicit padding to 8-byte align the pointer below
     ObservedValues* parent;
     // total with recordless:    1+1+3+3(pad)+8 = 16 bytes
@@ -229,7 +229,7 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     inline void notifyParent() {
         if (object && parent && !hasNotifiedParent) {
             parent->shouldNotRecord = false;
@@ -241,7 +241,7 @@ struct ObservedValues {
     // Generic entry used by the standard record_type_ instruction (flag off:
     // plain doRecord).
     inline void record(SEXP e) {
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         if (shouldNotRecord)
             return; // A
         doRecord(e);
@@ -263,7 +263,7 @@ struct ObservedValues {
     //   doRecord           (no parent to notify) 1     1     variable lookup:
     //   doRecord               (no A, no B)
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     inline void recordInnerNode(SEXP e) {
         if (shouldNotRecord)
             return; // A
@@ -285,7 +285,7 @@ struct ObservedValues {
 #endif
 };
 
-#ifndef RECORD_LESS_ENABLED
+#ifndef RECORDLESS_EXPTREE_ENABLED
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 #endif
@@ -445,7 +445,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     inline void record_type_inner_node(uint32_t idx, const SEXP e) {
         types(idx).recordInnerNode(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));

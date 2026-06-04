@@ -142,7 +142,7 @@ class CompilerContext {
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     std::stack<std::vector<uint32_t>> slotsStack;
     std::map<uint32_t, uint32_t> parents;
     std::vector<Code*> allCodes_;
@@ -199,7 +199,7 @@ class CompilerContext {
             pushedPromiseContexts--;
         delete code.top();
         code.pop();
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         allCodes_.push_back(res);
 #endif
         return res;
@@ -215,7 +215,7 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     void popNodeForSlots() {
         // Always pop the inner vector for this LANGSXP. If it still has
         // unhandled child slots (non-profiled call — no recordType(true) was
@@ -233,7 +233,7 @@ class CompilerContext {
 
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
-#ifdef RECORD_LESS_DEBUG
+#ifdef RECORDLESS_EXPTREE_DEBUG
         std::cerr << "\n slotsStack size: " << slotsStack.size() << "\n";
         std::cerr << "\n registerSlot " << slotIdx << "\n";
 #endif
@@ -254,7 +254,7 @@ class CompilerContext {
     }
 #endif
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     void setTypeFeedbackParents(TypeFeedback& tf) {
         // Set up parent pointers in TypeFeedback.
         for (auto& kv : parents) {
@@ -304,7 +304,7 @@ class CompilerContext {
     }
 #endif
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     BC recordType(bool isParent = false) {
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack.empty())
@@ -657,7 +657,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
             cs << ctx.recordType(true);
 #else
             cs << ctx.recordType();
@@ -1320,7 +1320,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         if (!voidContext) {
             if (Compiler::profile) {
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
                 // `[` (Bracket) is type-preserving: x[...] has the same
                 // SEXPTYPE as x for non-object x, so its result type is
                 // inferable from the lhs leaf — record it as an inner node
@@ -2087,13 +2087,13 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         // Function application
     case LANGSXP: {
 
-#if defined(RECORD_LESS_ENABLED) && defined(RECORD_LESS_DEBUG)
+#if defined(RECORDLESS_EXPTREE_ENABLED) && defined(RECORDLESS_EXPTREE_DEBUG)
         std::cerr << "pushing slot node for expr: \n";
         Rf_PrintValue(exp);
         std::cerr << "\n\n";
 #endif
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         ctx.pushNewNodeForSlots();
 #endif
 
@@ -2101,7 +2101,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         ctx.popNodeForSlots();
 #endif
 
@@ -2207,7 +2207,7 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
     ctx.setTypeFeedbackParents(*feedback);
 #endif
 

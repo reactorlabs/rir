@@ -1,6 +1,6 @@
 #pragma once
 
-#define RECORD_LESS_ENABLED // comment out to disable
-#ifdef RECORD_LESS_ENABLED
-// #define RECORD_LESS_DEBUG // uncomment to enable debug prints
+#define RECORDLESS_EXPTREE_ENABLED // comment out to disable
+#ifdef RECORDLESS_EXPTREE_ENABLED
+//    #define RECORDLESS_EXPTREE_DEBUG // uncomment to enable debug prints
 #endif

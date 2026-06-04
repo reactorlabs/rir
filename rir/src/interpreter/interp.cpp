@@ -2346,7 +2346,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-#ifdef RECORD_LESS_ENABLED
+#ifdef RECORDLESS_EXPTREE_ENABLED
         INSTRUCTION(record_type_leaf_) {
             Immediate idx = readImmediate();
             advanceImmediate();
