@@ -10,6 +10,7 @@
 #include "bc/CompilerCFG.h"
 #include "bc/DefUseAnalysis.h"
 #include "bc/LoopScopeGuards.h"
+#include "bc/recordless.h"
 #include "interpreter/cache.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
@@ -148,7 +149,7 @@ class CompilerContext {
 
     void push(SEXP ast, SEXP env) {
         std::unordered_set<SEXP> argAssigned;
-        if (Compiler::recordLessEnabled)
+        if (Compiler::recordLess_Leaf_Enabled)
             DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
                            &outerImmutable_, &formalNames_,
@@ -164,7 +165,7 @@ class CompilerContext {
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
         std::unordered_set<SEXP> argAssigned;
-        if (Compiler::recordLessEnabled)
+        if (Compiler::recordLess_Leaf_Enabled)
             DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
                            &outerImmutable_, &formalNames_,
@@ -331,7 +332,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     unsigned beginLoopPos = cs.currentPos();
     cs << BC::beginloop(breakBranch);
 
-    if (Compiler::isRecordLessEnabled()) {
+    if (Compiler::isRecordlessLeafEnabled()) {
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
         ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
@@ -343,15 +344,15 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
 
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
-        auto savedDefs = (Compiler::isRecordLessEnabled())
+        auto savedDefs = (Compiler::isRecordlessLeafEnabled())
                              ? ctx.defUseAnalysis().saveState()
                              : DefUseAnalysis::DefsSnapshot{};
         compileCond();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterLoopScope();
         compileBody();
-        if (Compiler::isRecordLessEnabled()) {
+        if (Compiler::isRecordlessLeafEnabled()) {
             ctx.defUseAnalysis().exitLoop();
             ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
@@ -361,10 +362,10 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     compileCond();
     cs << BC::brfalse(breakBranch);
 
-    if (Compiler::isRecordLessEnabled())
+    if (Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().enterLoopScope();
     compileBody();
-    if (Compiler::isRecordLessEnabled()) {
+    if (Compiler::isRecordlessLeafEnabled()) {
         ctx.defUseAnalysis().exitLoop();
         ctx.defUseAnalysis().clearLoopBodyDefs();
     }
@@ -537,14 +538,14 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     //           following bytecode expects: lhs :: rhs :: step :: ...)
     cs << BC::swap() << BC::pick(2);
 
-    if (Compiler::isRecordLessEnabled())
+    if (Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().pushForLoopVar(sym);
     // compileSimpleFor always handles `:` — always range-based.
     RangeBasedIterVarScope rangeScope(
         ctx.code.top(), sym,
-        /*active=*/Compiler::isRecordLessEnabled());
+        /*active=*/Compiler::isRecordlessLeafEnabled());
     ClearableScopeGuard clearScope(ctx.code.top(),
-                                   Compiler::isRecordLessEnabled());
+                                   Compiler::isRecordlessLeafEnabled());
 
     // while
     compileWhile(
@@ -573,7 +574,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
 
     rangeScope.finish();
     clearScope.finish();
-    if (Compiler::isRecordLessEnabled())
+    if (Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().popForLoopVar(sym);
 
     cs << BC::popn(3);
@@ -632,7 +633,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
             CompilerContext::CaptureInfo captures;
-            if (Compiler::recordLessEnabled)
+            if (Compiler::recordLess_Leaf_Enabled)
                 captures = ctx.computeCapturesForInner();
             auto dt = Compiler::compileFunction(args[1], args[0],
                                                 std::move(captures.immutable),
@@ -709,10 +710,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(args[0]);
         cs << BC::dup() << BC::brfalse(nextBranch);
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
@@ -737,10 +738,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         cs << BC::dup() << BC::brtrue(nextBranch);
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1]);
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << BC::aslogical();
@@ -839,7 +840,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
-                if (Compiler::isRecordLessEnabled()) {
+                if (Compiler::isRecordlessLeafEnabled()) {
                     // The last type slot allocated while compiling rhs (if
                     // any) captures the type of the value being stored —
                     // use it as the def's feedback slot.
@@ -967,7 +968,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::ldvarForUpdate(target);
                 }
                 if (Compiler::profile) {
-                    if (Compiler::recordLessEnabled)
+                    if (Compiler::recordLess_Leaf_Enabled)
                         emitRecordTypeForVar(ctx, cs, target);
                     else
                         cs << ctx.recordType();
@@ -1015,7 +1016,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 } else {
                     cs << BC::stvar(target);
                 }
-                if (Compiler::isRecordLessEnabled())
+                if (Compiler::isRecordlessLeafEnabled())
                     ctx.defUseAnalysis().trackDef(target,
                                                   DefUseAnalysis::kNoSlot);
             }
@@ -1246,19 +1247,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::invisible();
             }
         } else {
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().enterBranch();
             compileExpr(ctx, args[2], voidContext);
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().exitBranch();
         }
         cs << BC::br(nextBranch);
 
         cs << trueBranch;
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, args[1], voidContext);
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << nextBranch;
@@ -1287,7 +1288,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().markReturn();
         if (ctx.inLoop() || ctx.isInPromise())
             cs << BC::return_();
@@ -1354,19 +1355,19 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << objBranch;
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         {
             LoadArgsResult dummy;
             compileLoadArgs(ctx, ast, fun, args_, dummy, voidContext, 1);
         }
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
         cs << nonObjBranch;
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         compileExpr(ctx, *idx);
         if (dims == 3) {
@@ -1375,7 +1376,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         } else if (dims == 2) {
             compileExpr(ctx, *(idx + 1));
         }
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
         cs << BC::br(contBranch);
 
@@ -1425,7 +1426,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         emitGuardForNamePrimitive(cs, fun);
 
         ClearableScopeGuard clearScope(ctx.code.top(),
-                                       Compiler::isRecordLessEnabled());
+                                       Compiler::isRecordlessLeafEnabled());
         compileWhile(
             ctx,
             [&ctx, &cs, &cond]() {
@@ -1456,7 +1457,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         unsigned beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::isRecordLessEnabled()) {
+        if (Compiler::isRecordlessLeafEnabled()) {
             ctx.defUseAnalysis().enterLoop();
             std::unordered_map<SEXP, int> bodyDefs;
             DefUseAnalysis::collectAssignedVars(body, bodyDefs);
@@ -1464,22 +1465,22 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
 
         ClearableScopeGuard clearScope(ctx.code.top(),
-                                       Compiler::isRecordLessEnabled());
+                                       Compiler::isRecordlessLeafEnabled());
 
         // loop peel is a copy of the body, with no backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::isRecordLessEnabled())
+            auto savedDefs = (Compiler::isRecordlessLeafEnabled())
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileExpr(ctx, body, true);
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
         cs << nextBranch;
         compileExpr(ctx, body, true);
         clearScope.finish();
-        if (Compiler::isRecordLessEnabled()) {
+        if (Compiler::isRecordlessLeafEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().exitLoop();
         }
@@ -1547,16 +1548,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         };
 
         bool rangeBased =
-            Compiler::isRecordLessEnabled() && isRangeBasedSeq(seq);
+            Compiler::isRecordlessLeafEnabled() && isRangeBasedSeq(seq);
         RangeBasedIterVarScope rangeScope(ctx.code.top(), sym,
                                           /*active=*/rangeBased);
         ClearableScopeGuard clearScope(ctx.code.top(),
-                                       Compiler::isRecordLessEnabled());
+                                       Compiler::isRecordlessLeafEnabled());
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch);
 
-        if (Compiler::isRecordLessEnabled()) {
+        if (Compiler::isRecordlessLeafEnabled()) {
             ctx.defUseAnalysis().enterLoop();
             ctx.defUseAnalysis().pushForLoopVar(sym);
             std::unordered_map<SEXP, int> bodyDefs;
@@ -1569,12 +1570,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // loop peel is a copy of the body (including indexing ops), with no
         // backwards jumps
         if (Compiler::loopPeelingEnabled && !containsLoop(body)) {
-            auto savedDefs = (Compiler::isRecordLessEnabled())
+            auto savedDefs = (Compiler::isRecordlessLeafEnabled())
                                  ? ctx.defUseAnalysis().saveState()
                                  : DefUseAnalysis::DefsSnapshot{};
             compileIndexOps(true);
             compileExpr(ctx, body, true);
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().restoreState(std::move(savedDefs));
         }
 
@@ -1585,7 +1586,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         compileExpr(ctx, body, true);
         rangeScope.finish();
         clearScope.finish();
-        if (Compiler::isRecordLessEnabled()) {
+        if (Compiler::isRecordlessLeafEnabled()) {
             ctx.defUseAnalysis().clearLoopBodyDefs();
             ctx.defUseAnalysis().popForLoopVar(sym);
             ctx.defUseAnalysis().exitLoop();
@@ -1618,7 +1619,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
@@ -1635,7 +1636,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            if (Compiler::isRecordLessEnabled())
+            if (Compiler::isRecordlessLeafEnabled())
                 ctx.defUseAnalysis().markLoopExit();
             cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
@@ -1823,10 +1824,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 continue;
             } else {
                 cs << BC::pop();
-                if (Compiler::isRecordLessEnabled())
+                if (Compiler::isRecordlessLeafEnabled())
                     ctx.defUseAnalysis().enterBranch();
                 compileExpr(ctx, expressions[j++]);
-                if (Compiler::isRecordLessEnabled())
+                if (Compiler::isRecordlessLeafEnabled())
                     ctx.defUseAnalysis().exitBranch();
                 cs << BC::br(contBr);
             }
@@ -2146,7 +2147,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     };
 
     LoadArgsResult info;
-    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
+    if (speculateOnBuiltin && Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().enterBranch();
     if (fun == symbol::forceAndCall) {
         // forceAndCall is a special with signature `function(n, FUN, ...)`
@@ -2161,20 +2162,20 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadArgs(ctx, ast, fun, args, info, voidContext);
     }
     compileCall(info);
-    if (speculateOnBuiltin && Compiler::isRecordLessEnabled())
+    if (speculateOnBuiltin && Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().exitBranch();
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterBranch();
         LoadArgsResult infoEager;
         compileLoadArgs(ctx, ast, fun, args, infoEager, voidContext, 0,
                         RList(args).length());
 
         compileCall(infoEager);
-        if (Compiler::isRecordLessEnabled())
+        if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().exitBranch();
 
         cs << theEnd;
@@ -2335,7 +2336,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile) {
-            if (Compiler::recordLessEnabled)
+            if (Compiler::recordLess_Leaf_Enabled)
                 emitRecordTypeForVar(ctx, cs, name, ldvarCachedPos);
             else
                 cs << ctx.recordType();
@@ -2425,7 +2426,7 @@ SEXP Compiler::finalize() {
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);
 
-    if (Compiler::recordLessEnabled) {
+    if (Compiler::recordLess_Leaf_Enabled) {
         ctx.cfgBuilder.configure(formals, exp);
 
         // Pre-scan the function body. Stored on ctx for reuse at inner-
@@ -2521,7 +2522,5 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 bool Compiler::loopPeelingEnabled = true;
-
-bool Compiler::recordLessEnabled = true;
 
 } // namespace rir

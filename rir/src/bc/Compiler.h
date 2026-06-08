@@ -54,9 +54,11 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
-    static bool recordLessEnabled;
+    static bool recordLess_Leaf_Enabled;
 
-    static bool isRecordLessEnabled() { return profile && recordLessEnabled; }
+    static bool isRecordlessLeafEnabled() {
+        return profile && recordLess_Leaf_Enabled;
+    }
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);

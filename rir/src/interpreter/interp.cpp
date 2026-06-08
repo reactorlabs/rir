@@ -9,6 +9,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "record_stats.h"
 #include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
@@ -2083,6 +2084,40 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
+        // REC_STAT_LDVAR_CLASSIFY: at this point `pc` references the opcode
+        // that follows a value load, which lets us attribute recordings to
+        // ldvar leaves.
+        //   record_type_                 -> a recording fires here every
+        //   execution record_type_once_, bit unset -> a recording fires here
+        //   (first hit) record_type_once_, bit set   -> gated, skipped
+        //   (read-only bit test; the
+        //                                   record_type_once_ handler sets the
+        //                                   bit)
+        //   anything else                -> the compiler elided the record
+        //   entirely
+        //                                   (NoRecord, type inferable from a
+        //                                   source)
+        // No-op unless RIR_RECORD_STATS is enabled.
+#ifdef RIR_RECORD_STATS
+#define REC_STAT_LDVAR_CLASSIFY()                                              \
+    do {                                                                       \
+        if (*pc == Opcode::record_type_) {                                     \
+            ::rir::g_recStats.ldvarRec++;                                      \
+        } else if (*pc == Opcode::record_type_once_) {                         \
+            Immediate raw__ = *(Immediate*)(pc + 1);                           \
+            if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,                            \
+                                             RECORD_TYPE_ONCE_IIDX(raw__)))    \
+                ::rir::g_recStats.ldvarOnceSkip++;                             \
+            else                                                               \
+                ::rir::g_recStats.ldvarRec++;                                  \
+        } else {                                                               \
+            ::rir::g_recStats.noRecordSkip++;                                  \
+        }                                                                      \
+    } while (0)
+#else
+#define REC_STAT_LDVAR_CLASSIFY() ((void)0)
+#endif
+
     // main loop
     BEGIN_MACHINE {
 
@@ -2156,6 +2191,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
+            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
@@ -2198,6 +2234,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
+            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
@@ -2220,6 +2257,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP res = Rf_findVar(sym, env);
             R_Visible = TRUE;
 
+            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
 
             if (res == R_UnboundValue) {
@@ -2284,6 +2322,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         Rf_error("argument \"%s\" is missing, with no default",                \
                  CHAR(PRINTNAME(sym)));                                        \
     }                                                                          \
+    REC_STAT_LDVAR_CLASSIFY();                                                 \
     record_fb_action;                                                          \
     if (TYPEOF(res) == PROMSXP)                                                \
         res = evaluatePromise(res);                                            \
@@ -2415,6 +2454,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
+            REC_STAT(g_recStats.typeAlways++);
             NEXT();
         }
 
@@ -2428,6 +2468,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
                                           ostack_top());
                 word |= mask;
+                REC_STAT(g_recStats.typeOnceRec++);
+            } else {
+                REC_STAT(g_recStats.typeOnceSkip++);
             }
             NEXT();
         }

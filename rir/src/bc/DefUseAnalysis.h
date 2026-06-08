@@ -154,7 +154,7 @@ class DefUseAnalysis {
 
     // Pointer to the function-wide set of local/param variables (owned by
     // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
-    // mutated. Null when recordLessEnabled is off.
+    // mutated. Null when recordLess_Leaf_Enabled is off.
     const std::unordered_set<SEXP>* localOrParam_ = nullptr;
 
     // Pointer to the set of variables captured from enclosing scopes that are
