@@ -2044,7 +2044,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         Immediate raw = *(Immediate*)(pc + 1);
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
-                RECORD_TYPE_ONCE_GATE(fired, raw);
+                RECORD_TYPE_ONCE_GATE(fired, raw, return );
                 // } else if (*pc == Opcode::record_type_once_promise_) {
                 //     RECORD_TYPE_ONCE_PROMISE_GATE(
                 //         env->u.envsxp.recordTypeOnceBitmap, raw);
@@ -2080,39 +2080,30 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // assert(*pc == Opcode::record_type_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
-        RECORD_TYPE_ONCE_GATE(fired, raw);
+        RECORD_TYPE_ONCE_GATE(fired, raw, return );
         recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
     };
 
         // REC_STAT_LDVAR_CLASSIFY: at this point `pc` references the opcode
-        // that follows a value load, which lets us attribute recordings to
-        // ldvar leaves.
-        //   record_type_                 -> a recording fires here every
-        //   execution record_type_once_, bit unset -> a recording fires here
-        //   (first hit) record_type_once_, bit set   -> gated, skipped
-        //   (read-only bit test; the
-        //                                   record_type_once_ handler sets the
-        //                                   bit)
-        //   anything else                -> the compiler elided the record
-        //   entirely
-        //                                   (NoRecord, type inferable from a
-        //                                   source)
-        // No-op unless RIR_RECORD_STATS is enabled.
+        // that follows a value load. The leaf record opcodes count themselves
+        // (in their handlers), so here we only detect the NoRecord case: a load
+        // whose next opcode is NOT a value-type record opcode had its record
+        // elided. No-op unless RIR_RECORD_STATS is enabled.
 #ifdef RIR_RECORD_STATS
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        // record_type_ .. record_type_inner_node_ are the contiguous value-type
+        // record opcodes (record_call_/record_test_ sit just outside the
+        // range).
+#define REC_STAT_IS_RECORD(op)                                                 \
+    ((op) >= Opcode::record_type_ && (op) <= Opcode::record_type_inner_node_)
+#else
+#define REC_STAT_IS_RECORD(op)                                                 \
+    ((op) == Opcode::record_type_ || (op) == Opcode::record_type_once_)
+#endif
 #define REC_STAT_LDVAR_CLASSIFY()                                              \
     do {                                                                       \
-        if (*pc == Opcode::record_type_) {                                     \
-            ::rir::g_recStats.ldvarRec++;                                      \
-        } else if (*pc == Opcode::record_type_once_) {                         \
-            Immediate raw__ = *(Immediate*)(pc + 1);                           \
-            if (RECORD_TYPE_ONCE_BITMAP_TEST(fired,                            \
-                                             RECORD_TYPE_ONCE_IIDX(raw__)))    \
-                ::rir::g_recStats.ldvarOnceSkip++;                             \
-            else                                                               \
-                ::rir::g_recStats.ldvarRec++;                                  \
-        } else {                                                               \
+        if (!REC_STAT_IS_RECORD(*pc))                                          \
             ::rir::g_recStats.noRecordSkip++;                                  \
-        }                                                                      \
     } while (0)
 #else
 #define REC_STAT_LDVAR_CLASSIFY() ((void)0)
@@ -2454,24 +2445,25 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
-            REC_STAT(g_recStats.typeAlways++);
+            // The bare record_type_ opcode covers everything the optimization
+            // doesn't track: genuinely untracked sites AND tracked RecordAlways
+            // leaves left as record_type_ (isLeaf && isRoot && !isSrc). The two
+            // are indistinguishable here (same opcode); count them together.
+            REC_STAT(g_recStats.untrackedRec++);
             NEXT();
         }
 
         INSTRUCTION(record_type_once_) {
             uint32_t raw = readImmediate();
             advanceImmediate();
-            uint32_t bitIdx = RECORD_TYPE_ONCE_IIDX(raw);
-            uint64_t& word = RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx);
-            uint64_t mask = RECORD_TYPE_ONCE_MASK(bitIdx);
-            if (!(word & mask)) {
-                typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
-                                          ostack_top());
-                word |= mask;
-                REC_STAT(g_recStats.typeOnceRec++);
-            } else {
-                REC_STAT(g_recStats.typeOnceSkip++);
-            }
+            RECORD_TYPE_ONCE_GATE(fired, raw, {
+                REC_STAT(g_recStats.leafOnceSkip++);
+                NEXT();
+            });
+            typeFeedback->record_type(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                      ostack_top());
+            RECORD_TYPE_ONCE_SET(fired, raw);
+            REC_STAT(g_recStats.leafOnceRec++);
             NEXT();
         }
 
@@ -2516,6 +2508,75 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
             NEXT();
         }
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        // (simple leaves are plain record_type_ / record_type_once_; only the
+        // simple-leaf *source* variants below are specialized.)
+        INSTRUCTION(record_type_dep_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            typeFeedback->record_type_dep(idx, ostack_top());
+            REC_STAT(g_recStats.leafAlwaysRec++);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_once_dep_) {
+            uint32_t raw = readImmediate();
+            advanceImmediate();
+            RECORD_TYPE_ONCE_GATE(fired, raw, {
+                REC_STAT(g_recStats.leafOnceSkip++);
+                NEXT();
+            });
+            typeFeedback->record_type_dep(RECORD_TYPE_ONCE_SLOT_IDX(raw),
+                                          ostack_top());
+            RECORD_TYPE_ONCE_SET(fired, raw);
+            REC_STAT(g_recStats.leafOnceRec++);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_leafWithParent_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            // doRecord + propagate (own parent + any deps, together)
+            typeFeedback->record_type_leafWithParent(idx, ostack_top());
+            REC_STAT(g_recStats.leafAlwaysRec++);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_leafWithParent_once_) {
+            uint32_t raw = readImmediate();
+            advanceImmediate();
+            RECORD_TYPE_ONCE_GATE(fired, raw, {
+                REC_STAT(g_recStats.leafOnceSkip++);
+                NEXT();
+            });
+            typeFeedback->record_type_leafWithParent(
+                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top());
+            RECORD_TYPE_ONCE_SET(fired, raw);
+            REC_STAT(g_recStats.leafOnceRec++);
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_root_inner_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
+                         g_recStats.rootInnerSkip++;
+                     else g_recStats.rootInnerRec++);
+            typeFeedback->record_type_root_inner(idx, ostack_top());
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_inner_node_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
+                         g_recStats.innerNodeSkip++;
+                     else g_recStats.innerNodeRec++);
+            typeFeedback->record_type_inner_node(idx, ostack_top());
+            NEXT();
+        }
+#endif
 
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT

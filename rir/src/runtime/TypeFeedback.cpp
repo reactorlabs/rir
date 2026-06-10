@@ -110,6 +110,7 @@ void DeoptReason::record(SEXP val) const {
 }
 
 void ObservedCallees::print(std::ostream& out, const Function* function) const {
+
     if (taken == ObservedCallees::CounterOverflow)
         out << "*, <";
     else
@@ -224,6 +225,17 @@ void ObservedValues::print(std::ostream& out) const {
     } else {
         out << "<?>";
     }
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    out << " @ " << this;
+    if (parent) {
+        out << " -> " << parent;
+    }
+    // Cast the uint8_t bitfields to int: streaming a uint8_t (= unsigned char)
+    // prints a character glyph (0x00/0x01 control chars), not the digits 0/1.
+    out << ", isLeaf: " << (int)isLeaf
+        << ", should not record: " << (int)shouldNotRecord;
+#endif
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }

@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "Rinternals.h"
+#include "bc/recordless.h"
 #include "common.h"
 #include "interpreter/profiler.h"
 #include "recording_hooks.h"
@@ -209,14 +210,27 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
+    // byte 0: existing flags
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
     uint8_t notScalar : 1;
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    // byte 1: expression-tree flags (5 bits spare)
+    uint8_t isLeaf : 1;
+    uint8_t shouldNotRecord : 1;
+    uint8_t hasPropagatedNotification : 1;
+#endif
+    // bytes 2-4 (or 1-3 without recordless): type observations
     std::array<uint8_t, MaxTypes> seen;
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    // bytes 5-7: implicit padding to 8-byte align the pointer below
+    ObservedValues* parent;
+    // total with recordless:    1+1+3+3(pad)+8 = 16 bytes
+    // total without recordless: 1+3 = 4 bytes (matches original static_assert)
+#endif
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
@@ -228,10 +242,12 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-    inline void record(SEXP e) {
+    // Shared core: update all observed-value flags from e.
+
+    __attribute__((always_inline)) void doRecord(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
-        // Set attribs flag for every object even if the SEXP does  not
+        // Set attribs flag for every object even if the SEXP does not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
         // the case in some very specific cases:
@@ -258,10 +274,66 @@ struct ObservedValues {
 
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    inline void notifyParent() {
+        if (object && parent && !hasPropagatedNotification) {
+            parent->shouldNotRecord = false;
+            hasPropagatedNotification = true;
+        }
+    }
+#endif
+
+    // Used by record_type_ / record_type_once_: root-level leaves (no parent).
+    // Skip if suppressed; no notifyParent — parent is always nullptr here.
+    inline void record(SEXP e) {
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        if (shouldNotRecord)
+            return;
+        doRecord(e);
+#else
+        doRecord(e);
+#endif
+    }
+
+  public:
+    // Four specializations corresponding to the expression-tree node type.
+    // Only compiled when RECORD_LESS_ENABLED; callers select the right one
+    // at compile time (different record_ opcodes / TypeFeedback entry points).
+    //
+    //  root  leaf   case
+    //   0     0     inner node:       A (skip if suppressed) + doRecord + B
+    //   (notify parent) 0     1     leaf with parent: doRecord + B (never
+    //   skipped, but notifies parent) 1     0     root inner:       A +
+    //   doRecord           (no parent to notify) 1     1     variable lookup:
+    //   doRecord               (no A, no B)
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    inline void recordInnerNode(SEXP e) {
+        if (shouldNotRecord)
+            return; // A
+        doRecord(e);
+        notifyParent(); // B
+    }
+
+    // root=1, leaf=1 — standalone variable lookup: no parent, never suppressed.
+    // Leaf-with-parent uses record_type_leafWithParent_ → recordSimple +
+    // notifyRelatedNodes.
+    inline void recordSimple(SEXP e) { doRecord(e); }
+
+    inline void recordRootInner(SEXP e) { // root=1, leaf=0
+        if (shouldNotRecord)
+            return; // A
+        doRecord(e);
+    }
+
+#endif
 };
 
+#ifndef RECORDLESS_EXPTREE_ENABLED
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
+#endif
 
 enum class Opcode : uint8_t;
 
@@ -375,6 +447,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // Parallel to types_: forceBehaviorKinds_[i] is the compile-time FB
     // recording decision for slot i (default ForceBehaviorKind::Always).
     uint8_t* forceBehaviorKinds_;
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    // Reverse of typeDeps_: source slot -> its NoRecord dependent slots. Built
+    // in-memory at compile time (buildNoRecordReverseMap); empty when the
+    // function has no NoRecord uses. Used at runtime so that when a source
+    // records an object it can enable the parents of its dependents — those
+    // dependents emit no record opcode and so cannot notify their parents
+    // themselves (the "two-step notification"). Not serialized (like parent
+    // pointers, it is reconstructed by the compiler).
+    std::vector<std::vector<uint32_t>> noRecordSourceToDeps_;
+#endif
     // All the data are stored in this array: callees, tests, types, typeDeps,
     // and forceBehaviorKinds in this order. The constructor sets the above
     // pointers to point at the appropriate locations.
@@ -444,10 +526,83 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(test(idx), idx, owner_));
     }
 
-    void record_type(uint32_t idx, const SEXP e) {
+    inline void record_type(uint32_t idx, const SEXP e) {
         types(idx).record(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    inline void record_type_inner_node(uint32_t idx, const SEXP e) {
+        // A non-root inner node always has a parent, so it can never be a
+        // variable's def — hence never a NoRecord source. It only notifies its
+        // own parent (done inside recordInnerNode); no propagate needed.
+        types(idx).recordInnerNode(e);
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
+    }
+    inline void record_type_root_inner(uint32_t idx, const SEXP e) {
+        // A root inner node IS the top of an expression assigned to a variable,
+        // so it may be a NoRecord source. After recording, always check for
+        // dependents and propagate (cheap no-op when it has none).
+        ObservedValues& slot = types(idx);
+        slot.recordRootInner(e); // skipIfSuppressed + doRecord
+        notifyRelatedNodes(slot,
+                           slot.object); // enable dependents' parents if obj
+        REC_HOOK(recording::recordSC(slot, idx, owner_));
+    }
+    // record_type_dep is emitted only for simple-leaf source slots (a variable
+    // with no parent but with forward NoRecord uses). It doRecords, then
+    // propagateNoRecord un-suppresses its dependents' parents, once — so we do
+    // NOT use record()'s inline notifyParent here (it would pre-set the
+    // once-flag and skip the dependent propagation). A simple leaf that is NOT
+    // a source stays plain record_type_ / record_type_once_ and pays nothing.
+    inline void record_type_dep(uint32_t idx, const SEXP e) {
+        ObservedValues& slot = types(idx);
+        slot.recordSimple(e); // doRecord only (simple-leaf source)
+        notifyRelatedNodes(slot,
+                           slot.object); // dependents' parents (no own parent)
+        REC_HOOK(recording::recordSC(slot, idx, owner_));
+    }
+    // A leaf WITH a parent. It must un-suppress its parent once it sees an
+    // object anyway, so it always goes through propagateNoRecord, which
+    // notifies its own parent AND any NoRecord dependents together, once.
+    // Non-source leaves just have an empty dependent list (the loop is a
+    // no-op), so there is no separate _dep_ opcode for this family.
+    inline void record_type_leafWithParent(uint32_t idx, const SEXP e) {
+        ObservedValues& slot = types(idx);
+        slot.recordSimple(e); // doRecord only (notify handled below)
+        notifyRelatedNodes(slot, slot.object); // own parent + any dependents
+        REC_HOOK(recording::recordSC(slot, idx, owner_));
+    }
+
+    // Un-suppress the slot's own parent (if any) and the parents of all its
+    // NoRecord dependents — done together, once. record_type_ and
+    // record_type_once_ (plain simple leaves) don't call this, so they never
+    // pay the parent-check / dependent-list lookup.
+    inline void notifyRelatedNodes(ObservedValues& slot, bool isObject) {
+        if (!isObject || slot.hasPropagatedNotification)
+            return; // only an object un-suppresses, and only once
+        slot.hasPropagatedNotification = true;
+        if (slot.parent) // this node's own parent (leafWithParent case)
+            slot.parent->shouldNotRecord = false;
+        uint32_t idx = (uint32_t)(&slot - types_);
+        for (uint32_t d : noRecordSourceToDeps_[idx]) { // dependents' parents
+            if (ObservedValues* p = types_[d].parent)
+                p->shouldNotRecord = false;
+        }
+    }
+
+    // Build noRecordSourceToDeps_ (source slot -> its NoRecord dependent slots)
+    // from typeDeps_, once at compile time. Always sized to types_size_ so the
+    // _dep methods can index it unconditionally.
+    void buildNoRecordReverseMap() {
+        noRecordSourceToDeps_.assign(types_size_, {});
+        for (size_t d = 0; d < types_size_; d++) {
+            uint32_t s = typeDeps_[d];
+            if (s != NoDep && s < types_size_)
+                noRecordSourceToDeps_[s].push_back((uint32_t)d);
+        }
+    }
+#endif
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
         ObservedValues& slot = types(idx);

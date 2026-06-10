@@ -458,9 +458,38 @@ DEF_INSTR(ret_, 0, 1, 0)
  */
 DEF_INSTR(record_call_, 1, 1, 1)
 DEF_INSTR(record_type_, 1, 1, 1)
+// Leaf optimization (recordLess_Leaf_Enabled, runtime): record once per
+// invocation, gated by the per-Code `fired` bitmap.
 DEF_INSTR(record_type_once_, 1, 1, 1)
 // DEF_INSTR(record_type_once_promise_, 1, 1, 1)  // env-bitmap optimization
 // disabled
+// Records are classified along {simple-leaf, leaf-with-parent, inner} x
+// {always, once} x {no NoRecord dependents, source}. The SIMPLE-LEAF family is
+// the plain record_type_ / record_type_once_ (and the _dep_ variants below for
+// sources); these also serve as the pre-patch placeholders and the opcodes used
+// when RECORDLESS_EXPTREE_ENABLED is off, and untracked records (recordType
+// Untracked) stay record_type_. The compiler post-pass specializes the rest by
+// (isLeaf, isRoot, isSource):
+//   simple leaf,    no-dep -> record_type_         (plain doRecord; unchanged)
+//   simple leaf,    once   -> record_type_once_    (unchanged)
+//   simple leaf,    source -> record_type_dep_ / record_type_once_dep_
+//                             (doRecord + propagate to dependents)
+//   leaf w/ parent         -> record_type_leafWithParent_[once_]
+//                             (doRecord + propagate: own parent + any deps,
+//                             together — a leaf-with-parent already pays the
+//                             object-check + notify cost, so the (usually
+//                             empty) deps loop is folded in rather than split
+//                             into a separate _dep_ opcode)
+//   inner node             -> record_type_root_inner_ / record_type_inner_node_
+//                             (skipIfSuppressed + doRecord [+ notifyParent])
+#ifdef RECORDLESS_EXPTREE_ENABLED
+DEF_INSTR(record_type_dep_, 1, 1, 1)
+DEF_INSTR(record_type_once_dep_, 1, 1, 1)
+DEF_INSTR(record_type_leafWithParent_, 1, 1, 1)
+DEF_INSTR(record_type_leafWithParent_once_, 1, 1, 1)
+DEF_INSTR(record_type_root_inner_, 1, 1, 1)
+DEF_INSTR(record_type_inner_node_, 1, 1, 1)
+#endif
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)

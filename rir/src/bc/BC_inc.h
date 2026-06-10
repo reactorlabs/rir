@@ -39,14 +39,21 @@ typedef uint32_t Immediate;
     ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
-// Return from the enclosing function/lambda if the fired-bitmap bit is already
-// set (gate only — no recording).
-#define RECORD_TYPE_ONCE_GATE(bitmap, raw)                                     \
+// If the fired-bitmap bit for `raw` is already set, run `onFired` — the skip
+// action. Use `return` in the recordForceBehavior lambdas and `NEXT()` in the
+// once-opcode handlers; both are gotos/returns, so the do/while wrapper is safe
+// (NEXT() is never a plain `break`). Pair with RECORD_TYPE_ONCE_SET to mark the
+// bit after the first recording.
+#define RECORD_TYPE_ONCE_GATE(bitmap, raw, onFired)                            \
     do {                                                                       \
         if (RECORD_TYPE_ONCE_BITMAP_TEST((bitmap),                             \
                                          RECORD_TYPE_ONCE_IIDX(raw)))          \
-            return;                                                            \
+            onFired;                                                           \
     } while (0)
+// Mark the fired-bitmap bit for `raw` (after the first recording).
+#define RECORD_TYPE_ONCE_SET(bitmap, raw)                                      \
+    (RECORD_TYPE_ONCE_BITMAP_WORD((bitmap), RECORD_TYPE_ONCE_IIDX(raw)) |=     \
+     RECORD_TYPE_ONCE_MASK(RECORD_TYPE_ONCE_IIDX(raw)))
 // Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
 #define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
 // Mask with 1s in word positions [0..hi] (clears bits from start of word to
@@ -342,8 +349,17 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_ || bc == Opcode::record_type_once_;
+               bc == Opcode::record_type_ || bc == Opcode::record_type_once_
         // || bc == Opcode::record_type_once_promise_;  // disabled
+#ifdef RECORDLESS_EXPTREE_ENABLED
+               || bc == Opcode::record_type_dep_ ||
+               bc == Opcode::record_type_once_dep_ ||
+               bc == Opcode::record_type_leafWithParent_ ||
+               bc == Opcode::record_type_leafWithParent_once_ ||
+               bc == Opcode::record_type_root_inner_ ||
+               bc == Opcode::record_type_inner_node_
+#endif
+            ;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -656,6 +672,14 @@ class BC {
         // case Opcode::record_type_once_promise_:  // disabled
         case Opcode::clear_record_type_once_bit_:
         case Opcode::clear_record_type_once_bits_range_:
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        case Opcode::record_type_dep_:
+        case Opcode::record_type_once_dep_:
+        case Opcode::record_type_leafWithParent_:
+        case Opcode::record_type_leafWithParent_once_:
+        case Opcode::record_type_root_inner_:
+        case Opcode::record_type_inner_node_:
+#endif
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

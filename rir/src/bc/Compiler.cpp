@@ -19,6 +19,7 @@
 #include "simple_instruction_list.h"
 #include "utils/Pool.h"
 
+#include <set>
 #include <stack>
 
 namespace rir {
@@ -111,6 +112,12 @@ class CompilerContext {
     // body.
     // // Used to gate the post-subassign record_type_ emission.
     // std::unordered_set<SEXP> readVars_;
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    std::stack<std::vector<uint32_t>> slotsStack;
+    std::map<uint32_t, uint32_t> parents;
+    std::vector<Code*> allCodes_;
+#endif
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -236,6 +243,9 @@ class CompilerContext {
             pushedPromiseContexts--;
         delete code.top();
         code.pop();
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        allCodes_.push_back(res);
+#endif
         return res;
     }
 
@@ -249,11 +259,168 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    void popNodeForSlots() {
+        // Always pop the inner vector for this LANGSXP. If it still has
+        // unhandled child slots (non-profiled call — no recordType(true) was
+        // emitted), propagate them to the enclosing level so they are not
+        // orphaned and don't corrupt the stack.
+        auto slots = std::move(slotsStack.top());
+        slotsStack.pop();
+        if (!slots.empty() && !slotsStack.empty()) {
+            for (auto s : slots)
+                slotsStack.top().push_back(s);
+        }
+    }
+
+    void pushNewNodeForSlots() { slotsStack.push(std::vector<uint32_t>()); }
+
+    void registerSlot(uint32_t slotIdx, bool isParent) {
+
+#ifdef RECORDLESS_EXPTREE_DEBUG
+        std::cerr << "\n slotsStack size: " << slotsStack.size() << "\n";
+        std::cerr << "\n registerSlot " << slotIdx << "\n";
+#endif
+
+        auto& currentSlots = slotsStack.top();
+        if (!isParent) {
+            currentSlots.push_back(slotIdx);
+        } else {
+            // Link all current children to this parent slot, then replace the
+            // current level with just this slot. Do NOT pop — popNodeForSlots()
+            // in compileExpr is the single owner of the push/pop balance.
+            for (auto child : currentSlots) {
+                parents[child] = slotIdx;
+            }
+            currentSlots.clear();
+            currentSlots.push_back(slotIdx);
+        }
+    }
+#endif
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    void setTypeFeedbackParents(TypeFeedback& tf) {
+        // Set up parent pointers in TypeFeedback.
+        for (auto& kv : parents) {
+            tf.types(kv.first).parent = &tf.types(kv.second);
+        }
+
+        // parentSlots: slots that have children (not leaves).
+        // childSlots:  slots that have a parent (not roots).
+        std::set<uint32_t> parentSlots;
+        std::set<uint32_t> childSlots;
+        for (const auto& kv : parents) {
+            childSlots.insert(kv.first);
+            parentSlots.insert(kv.second);
+        }
+
+        for (size_t i = 0; i < tf.types_size(); i++) {
+            auto& slot = tf.types(i);
+            slot.isLeaf = parentSlots.find(i) == parentSlots.end();
+            slot.shouldNotRecord = !slot.isLeaf;
+        }
+
+        // Source slots: those a NoRecord (elided) use depends on. When such a
+        // slot records an object it must propagate to its dependents' parents.
+        std::set<uint32_t> sourceSlots;
+        for (size_t d = 0; d < tf.types_size(); d++)
+            if (tf.hasTypeDep(d))
+                sourceSlots.insert(tf.typeDep(d));
+
+        // Specialize each record_type_ / record_type_once_ by (isLeaf, isRoot,
+        // isSource). Inner nodes come only from record_type_ (RecordOnce only
+        // classifies leaves). Leaf-with-parent + no source keeps the original
+        // opcode (record_type_ / record_type_once_). The packed immediate is
+        // preserved; only the opcode byte changes.
+        for (Code* code : allCodes_) {
+            Opcode* pc = code->code();
+            Opcode* end = code->endCode();
+            while (pc < end) {
+                Opcode op = *pc;
+                bool once = op == Opcode::record_type_once_;
+                if (op == Opcode::record_type_ || once) {
+                    uint32_t imm;
+                    memcpy(&imm, pc + 1, sizeof(imm));
+                    uint32_t slot = once ? RECORD_TYPE_ONCE_SLOT_IDX(imm) : imm;
+                    bool isLeaf = parentSlots.find(slot) == parentSlots.end();
+                    bool isRoot = childSlots.find(slot) == childSlots.end();
+                    bool isSrc = sourceSlots.find(slot) != sourceSlots.end();
+                    if (!once && !isLeaf) {
+                        *pc = isRoot ? Opcode::record_type_root_inner_
+                                     : Opcode::record_type_inner_node_;
+                    } else if (isRoot) { // simple leaf (root + leaf)
+                        // Non-source simple leaves — and every untracked
+                        // record, which is also isLeaf && isRoot && !isSrc —
+                        // stay plain record_type_ / record_type_once_ (doRecord
+                        // only). Only a simple-leaf *source* needs a
+                        // specialized opcode so it can propagate to its
+                        // NoRecord dependents' parents.
+                        if (isSrc)
+                            *pc = once ? Opcode::record_type_once_dep_
+                                       : Opcode::record_type_dep_;
+                        // else: leave record_type_ / record_type_once_
+                        // unchanged
+                    } else { // leaf with a parent
+                        // One opcode per once-ness — no _dep_ split. The
+                        // handler always propagates to its own parent and to
+                        // any deps (empty list when not a source), so isSrc is
+                        // irrelevant.
+                        *pc = once ? Opcode::record_type_leafWithParent_once_
+                                   : Opcode::record_type_leafWithParent_;
+                    }
+                }
+                pc = BC::next(pc);
+            }
+        }
+    }
+#endif
+
+    // Tracked: participates in the expression-tree optimization. Registered in
+    // the slot tree, so the post-pass specializes it (root_inner_/inner_node_
+    // for inner nodes, leafWithParent_* for leaves with a parent). A tracked
+    // but parent-less leaf stays plain record_type_ (same as untracked).
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    BC recordTypeTracked(bool isParent) {
+        auto slotIdx = typeFeedbackBuilder.addType();
+        if (!slotsStack.empty())
+            registerSlot(slotIdx, isParent);
+        return BC::recordType(slotIdx);
+    }
+#else
+    BC recordTypeTracked(bool isParent) {
+        (void)isParent;
+        return BC::recordType(typeFeedbackBuilder.addType());
+    }
+#endif
+
+    // Untracked: completely excluded from the optimization scheme. Just emits a
+    // record_type_ and registers nowhere, so the post-pass leaves it untouched
+    // (it is isLeaf && isRoot && !isSource). It records on every execution,
+    // never notifies a parent, is never suppressed, and is never
+    // NoRecord/RecordOnce. Used for records that must always fire (super-assign
+    // target, for-loop bounds, default arguments, statement results, …).
+    BC recordTypeUntracked() {
+        return BC::recordType(typeFeedbackBuilder.addType());
+    }
+
+    // Register a slot that the leaf optimization allocated directly (emitting
+    // record_type_ / record_type_once_) as a leaf child in the expression tree,
+    // so its parent pointer is wired and its record notifies the parent. No-op
+    // when the expression-tree optimization is compiled out. Mirrors the
+    // registerSlot(false) that recordType() does for the non-leaf-opt path.
+    void registerLeafSlot(uint32_t slotIdx) {
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        if (!slotsStack.empty())
+            registerSlot(slotIdx, /*isParent=*/false);
+#else
+        (void)slotIdx;
+#endif
+    }
 
     BC recordTypeTracked(SEXP name) {
         int slot = typeFeedbackBuilder.addType();
         defUseAnalysis().trackUseDef(name, slot);
+        registerLeafSlot((uint32_t)slot); // RecordAlways leaf → tree child
         return BC::recordType(slot);
     }
 
@@ -267,6 +434,9 @@ class CompilerContext {
                "NoRecord must always reference a valid feedback slot");
         uint32_t slot = typeFeedbackBuilder.addType();
         typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
+        // Register the elided use as a leaf in the expression tree so it gets a
+        // parent pointer: the source's propagation enables that parent.
+        registerLeafSlot(slot);
         return slot;
     }
 
@@ -513,7 +683,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << ctx.recordType();
+            cs << ctx.recordTypeUntracked();
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -521,11 +691,11 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // } else {
 
     // m' <- colonCastLhs(m')
-    cs << BC::swap() << BC::colonCastLhs() << ctx.recordType()
+    cs << BC::swap() << BC::colonCastLhs() << ctx.recordTypeUntracked()
        << BC::ensureNamed() << BC::swap();
 
     // n' <- colonCastRhs(m', n')
-    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordType();
+    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordTypeUntracked();
 
     // step <- if (m' <= n') 1L else -1L
     cs << BC::dup2() << BC::le();
@@ -694,7 +864,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << ctx.recordType();
+#ifdef RECORDLESS_EXPTREE_ENABLED
+            cs << ctx.recordTypeTracked(true);
+#else
+            cs << ctx.recordTypeUntracked();
+#endif
 
         return true;
     }
@@ -959,7 +1133,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (superAssign) {
                 cs << BC::ldvarSuper(target);
                 if (Compiler::profile)
-                    cs << ctx.recordType();
+                    cs << ctx.recordTypeUntracked();
             } else {
                 if (ctx.code.top()->isCached(target)) {
                     cs << BC::ldvarForUpdateCached(
@@ -971,7 +1145,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     if (Compiler::recordLess_Leaf_Enabled)
                         emitRecordTypeForVar(ctx, cs, target);
                     else
-                        cs << ctx.recordType();
+                        cs << ctx.recordTypeUntracked();
                 }
             }
 
@@ -1200,7 +1374,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // The return value, RHS, is TOS
                 cs << BC::invisible();
                 if (Compiler::profile) {
-                    cs << ctx.recordType();
+                    cs << ctx.recordTypeUntracked();
                 }
             }
 
@@ -1398,8 +1572,24 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
         cs.addSrc(ast);
         if (!voidContext) {
-            if (Compiler::profile)
-                cs << ctx.recordType();
+            if (Compiler::profile) {
+#ifdef RECORDLESS_EXPTREE_ENABLED
+                // `[` (Bracket) is type-preserving: x[...] has the same
+                // SEXPTYPE as x for non-object x, so its result type is
+                // inferable from the lhs leaf — record it as an inner node
+                // (elidable). If x is ever an object (S3/S4 `[` dispatch can
+                // return anything), the lhs leaf's notifyParent re-enables this
+                // record. `[[` (DoubleBracket) extracts an *element* whose type
+                // varies (e.g. list(3,"hello")[[i]]) and is not inferable, so
+                // it must keep recording.
+                if (fun == symbol::Bracket)
+                    cs << ctx.recordTypeTracked(true);
+                else
+                    cs << ctx.recordTypeUntracked();
+#else
+                cs << ctx.recordTypeUntracked();
+#endif
+            }
             cs << BC::visible();
         } else {
             cs << BC::pop();
@@ -2184,7 +2374,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (voidContext)
         cs << BC::pop();
     else if (Compiler::profile)
-        cs << ctx.recordType();
+        cs << ctx.recordTypeUntracked();
 }
 
 // Classify the use of `name` and emit the appropriate recording instruction.
@@ -2194,14 +2384,14 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                                  SEXP name, unsigned ldvarCachedPos) {
     // if (ctx.isInPromise()) {
-    //     cs << ctx.recordType();
+    //     cs << ctx.recordTypeUntracked();
     //     return;
     // }
 
     // No main body context yet (compiling default formal arguments): skip
     // promise-specific optimizations and fall through to the normal path.
     if (!ctx.mainBodyCtx_) {
-        cs << ctx.recordType();
+        cs << ctx.recordTypeUntracked();
         return;
     }
 
@@ -2230,6 +2420,10 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
             int slot = ctx.typeFeedbackBuilder.addType();
             allocatedSlot = slot;
             ctx.defUseAnalysis().trackUseDef(name, slot);
+            // Wire this leaf into the expression tree so its single recording
+            // notifies the parent (RecordOnce records an invariant type, so one
+            // notification is sufficient — see merge analysis).
+            ctx.registerLeafSlot((uint32_t)slot);
             auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
             if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {
                 // Deferred: bit assigned later when outermost
@@ -2339,7 +2533,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             if (Compiler::recordLess_Leaf_Enabled)
                 emitRecordTypeForVar(ctx, cs, name, ldvarCachedPos);
             else
-                cs << ctx.recordType();
+                cs << ctx.recordTypeUntracked();
         }
     }
 }
@@ -2349,19 +2543,35 @@ void compileConst(CodeStream& cs, SEXP constant) {
     SET_NAMED(constant, 2);
     cs << BC::push(constant) << BC::visible();
 }
-
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
+
     // Dispatch on the current type of AST node
     switch (TYPEOF(exp)) {
         // Function application
     case LANGSXP: {
 
+#if defined(RECORDLESS_EXPTREE_ENABLED) && defined(RECORDLESS_EXPTREE_DEBUG)
+        std::cerr << "pushing slot node for expr: \n";
+        Rf_PrintValue(exp);
+        std::cerr << "\n\n";
+#endif
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        ctx.pushNewNodeForSlots();
+#endif
+
         auto fun = CAR(exp);
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
+
+#ifdef RECORDLESS_EXPTREE_ENABLED
+        ctx.popNodeForSlots();
+#endif
+
     } break;
         // Variable lookup
     case SYMSXP:
+
         compileGetvar(ctx, exp);
         if (voidContext)
             ctx.cs() << BC::pop();
@@ -2500,6 +2710,11 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
+#ifdef RECORDLESS_EXPTREE_ENABLED
+    ctx.setTypeFeedbackParents(*feedback);
+    feedback->buildNoRecordReverseMap();
+#endif
+
     PROTECT(feedback->container());
     function.finalize(body, signature, Context(), feedback);
     // function.function()->recordTypeOncePromiseCount =
@@ -2522,5 +2737,9 @@ bool Compiler::profile =
       std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 bool Compiler::loopPeelingEnabled = true;
+
+// The ldvar-leaf optimization toggle (runtime). Defined here (single TU) rather
+// than in recordless.h, which is a macros-only header included broadly.
+bool Compiler::recordLess_Leaf_Enabled = true;
 
 } // namespace rir

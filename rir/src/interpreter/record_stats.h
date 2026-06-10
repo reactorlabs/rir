@@ -24,7 +24,7 @@
 // perf/production builds so evalRirCode stays byte-identical and the hot loop
 // pays zero overhead.
 
-//#define RIR_RECORD_STATS
+#define RIR_RECORD_STATS
 
 #ifdef RIR_RECORD_STATS
 #include <cstdint>
@@ -35,17 +35,28 @@ namespace rir {
 #ifdef RIR_RECORD_STATS
 
 struct RecordSkipStats {
-    // Recordings that actually happen, counted at the record_type_* handlers:
-    uint64_t typeAlways = 0;   // record_type_       executed (recorded)
-    uint64_t typeOnceRec = 0;  // record_type_once_  1st hit  (recorded)
-    uint64_t typeOnceSkip = 0; // record_type_once_  gated    (SKIPPED)
-    // Counted at the value-load handlers by classifying the *next* opcode, so
-    // we can attribute recordings to ldvar leaves vs. inner expression nodes:
-    uint64_t ldvarRec = 0; // load followed by a record that fires (recorded)
-    uint64_t ldvarOnceSkip = 0; // load followed by a gated record_type_once_
-    uint64_t noRecordSkip =
-        0; // load w/o a following record (elided, inferable)
-    // Prints the summary (when the RIR_RECORD_STATS env var is set) at exit.
+    // ldvar leaves (counted at the leaf record_type_* handlers + ldvar
+    // classify)
+    uint64_t leafAlwaysRec = 0; // RecordAlways leaf — recorded every execution
+    uint64_t leafOnceRec = 0;   // RecordOnce leaf — first-hit recorded
+    uint64_t leafOnceSkip = 0;  // RecordOnce leaf — gated (SKIPPED)
+    uint64_t noRecordSkip = 0;  // NoRecord leaf — elided, no opcode (SKIPPED)
+    // inner nodes (counted at the inner record_type_* handlers; exptree only).
+    // "skip" here = suppressed via shouldNotRecord (the expression-tree
+    // elision).
+    uint64_t rootInnerRec = 0;  // record_type_root_inner_  — recorded
+    uint64_t rootInnerSkip = 0; // record_type_root_inner_  — suppressed
+    uint64_t innerNodeRec = 0;  // record_type_inner_node_  — recorded
+    uint64_t innerNodeSkip = 0; // record_type_inner_node_  — suppressed
+    // Untracked / unoptimized records — every execution of the plain
+    // record_type_ opcode. Two sources land here and are indistinguishable at
+    // runtime (same opcode): (a) recordTypeUntracked sites excluded from the
+    // optimization (loop bounds, super-assign target, default args, statement
+    // results, [[ ...), and (b) tracked RecordAlways leaves that ended up
+    // isLeaf && isRoot && !isSrc, so the post-pass left them as record_type_.
+    // Both always record, never skipped.
+    uint64_t untrackedRec = 0;
+    // Prints the summary at exit.
     ~RecordSkipStats();
 };
 
