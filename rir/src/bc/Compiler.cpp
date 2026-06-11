@@ -320,11 +320,16 @@ class CompilerContext {
             slot.shouldNotRecord = !slot.isLeaf;
         }
 
-        // Source slots: those a NoRecord (elided) use depends on. When such a
-        // slot records an object it must propagate to its dependents' parents.
+        // Source slots: those a NoRecord (elided) use depends on AND whose
+        // dependent has a parent to un-suppress. When such a slot records an
+        // object it must propagate to its dependents' parents — that is the
+        // ONLY thing the _dep_ opcode does. A source whose dependents are all
+        // parentless leaves (e.g. `a <- f(); a`, where the elided read of `a`
+        // is a standalone leaf) has nothing to propagate to, so it stays a
+        // plain record_type_ rather than a pointless record_type_dep_.
         std::set<uint32_t> sourceSlots;
         for (size_t d = 0; d < tf.types_size(); d++)
-            if (tf.hasTypeDep(d))
+            if (tf.hasTypeDep(d) && childSlots.find(d) != childSlots.end())
                 sourceSlots.insert(tf.typeDep(d));
 
         // Specialize each record_type_ / record_type_once_ by (isLeaf, isRoot,
