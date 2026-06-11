@@ -39,7 +39,8 @@ static std::string pctStr(uint64_t value, uint64_t total) {
 }
 
 RecordSkipStats::~RecordSkipStats() {
-    // ldvar leaves
+    // leaves (ldvar reads + opaque value results: call / [[ / for /
+    // replacement)
     uint64_t leafRec = leafAlwaysRec + leafOnceRec;
     uint64_t leafSkip = leafOnceSkip + noRecordSkip;
     uint64_t leafShould = leafRec + leafSkip;
@@ -68,16 +69,15 @@ RecordSkipStats::~RecordSkipStats() {
             "recorded", W, "skipped", "skip%");
     fprintf(stderr, "  ----------------------+-%.*s-+-%.*s-+-%.*s-+-------\n",
             W, dash, W, dash, W, dash);
-    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "ldvar leaves", W,
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "leaves", W,
             col(leafShould).c_str(), W, col(leafRec).c_str(), W,
             col(leafSkip).c_str(), pctStr(leafSkip, leafShould).c_str());
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "inner nodes", W,
             col(innerShould).c_str(), W, col(innerRec).c_str(), W,
             col(innerSkip).c_str(), pctStr(innerSkip, innerShould).c_str());
-    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n",
-            "untracked/unoptimized", W, col(untrackedShould).c_str(), W,
-            col(untrackedRec).c_str(), W, col(0).c_str(),
-            pctStr(0, untrackedShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "untracked", W,
+            col(untrackedShould).c_str(), W, col(untrackedRec).c_str(), W,
+            col(0).c_str(), pctStr(0, untrackedShould).c_str());
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "TOTAL", W,
             col(baselineTotal).c_str(), W, col(recordedTotal).c_str(), W,
             col(skippedTotal).c_str(),
@@ -85,13 +85,13 @@ RecordSkipStats::~RecordSkipStats() {
 
     const int Ws = 22; // should column: "value (share%)"
 
-    // Table 2: ldvar leaves by compiler classification. The should column
-    // carries each class's share of all ldvar leaves in parens.
+    // Table 2: leaves by compiler classification. The should column
+    // carries each class's share of all leaves in parens.
     auto leafShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, leafShould) + ")";
     };
     uint64_t onceShould = leafOnceRec + leafOnceSkip;
-    fprintf(stderr, "\nldvar leaves (total): %s\n", col(leafShould).c_str());
+    fprintf(stderr, "\nleaves (total): %s\n", col(leafShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "class", Ws, "should",
             W, "recorded", W, "skip", "skip%");
     fprintf(stderr, "  -------------------+-%.*s-+-%.*s-+-%.*s-+-------\n", Ws,

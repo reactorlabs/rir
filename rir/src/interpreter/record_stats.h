@@ -24,7 +24,7 @@
 // perf/production builds so evalRirCode stays byte-identical and the hot loop
 // pays zero overhead.
 
-#define RIR_RECORD_STATS
+//#define RIR_RECORD_STATS
 
 #ifdef RIR_RECORD_STATS
 #include <cstdint>
@@ -35,8 +35,9 @@ namespace rir {
 #ifdef RIR_RECORD_STATS
 
 struct RecordSkipStats {
-    // ldvar leaves (counted at the leaf record_type_* handlers + ldvar
-    // classify)
+    // leaves: ldvar reads plus opaque value results (call / [[ / for /
+    // replacement-fn) — both are tree leaves whose type is observed directly.
+    // Counted at the leaf record_type_* handlers + the ldvar classify.
     uint64_t leafAlwaysRec = 0; // RecordAlways leaf — recorded every execution
     uint64_t leafOnceRec = 0;   // RecordOnce leaf — first-hit recorded
     uint64_t leafOnceSkip = 0;  // RecordOnce leaf — gated (SKIPPED)
@@ -48,13 +49,13 @@ struct RecordSkipStats {
     uint64_t rootInnerSkip = 0; // record_type_root_inner_  — suppressed
     uint64_t innerNodeRec = 0;  // record_type_inner_node_  — recorded
     uint64_t innerNodeSkip = 0; // record_type_inner_node_  — suppressed
-    // Untracked / unoptimized records — every execution of the plain
-    // record_type_ opcode. Two sources land here and are indistinguishable at
-    // runtime (same opcode): (a) recordTypeUntracked sites excluded from the
-    // optimization (loop bounds, super-assign target, default args, statement
-    // results, [[ ...), and (b) tracked RecordAlways leaves that ended up
-    // isLeaf && isRoot && !isSrc, so the post-pass left them as record_type_.
-    // Both always record, never skipped.
+    // Untracked records — every execution of a plain record_type_ opcode that
+    // came from recordTypeUntracked() (sites excluded from the optimization:
+    // loop bounds, super-assign target, default args, statement results, [[
+    // ...). Always record, never skipped. RecordAlways leaves that the
+    // post-pass also left as plain record_type_ are NOT counted here — they go
+    // to leafAlwaysRec, recovered at runtime via
+    // TypeFeedback::isStatsUntracked.
     uint64_t untrackedRec = 0;
     // Prints the summary at exit.
     ~RecordSkipStats();

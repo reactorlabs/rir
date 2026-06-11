@@ -118,6 +118,12 @@ class CompilerContext {
     std::map<uint32_t, uint32_t> parents;
     std::vector<Code*> allCodes_;
 #endif
+#ifdef RIR_RECORD_STATS
+    // Stats only: slot indices emitted via recordTypeUntracked(), handed to the
+    // TypeFeedback at finalize so the record_type_ handler can attribute them
+    // to the "untracked" row rather than to RecordAlways leaves.
+    std::set<uint32_t> untrackedStatsSlots_;
+#endif
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -398,14 +404,23 @@ class CompilerContext {
     }
 #endif
 
-    // Untracked: completely excluded from the optimization scheme. Just emits a
-    // record_type_ and registers nowhere, so the post-pass leaves it untouched
-    // (it is isLeaf && isRoot && !isSource). It records on every execution,
-    // never notifies a parent, is never suppressed, and is never
-    // NoRecord/RecordOnce. Used for records that must always fire (super-assign
-    // target, for-loop bounds, default arguments, statement results, …).
+    // Untracked: genuinely outside the analysis — the slot is never a def, a
+    // source, or an inner-node operand. Just emits a record_type_ and registers
+    // nowhere, so the post-pass leaves it untouched (isLeaf && isRoot &&
+    // !isSource). It records on every execution, never notifies a parent, is
+    // never suppressed, and is never NoRecord/RecordOnce. Reserved for the few
+    // records that are truly internal: the colon (`m:n`) operand casts, the
+    // super-assign target read-for-update, and the ldvar fallback while
+    // compiling default formal args (no main-body context to analyse).
+    // NB: opaque *value results* (call / `[[` / `for` / replacement-fn) are NOT
+    // untracked — they are tracked always-record leaves (recordTypeTracked) so
+    // they can be defs/sources and so an enclosing inner node can lean on them.
     BC recordTypeUntracked() {
-        return BC::recordType(typeFeedbackBuilder.addType());
+        auto slotIdx = typeFeedbackBuilder.addType();
+#ifdef RIR_RECORD_STATS
+        untrackedStatsSlots_.insert(slotIdx);
+#endif
+        return BC::recordType(slotIdx);
     }
 
     // Register a slot that the leaf optimization allocated directly (emitting
@@ -688,7 +703,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << ctx.recordTypeUntracked();
+            // `for` result is an opaque value that may be assigned (a def
+            // candidate) and may feed an enclosing inner node, so it is a
+            // tracked always-record leaf, not untracked.
+            cs << ctx.recordTypeTracked(/*isParent=*/false);
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -1379,7 +1397,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // The return value, RHS, is TOS
                 cs << BC::invisible();
                 if (Compiler::profile) {
-                    cs << ctx.recordTypeUntracked();
+                    // Replacement-function result is an opaque value that may
+                    // be assigned (a def candidate) and may feed an enclosing
+                    // inner node, so it is a tracked always-record leaf.
+                    cs << ctx.recordTypeTracked(/*isParent=*/false);
                 }
             }
 
@@ -1590,7 +1611,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 if (fun == symbol::Bracket)
                     cs << ctx.recordTypeTracked(true);
                 else
-                    cs << ctx.recordTypeUntracked();
+                    // `[[` extracts an element whose type is not inferable from
+                    // the lhs, so it is not an elidable inner node — but it is
+                    // an opaque always-record leaf (def candidate / inner-node
+                    // operand), not untracked.
+                    cs << ctx.recordTypeTracked(/*isParent=*/false);
 #else
                 cs << ctx.recordTypeUntracked();
 #endif
@@ -2379,7 +2404,10 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (voidContext)
         cs << BC::pop();
     else if (Compiler::profile)
-        cs << ctx.recordTypeUntracked();
+        // Call result is an opaque value (type not inferable from operands)
+        // that may be assigned (a def candidate) and may feed an enclosing
+        // inner node, so it is a tracked always-record leaf, not untracked.
+        cs << ctx.recordTypeTracked(/*isParent=*/false);
 }
 
 // Classify the use of `name` and emit the appropriate recording instruction.
@@ -2718,6 +2746,9 @@ SEXP Compiler::finalize() {
 #ifdef RECORDLESS_EXPTREE_ENABLED
     ctx.setTypeFeedbackParents(*feedback);
     feedback->buildNoRecordReverseMap();
+#endif
+#ifdef RIR_RECORD_STATS
+    feedback->setStatsUntrackedSlots(ctx.untrackedStatsSlots_);
 #endif
 
     PROTECT(feedback->container());

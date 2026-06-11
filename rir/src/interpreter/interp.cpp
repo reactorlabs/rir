@@ -2445,11 +2445,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP t = ostack_top();
             typeFeedback->record_type(idx, t);
-            // The bare record_type_ opcode covers everything the optimization
-            // doesn't track: genuinely untracked sites AND tracked RecordAlways
-            // leaves left as record_type_ (isLeaf && isRoot && !isSrc). The two
-            // are indistinguishable here (same opcode); count them together.
-            REC_STAT(g_recStats.untrackedRec++);
+            // The bare record_type_ opcode has two origins: genuinely untracked
+            // sites (recordTypeUntracked) and tracked RecordAlways leaves the
+            // post-pass left as record_type_ (isLeaf && isRoot && !isSrc). They
+            // share the opcode, so we recover the origin from the compile-time
+            // set of untracked slots: untracked → untracked row; otherwise it
+            // is a RecordAlways leaf.
+            REC_STAT(if (typeFeedback->isStatsUntracked(idx))
+                         g_recStats.untrackedRec++;
+                     else g_recStats.leafAlwaysRec++);
             NEXT();
         }
 

@@ -6,6 +6,7 @@
 #include "bc/recordless.h"
 #include "common.h"
 #include "interpreter/profiler.h"
+#include "interpreter/record_stats.h"
 #include "recording_hooks.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
@@ -15,6 +16,7 @@
 #include <iostream>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -457,6 +459,15 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // pointers, it is reconstructed by the compiler).
     std::vector<std::vector<uint32_t>> noRecordSourceToDeps_;
 #endif
+#ifdef RIR_RECORD_STATS
+    // Stats only: which slots were emitted via the compiler's
+    // recordTypeUntracked() — the genuinely untracked sites (loop bounds,
+    // super-assign target, default args, statement results, [[ ...). Lets the
+    // record_type_ handler tell a true untracked record apart from a
+    // RecordAlways leaf the post-pass also left as a plain record_type_.
+    // Reconstructed at compile time (setStatsUntrackedSlots); never serialized.
+    std::set<uint32_t> statsUntrackedSlots_;
+#endif
     // All the data are stored in this array: callees, tests, types, typeDeps,
     // and forceBehaviorKinds in this order. The constructor sets the above
     // pointers to point at the appropriate locations.
@@ -608,6 +619,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         ObservedValues& slot = types(idx);
         f(slot);
     }
+
+#ifdef RIR_RECORD_STATS
+    // Record the slots emitted via recordTypeUntracked() (stats attribution).
+    void setStatsUntrackedSlots(const std::set<uint32_t>& slots) {
+        statsUntrackedSlots_ = slots;
+    }
+    bool isStatsUntracked(uint32_t idx) const {
+        return statsUntrackedSlots_.count(idx) != 0;
+    }
+#endif
 
     size_t callees_size() { return callees_size_; }
     size_t tests_size() { return tests_size_; }
