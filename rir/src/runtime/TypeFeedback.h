@@ -182,7 +182,7 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-    inline void record(SEXP e) {
+    __attribute__((always_inline)) void record(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         // Set attribs flag for every object even if the SEXP does  not
@@ -350,7 +350,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
-    ObservedValues& types(uint32_t idx);
+    // Defined here (not in the .cpp) and force-inlined: it's on the hot
+    // recordForceBehavior / record_type_ path, called once per recorded load.
+    __attribute__((always_inline)) ObservedValues& types(uint32_t idx) {
+        return types_[idx];
+    }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
@@ -363,7 +367,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(test(idx), idx, owner_));
     }
 
-    void record_type(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type(uint32_t idx, const SEXP e) {
         types(idx).record(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }

@@ -1981,10 +1981,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = c->code();
     }
 
+    // Cached once here so the hot recordForceBehavior path (and the main loop)
+    // reuse them instead of recomputing c->function()->typeFeedback() per call.
+    auto function = c->function();
+    auto typeFeedback = function->typeFeedback();
+
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
-    auto recordForceBehavior = [&](SEXP s) {
+    auto recordForceBehavior = [&](SEXP s) __attribute__((noinline)) {
         // Bail if this load not recorded or we are in already optimized code
         if (*pc != Opcode::record_type_)
             return;
@@ -2006,15 +2011,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
-            if (feedback.stateBeforeLastForce < state) {
-                feedback.stateBeforeLastForce = state;
-            }
-        });
+        // Access the feedback slot directly (cached typeFeedback) and update
+        // stateBeforeLastForce — no std::function / lambda indirection.
+        ObservedValues& feedback = typeFeedback->types(idx);
+        if (feedback.stateBeforeLastForce < state) {
+            feedback.stateBeforeLastForce = state;
+        }
     };
-
-    auto function = c->function();
-    auto typeFeedback = function->typeFeedback();
 
     // main loop
     BEGIN_MACHINE {
