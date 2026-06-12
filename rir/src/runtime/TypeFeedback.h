@@ -288,7 +288,7 @@ struct ObservedValues {
 
     // Used by record_type_ / record_type_once_: root-level leaves (no parent).
     // Skip if suppressed; no notifyParent — parent is always nullptr here.
-    inline void record(SEXP e) {
+    __attribute__((__always_inline__)) void record(SEXP e) {
 #ifdef RECORDLESS_EXPTREE_ENABLED
         if (shouldNotRecord)
             return;
@@ -311,7 +311,7 @@ struct ObservedValues {
     //   doRecord               (no A, no B)
 
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    inline void recordInnerNode(SEXP e) {
+    __attribute__((__always_inline__)) void recordInnerNode(SEXP e) {
         if (shouldNotRecord)
             return; // A
         doRecord(e);
@@ -321,9 +321,12 @@ struct ObservedValues {
     // root=1, leaf=1 — standalone variable lookup: no parent, never suppressed.
     // Leaf-with-parent uses record_type_leafWithParent_ → recordSimple +
     // notifyRelatedNodes.
-    inline void recordSimple(SEXP e) { doRecord(e); }
+    __attribute__((__always_inline__)) void recordSimple(SEXP e) {
+        doRecord(e);
+    }
 
-    inline void recordRootInner(SEXP e) { // root=1, leaf=0
+    __attribute__((__always_inline__)) void
+    recordRootInner(SEXP e) { // root=1, leaf=0
         if (shouldNotRecord)
             return; // A
         doRecord(e);
@@ -537,20 +540,22 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(test(idx), idx, owner_));
     }
 
-    inline void record_type(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type(uint32_t idx, const SEXP e) {
         types(idx).record(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    inline void record_type_inner_node(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type_inner_node(uint32_t idx,
+                                                          const SEXP e) {
         // A non-root inner node always has a parent, so it can never be a
         // variable's def — hence never a NoRecord source. It only notifies its
         // own parent (done inside recordInnerNode); no propagate needed.
         types(idx).recordInnerNode(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
-    inline void record_type_root_inner(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type_root_inner(uint32_t idx,
+                                                          const SEXP e) {
         // A root inner node IS the top of an expression assigned to a variable,
         // so it may be a NoRecord source. After recording, always check for
         // dependents and propagate (cheap no-op when it has none).
@@ -566,7 +571,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // NOT use record()'s inline notifyParent here (it would pre-set the
     // once-flag and skip the dependent propagation). A simple leaf that is NOT
     // a source stays plain record_type_ / record_type_once_ and pays nothing.
-    inline void record_type_dep(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type_dep(uint32_t idx, const SEXP e) {
         ObservedValues& slot = types(idx);
         slot.recordSimple(e); // doRecord only (simple-leaf source)
         notifyRelatedNodes(slot,
@@ -578,7 +583,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // notifies its own parent AND any NoRecord dependents together, once.
     // Non-source leaves just have an empty dependent list (the loop is a
     // no-op), so there is no separate _dep_ opcode for this family.
-    inline void record_type_leafWithParent(uint32_t idx, const SEXP e) {
+    __attribute__((noinline)) void record_type_leafWithParent(uint32_t idx,
+                                                              const SEXP e) {
         ObservedValues& slot = types(idx);
         slot.recordSimple(e); // doRecord only (notify handled below)
         notifyRelatedNodes(slot, slot.object); // own parent + any dependents
@@ -589,7 +595,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // NoRecord dependents — done together, once. record_type_ and
     // record_type_once_ (plain simple leaves) don't call this, so they never
     // pay the parent-check / dependent-list lookup.
-    inline void notifyRelatedNodes(ObservedValues& slot, bool isObject) {
+    __attribute__((__always_inline__)) void
+    notifyRelatedNodes(ObservedValues& slot, bool isObject) {
         if (!isObject || slot.hasPropagatedNotification)
             return; // only an object un-suppresses, and only once
         slot.hasPropagatedNotification = true;

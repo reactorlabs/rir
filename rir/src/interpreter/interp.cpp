@@ -2008,8 +2008,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // `slotIdx`. Used by all recordForceBehavior* variants below. Classify the
     // load, then move the slot up the monotonic lattice (unknown < value <
     // evaluatedPromise < promise). Direct types(slotIdx) access via the cached
-    // typeFeedback (no std::function indirection). Was a macro purely to force
-    // inlining; always_inline does that with identical semantics.
+    // typeFeedback (no std::function indirection). always_inline: this is the
+    // shared core, inlined into the noinline wrappers below (which are the
+    // outlined call targets in the dispatch loop).
     auto recordFbAtSlot = [&](uint32_t slotIdx, SEXP s)
         __attribute__((always_inline)) {
         // FIXME: cf. #1260
@@ -2037,10 +2038,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     //   record_type_once_promise_ — record FB once per invocation, gated by
     //                               the per-env bitmap
     // Single recordFbAtSlot call: computing `idx` (and bailing) first avoids
-    // duplicating the classification at each ldvar site. always_inline keeps
-    // both this lambda and recordFbAtSlot inlined regardless of the function's
-    // inlining budget (baseline fix).
-    auto recordForceBehavior = [&](SEXP s) __attribute__((always_inline)) {
+    // duplicating the classification at each ldvar site. noinline so it is
+    // outlined out of the dispatch loop (the always_inline recordFbAtSlot core
+    // is inlined into it) — keeps evalRirCode codegen matched to the baseline
+    // for a fair comparison.
+    auto recordForceBehavior = [&](SEXP s) __attribute__((noinline)) {
         Immediate raw = *(Immediate*)(pc + 1);
         if (*pc != Opcode::record_type_) {
             if (*pc == Opcode::record_type_once_) {
@@ -2060,8 +2062,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always
     // record_type_, so unconditionally record.
-    auto recordForceBehaviorAlways = [&](SEXP s)
-        __attribute__((always_inline)) {
+    auto recordForceBehaviorAlways = [&](SEXP s) __attribute__((noinline)) {
         // assert(*pc == Opcode::record_type_);
 
         Immediate slotIdx = *(Immediate*)(pc + 1);
@@ -2075,8 +2076,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // captures the highest lattice point the variable reaches (a formal/outer-
     // controlled var may still be an unforced promise on the first iteration);
     // later iterations are equal or more precise.
-    auto recordForceBehaviorRecordOnce = [&](SEXP s)
-        __attribute__((always_inline)) {
+    auto recordForceBehaviorRecordOnce = [&](SEXP s) __attribute__((noinline)) {
         // assert(*pc == Opcode::record_type_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
