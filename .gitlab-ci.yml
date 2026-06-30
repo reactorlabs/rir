@@ -471,13 +471,13 @@ benchmark_fastr:
 
 # Do not use the dind from Gitlab - no need to bootstrap
 update_containers:
-  image: docker:dind
+  image: docker:29.2.1-dind
   stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: docker:dind
+    - name: docker:29.2.1-dind
       alias: docker
   before_script:
     - docker info
