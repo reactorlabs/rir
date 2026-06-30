@@ -4,6 +4,7 @@
 #include "RirRuntimeObject.h"
 
 #include <iostream>
+
 #include <vector>
 
 namespace rir {
