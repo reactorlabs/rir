@@ -2476,8 +2476,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(clear_record_type_once_bit_) {
             uint32_t bitIdx = readImmediate();
             advanceImmediate();
-            RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx) &=
-                ~RECORD_TYPE_ONCE_MASK(bitIdx);
+            RECORD_TYPE_ONCE_CLEAR_BIT(fired, bitIdx);
             NEXT();
         }
 

@@ -9,6 +9,7 @@
 #include "runtime/TypeFeedback.h"
 
 #include <array>
+#include <bitset>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -37,8 +38,23 @@ typedef uint32_t Immediate;
     ((bitmap)[RECORD_TYPE_ONCE_WORD_IDX(iidx)])
 #define RECORD_TYPE_ONCE_MASK(iidx)                                            \
     ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
+// Whole-bitmap view: reinterpret the raw
+// uint64_t[RECORD_TYPE_ONCE_BITMAP_ELEMS] storage as a single
+// std::bitset<RECORD_TYPE_ONCE_MAX_IIDX>, so TEST/SET can address the full iidx
+// range directly instead of manually splitting into word+bit-in-word. libstdc++
+// lays out bitset<N> (N a multiple of 64) as std::array<unsigned long, N/64>,
+// byte-identical to uint64_t[N/64] on this LP64 target, so this is a zero-copy
+// view over the same storage — same load
+// + bit-test/bit-set as the manual version, just addressed as one bitset.
+// Relies on that (implementation-defined, not standard-guaranteed) layout.
+#define RECORD_TYPE_ONCE_BITMAP_VIEW(bitmap)                                   \
+    reinterpret_cast<std::bitset<RECORD_TYPE_ONCE_MAX_IIDX>&>(bitmap)
+// operator[] (not test()) — test() bounds-checks and throws on out-of-range,
+// which is dead-code overhead we can't have the compiler prove away (iidx
+// comes from the full 16-bit packed range, not provably < N at compile time).
+// operator[] is unchecked, matching the original macro's behavior exactly.
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
-    (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
+    (RECORD_TYPE_ONCE_BITMAP_VIEW(bitmap)[iidx])
 // If the fired-bitmap bit for `raw` is already set, run `onFired` — the skip
 // action. Use `return` in the recordForceBehavior lambdas and `NEXT()` in the
 // once-opcode handlers; both are gotos/returns, so the do/while wrapper is safe
@@ -50,10 +66,14 @@ typedef uint32_t Immediate;
                                          RECORD_TYPE_ONCE_IIDX(raw)))          \
             onFired;                                                           \
     } while (0)
-// Mark the fired-bitmap bit for `raw` (after the first recording).
+// Mark the fired-bitmap bit for `raw` (after the first recording). operator[]
+// (unchecked), same reasoning as TEST above.
 #define RECORD_TYPE_ONCE_SET(bitmap, raw)                                      \
-    (RECORD_TYPE_ONCE_BITMAP_WORD((bitmap), RECORD_TYPE_ONCE_IIDX(raw)) |=     \
-     RECORD_TYPE_ONCE_MASK(RECORD_TYPE_ONCE_IIDX(raw)))
+    (RECORD_TYPE_ONCE_BITMAP_VIEW(bitmap)[RECORD_TYPE_ONCE_IIDX(raw)] = true)
+// Clear a single fired-bitmap bit by its direct (unpacked) iidx. operator[]
+// (unchecked), same reasoning as TEST above.
+#define RECORD_TYPE_ONCE_CLEAR_BIT(bitmap, iidx)                               \
+    (RECORD_TYPE_ONCE_BITMAP_VIEW(bitmap)[iidx] = false)
 // Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
 #define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
 // Mask with 1s in word positions [0..hi] (clears bits from start of word to
