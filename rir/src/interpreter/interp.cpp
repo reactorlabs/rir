@@ -1988,11 +1988,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // of recomputing c->function()->typeFeedback() per call (baseline fix).
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
-    uint64_t fired[RECORD_TYPE_ONCE_BITMAP_ELEMS];
+    // Per-invocation "has this once-slot fired yet" flags — one bool per
+    // once-slot, alloca'd and zeroed to exactly what this function uses (no
+    // fixed cap, no bit-packing).
+    bool* fired = nullptr;
     if (c->recordTypeOnceCount > 0) {
-        memset(fired, 0,
-               RECORD_TYPE_ONCE_BITMAP_WORDS(c->recordTypeOnceCount) *
-                   sizeof(uint64_t));
+        fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
+        memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
     }
 
     // Per-function-invocation bitmap for record_type_once_promise_ — disabled:
@@ -2476,8 +2478,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(clear_record_type_once_bit_) {
             uint32_t bitIdx = readImmediate();
             advanceImmediate();
-            RECORD_TYPE_ONCE_BITMAP_WORD(fired, bitIdx) &=
-                ~RECORD_TYPE_ONCE_MASK(bitIdx);
+            fired[bitIdx] = false;
             NEXT();
         }
 
@@ -2486,30 +2487,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             uint32_t start = RECORD_TYPE_ONCE_RANGE_START(packed);
             uint32_t count = RECORD_TYPE_ONCE_RANGE_COUNT(packed);
-            // Naive bit-by-bit (reference):
-            // for (uint32_t b = start; b < start + count; b++)
-            //     RECORD_TYPE_ONCE_BITMAP_WORD(fired, b) &=
-            //         ~RECORD_TYPE_ONCE_MASK(b);
-            uint32_t end = start + count; // exclusive
-            uint32_t startWord = RECORD_TYPE_ONCE_WORD_IDX(start);
-            uint32_t endWord = RECORD_TYPE_ONCE_WORD_IDX(end - 1);
-            if (startWord == endWord) {
-                // All bits fall within one word: build a single mask.
-                uint64_t& word = fired[startWord];
-                word &= ~RECORD_TYPE_ONCE_CLEAR_MASK(
-                    RECORD_TYPE_ONCE_BIT_IN_WORD(start),
-                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
-            } else {
-                // Partial first word: clear bits [start&63 .. 63].
-                fired[startWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_FROM(
-                    RECORD_TYPE_ONCE_BIT_IN_WORD(start));
-                // Full middle words.
-                for (uint32_t w = startWord + 1; w < endWord; w++)
-                    fired[w] = 0;
-                // Partial last word: clear bits [0 .. (end-1)&63].
-                fired[endWord] &= ~RECORD_TYPE_ONCE_CLEAR_MASK_TO(
-                    RECORD_TYPE_ONCE_BIT_IN_WORD(end - 1));
-            }
+            memset(fired + start, 0, count * sizeof(bool));
             NEXT();
         }
 

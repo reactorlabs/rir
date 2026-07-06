@@ -20,48 +20,33 @@
 typedef uint32_t Immediate;
 
 // Macros for packing/unpacking the immediate of record_type_once_:
-// low 16 bits = slotIdx (TypeFeedback slot), high 16 bits = iidx (bit index
-// into the per-invocation fixed bitmap).
-#define RECORD_TYPE_ONCE_BITMAP_ELEMS 8
-#define RECORD_TYPE_ONCE_MAX_IIDX (RECORD_TYPE_ONCE_BITMAP_ELEMS * 64)
+// low 16 bits = slotIdx (TypeFeedback slot), high 16 bits = iidx (index into
+// the per-invocation fired-flags array).
+// Compile-time cap on once-slots per function (enforced in Compiler.cpp);
+// unrelated to how the interpreter stores the per-invocation fired flags.
+#define RECORD_TYPE_ONCE_MAX_IIDX 512
 #define RECORD_TYPE_ONCE_VALID_SLOT_IDX(idx) ((idx) <= 0xFFFF)
 #define RECORD_TYPE_ONCE_SLOT_IDX(imm) ((imm)&0xFFFF)
 #define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
 #define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
-#define RECORD_TYPE_ONCE_BITMAP_WORDS(count) (((count) + 63) >> 6)
-// Index of the 64-bit word that contains bit iidx.
-#define RECORD_TYPE_ONCE_WORD_IDX(iidx) ((iidx) >> 6)
-// Bit position of iidx within its word (0-63).
-#define RECORD_TYPE_ONCE_BIT_IN_WORD(iidx) ((iidx)&63)
-#define RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx)                             \
-    ((bitmap)[RECORD_TYPE_ONCE_WORD_IDX(iidx)])
-#define RECORD_TYPE_ONCE_MASK(iidx)                                            \
-    ((uint64_t)1 << RECORD_TYPE_ONCE_BIT_IN_WORD(iidx))
-#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
-    (RECORD_TYPE_ONCE_BITMAP_WORD(bitmap, iidx) & RECORD_TYPE_ONCE_MASK(iidx))
-// If the fired-bitmap bit for `raw` is already set, run `onFired` — the skip
+
+// `bitmap` is a bool* alloca'd to exactly c->recordTypeOnceCount entries (see
+// evalRirCode) — direct indexing, no word/mask packing.
+#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx) ((bitmap)[iidx])
+// If the fired flag for `raw` is already set, run `onFired` — the skip
 // action. Use `return` in the recordForceBehavior lambdas and `NEXT()` in the
 // once-opcode handlers; both are gotos/returns, so the do/while wrapper is safe
 // (NEXT() is never a plain `break`). Pair with RECORD_TYPE_ONCE_SET to mark the
-// bit after the first recording.
+// flag after the first recording.
 #define RECORD_TYPE_ONCE_GATE(bitmap, raw, onFired)                            \
     do {                                                                       \
         if (RECORD_TYPE_ONCE_BITMAP_TEST((bitmap),                             \
                                          RECORD_TYPE_ONCE_IIDX(raw)))          \
             onFired;                                                           \
     } while (0)
-// Mark the fired-bitmap bit for `raw` (after the first recording).
+// Mark the fired flag for `raw` (after the first recording).
 #define RECORD_TYPE_ONCE_SET(bitmap, raw)                                      \
-    (RECORD_TYPE_ONCE_BITMAP_WORD((bitmap), RECORD_TYPE_ONCE_IIDX(raw)) |=     \
-     RECORD_TYPE_ONCE_MASK(RECORD_TYPE_ONCE_IIDX(raw)))
-// Mask with 1s in word positions [lo..63] (clears bits from lo to end of word).
-#define RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) (~(uint64_t)0 << (lo))
-// Mask with 1s in word positions [0..hi] (clears bits from start of word to
-// hi).
-#define RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi) (~(uint64_t)0 >> (63 - (hi)))
-// Mask with 1s in word positions [lo..hi].
-#define RECORD_TYPE_ONCE_CLEAR_MASK(lo, hi)                                    \
-    (RECORD_TYPE_ONCE_CLEAR_MASK_FROM(lo) & RECORD_TYPE_ONCE_CLEAR_MASK_TO(hi))
+    ((bitmap)[RECORD_TYPE_ONCE_IIDX(raw)] = true)
 
 // Macros for packing/unpacking the immediate of
 // clear_record_type_once_bits_range_: low 16 bits = start bit index, high 16
