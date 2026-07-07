@@ -22,19 +22,20 @@ typedef uint32_t Immediate;
 // Macros for packing/unpacking the immediate of record_type_once_:
 // low 16 bits = slotIdx (TypeFeedback slot), high 16 bits = iidx (index into
 // the per-invocation fired-flags array).
-// Compile-time cap on once-slots per function (enforced in Compiler.cpp);
-// unrelated to how the interpreter stores the per-invocation fired flags.
+// Compile-time cap on once-slots per function (enforced in Compiler.cpp) and
+// the fixed size of the interpreter's per-invocation fired-flags array (see
+// evalRirCode).
 #define RECORD_TYPE_ONCE_MAX_IIDX 512
 #define RECORD_TYPE_ONCE_VALID_SLOT_IDX(idx) ((idx) <= 0xFFFF)
 #define RECORD_TYPE_ONCE_SLOT_IDX(imm) ((imm)&0xFFFF)
 #define RECORD_TYPE_ONCE_IIDX(imm) ((imm) >> 16)
 #define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
 
-// `bitmap` is a bool* alloca'd to exactly c->recordTypeOnceCount entries (see
-// evalRirCode) — direct indexing, no word/mask packing. The flag is set once
-// on the first hit and then read on every later iteration of the enclosing
-// loop, so "already fired" is the overwhelmingly common outcome — hint the
-// branch predictor accordingly.
+// `bitmap` is a fixed-size bool[RECORD_TYPE_ONCE_MAX_IIDX] (see evalRirCode)
+// — direct indexing, no word/mask packing. The flag is set once on the first
+// hit and then read on every later iteration of the enclosing loop, so
+// "already fired" is the overwhelmingly common outcome — hint the branch
+// predictor accordingly.
 #define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
     (__builtin_expect((bitmap)[iidx], 1))
 // If the fired flag for `raw` is already set, run `onFired` — the skip
