@@ -31,8 +31,12 @@ typedef uint32_t Immediate;
 #define RECORD_TYPE_ONCE_PACK(slotIdx, iidx) (((iidx) << 16) | (slotIdx))
 
 // `bitmap` is a bool* alloca'd to exactly c->recordTypeOnceCount entries (see
-// evalRirCode) — direct indexing, no word/mask packing.
-#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx) ((bitmap)[iidx])
+// evalRirCode) — direct indexing, no word/mask packing. The flag is set once
+// on the first hit and then read on every later iteration of the enclosing
+// loop, so "already fired" is the overwhelmingly common outcome — hint the
+// branch predictor accordingly.
+#define RECORD_TYPE_ONCE_BITMAP_TEST(bitmap, iidx)                             \
+    (__builtin_expect((bitmap)[iidx], 1))
 // If the fired flag for `raw` is already set, run `onFired` — the skip
 // action. Use `return` in the recordForceBehavior lambdas and `NEXT()` in the
 // once-opcode handlers; both are gotos/returns, so the do/while wrapper is safe
