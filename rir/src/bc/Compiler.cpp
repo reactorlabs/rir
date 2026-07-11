@@ -2047,8 +2047,10 @@ SEXP Compiler::finalize() {
         if (TYPEOF(e) == LANGSXP)
             for (auto n : RList(CDR(e))) {
                 if (CAR(e) == symbol::rm) {
-                    ctx.code.top()->loadsSlotInCache[n] =
-                        CompilerContext::CodeContext::BindingCacheDisabled;
+                    auto& cache = ctx.code.top()->loadsSlotInCache;
+                    if (cache.count(n))
+                        cache[n] =
+                            CompilerContext::CodeContext::BindingCacheDisabled;
                 } else if (TYPEOF(n) == SYMSXP) {
                     ctx.code.top()->cacheSlotFor(n);
                 } else {
