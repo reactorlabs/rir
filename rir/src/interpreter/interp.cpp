@@ -2032,33 +2032,41 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             fb__.stateBeforeLastForce = state;
     };
 
-    // General recordForceBehavior used by non-ldvar_cached_* loads. Dispatches
-    // on the immediately following opcode. Handles all three record kinds:
-    //   record_type_              — record FB always
-    //   record_type_once_         — record FB once, gated by the per-code
-    //                               `fired` bitmap
-    //   record_type_once_promise_ — record FB once per invocation, gated by
-    //                               the per-env bitmap
-    // Single recordFbAtSlot call: computing `idx` (and bailing) first avoids
-    // duplicating the classification at each ldvar site. noinline so it is
-    // outlined out of the dispatch loop (the always_inline recordFbAtSlot core
-    // is inlined into it) — keeps evalRirCode codegen matched to the baseline
-    // for a fair comparison.
+    // General recordForceBehavior used by non-ldvar_cached_* loads (ldvar_,
+    // ldvar_for_update_*, ldvar_super_, ldddvar_). Dispatches on the opcode
+    // immediately following the load — the load's own value-type record, if
+    // any. Two shapes reach here:
+    //   always (raw immediate = slot idx):
+    //     record_type_              — plain leaf / untracked
+    //     record_type_leaf_notify_  — leaf that is a source or has a parent
+    //   once (packed immediate, gated by the per-code `fired` bitmap):
+    //     record_type_once_
+    //     record_type_leaf_notify_once_
+    // The leaf_notify_ variants matter because the post-pass rewrites a tracked
+    // non-cached leaf's record_type_[once_] into them; matching only the plain
+    // opcodes would silently drop FB for those loads. Inner-node opcodes never
+    // follow a load (a load's own record is always a leaf), and anything else
+    // (NoRecord elision, ldddvar_) means no record follows — bail.
+    // noinline so it is outlined out of the dispatch loop (the always_inline
+    // recordFbAtSlot core is inlined into it) — keeps evalRirCode codegen
+    // matched to the baseline for a fair comparison.
     auto recordForceBehavior = [&](SEXP s) __attribute__((noinline)) {
         Immediate raw = *(Immediate*)(pc + 1);
-        if (*pc != Opcode::record_type_) {
-            if (*pc == Opcode::record_type_once_) {
-                RECORD_TYPE_ONCE_GATE(fired, raw, return );
-                // } else if (*pc == Opcode::record_type_once_promise_) {
-                //     RECORD_TYPE_ONCE_PROMISE_GATE(
-                //         env->u.envsxp.recordTypeOnceBitmap, raw);
-            } else {
-                return;
-            }
+        uint32_t idx;
+        switch (*pc) {
+        case Opcode::record_type_:
+        case Opcode::record_type_leaf_notify_:
+            idx = raw; // always: raw immediate is the slot index
+            break;
+        case Opcode::record_type_once_:
+        case Opcode::record_type_leaf_notify_once_:
+            // once: gated by the per-code `fired` bitmap; slot idx is packed
+            RECORD_TYPE_ONCE_GATE(fired, raw, return );
+            idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
+            break;
+        default:
+            return; // no value-type record follows this load
         }
-        uint32_t idx = (*pc == Opcode::record_type_)
-                           ? raw
-                           : RECORD_TYPE_ONCE_SLOT_IDX(raw);
         recordFbAtSlot(idx, s);
     };
 
