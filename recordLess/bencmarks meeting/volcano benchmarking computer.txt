@@ -1,0 +1,22 @@
+> run(commandArgs(trailingOnly=TRUE))
+[1] 21767.2
+volcano: iterations=1 runtime: 132593564us
+[1] 21767.2
+volcano: iterations=1 runtime: 133264076us
+[1] 21767.2
+volcano: iterations=1 runtime: 132767637us
+[1] 21767.2
+volcano: iterations=1 runtime: 132599479us
+[1] 21767.2
+volcano: iterations=1 runtime: 132249482us
+[1] 21767.2
+volcano: iterations=1 runtime: 133439679us
+[1] 21767.2
+volcano: iterations=1 runtime: 132840405us
+[1] 21767.2
+volcano: iterations=1 runtime: 132685734us
+[1] 21767.2
+volcano: iterations=1 runtime: 133215353us
+[1] 21767.2
+volcano: iterations=1 runtime: 133196142us
+volcano: iterations=10; average: 132885155 us; total: 1328851551us

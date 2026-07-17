@@ -1,0 +1,479 @@
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> 
+> verifyResult <- function(x, ...) {
++     UseMethod("verifyResult", x)
++ }
+> 
+> verifyResult.default <- function(result, benchmarkParameter) {
++     TRUE
++ }
+> 
+> innerBenchmarkLoop <- function(x, ...) {
++     UseMethod("innerBenchmarkLoop", x)
++ }
+> 
+> innerBenchmarkLoop.default <- function(class, benchmarkParameter, innerIterations) {
++     for (i in 1:innerIterations) {
++         if (!verifyResult(execute(benchmarkParameter), benchmarkParameter)) {
++             return(FALSE)
++         }
++     }
++     return(TRUE)
++ }
+> 
+> doRuns <- function(name, iterations, benchmarkParameter, innerIterations) {
++     total <- 0
++     class(name) <- tolower(name)
++     for (i in 1:iterations) {
++         startTime <- Sys.time()
++         if (!innerBenchmarkLoop(name, benchmarkParameter, innerIterations)) {
++             stop("Benchmark failed with incorrect result")
++         }
++         endTime <- Sys.time()
++         runTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
++ 
++         cat(name, ": iterations=1 runtime: ", round(runTime), "us\n", sep = "")
++         total <- total + runTime
++     }
++     total
++ }
+> 
+> run <- function(args) {
++     if (length(args) < 3 || 4 < length(args))
++         stop(printUsage())
++ 
++     name <- args[[1]]
++     numIterations <- strtoi(args[[2]])
++     benchmarkParameter <- strtoi(args[[3]])
++     innerIterations <- if (length(args) > 3) strtoi(args[[4]]) else 1
++ 
++     source(file.path(".", paste(tolower(name), ".r", sep="")))
++     
++     total <- as.numeric(doRuns(name, numIterations, benchmarkParameter, innerIterations));
++     cat(name, ": ",
++         "iterations=", numIterations, "; ",
++         "average: ", round(total / numIterations), " us; ",
++         "total: ", round(total), "us\n\n", sep="")
++     #cat("Total runtime: ", total, "us\n\n", sep="")
++ }
+> 
+> printUsage <- function() {
++     cat("harness.r benchmark num-iterations benchmark-parameter [inner-iter]\n")
++     cat("\n")
++     cat("  benchmark           - benchmark class name\n")
++     cat("  num-iterations      - number of times to execute benchmark\n")
++     cat("  benchmark-parameter - size of the benchmark problem\n")
++     cat("  inner-iter          - number of times the benchmark is executed in an inner loop,\n")
++     cat("                        which is measured in total, default: 1\n")
++ }
+> 
+> run(commandArgs(trailingOnly=TRUE))
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2465266us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2511240us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2624815us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2715094us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2446827us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2466794us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2581952us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2488456us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2442015us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2447387us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 3079938us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2528590us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2601194us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2873476us
+T 30.01
+A 29.95
+G 20.81
+C 19.23 
+AA 9.25092509250925
+TT 8.95089508950895
+TA 8.92089208920892
+AT 8.89088908890889
+TG 6.23062306230623
+GA 6.16061606160616
+GT 6.15061506150615
+CT 6.02060206020602
+AG 5.93059305930593
+TC 5.9005900590059
+AC 5.88058805880588
+CA 5.61056105610561
+GG 4.6004600460046
+CG 4.05040504050405
+GC 3.9003900390039
+CC 3.55035503550355 
+142	GGT	
+51	GGTA	
+2	GGTATT	
+0	GGTATTTTAATT	
+0	GGTATTTTAATTTATAGT	
+knucleotide/knucleotide_brute_2: iterations=1 runtime: 2903460us
+knucleotide/knucleotide_brute_2: iterations=15; average: 2611767 us; total: 39176504us
+
+> 

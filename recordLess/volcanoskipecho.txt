@@ -1,0 +1,683 @@
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> 
+> verifyResult <- function(x, ...) {
++     UseMethod("verifyResult", x)
++ }
+> 
+> verifyResult.default <- function(result, benchmarkParameter) {
++     TRUE
++ }
+> 
+> innerBenchmarkLoop <- function(x, ...) {
++     UseMethod("innerBenchmarkLoop", x)
++ }
+> 
+> innerBenchmarkLoop.default <- function(class, benchmarkParameter) {
++     verifyResult(execute(benchmarkParameter), benchmarkParameter)
++ }
+> 
+> doRuns <- function(name, iterations, benchmarkParameter) {
++     total <- 0
++     class(name) <- tolower(name)
++     for (i in 1:iterations) {
++         startTime <- Sys.time()
++         if (!innerBenchmarkLoop(name, benchmarkParameter)) {
++             stop("Benchmark failed with incorrect result")
++         }
++         endTime <- Sys.time()
++         runTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
++ 
++         cat(name, ": iterations=1 runtime: ", round(runTime), "us\n", sep = "")
++         total <- total + runTime
++     }
++     total
++ }
+> 
+> run <- function(args) {
++     if (length(args) != 3)
++         stop(printUsage())
++ 
++     name <- args[[1]]
++     numIterations <- strtoi(args[[2]])
++     benchmarkParameter <- strtoi(args[[3]])
++ 
++     source(file.path(".", paste(name, ".r", sep="")))
++     
++     total <- as.numeric(doRuns(name, numIterations, benchmarkParameter));
++     cat(name, ": ",
++         "iterations=", numIterations, "; ",
++         "average: ", round(total / numIterations), " us; ",
++         "total: ", round(total), "us\n\n", sep="")
++     #cat("Total runtime: ", total, "us\n\n", sep="")
++ }
+> 
+> printUsage <- function() {
++     cat("harness.r benchmark num-iterations benchmark-parameter [inner-iter]\n")
++     cat("\n")
++     cat("  benchmark           - benchmark class name\n")
++     cat("  num-iterations      - number of times to execute benchmark\n")
++     cat("  benchmark-parameter - size of the benchmark problem\n")
++     cat("  inner-iter          - number of times the benchmark is executed in an inner loop,\n")
++     cat("                        which is measured in total, default: 1\n")
++ }
+> 
+> run(commandArgs(trailingOnly=TRUE))
+== closure 0x55abf918b2f8 (env 0x55abf7185588) ==
+== dispatch table 0x55abf8db92d0 ==
+= version 0 (0x55abf8963878) =
+[sigature] needsEnv 
+[flags]    
+[stats]    invoked: 0, deopt: 0
+0:
+      0   push_  <blt length>
+      5   dup_  
+      6   ldvar_noforce_  length
+     11   identical_noforce_  
+     12   [ _ ] Test#0
+     17   brtrue_  1
+     22   pop_  
+     23   ldfun_  length
+     28   [ 0, <0>, valid  ] Call#0
+     33   mk_promise_  0
+     38   ; length(args)
+          call_  1
+     55   br_  2
+1:
+     60   ldvar_cached_  args{0}
+     69   [ <?> ] Type#1
+     74   ; length(args)
+          call_  1
+2:
+     91   [ <?> ] Type#2
+     96   push_  3
+    101   visible_  
+    102   ; !=(length(args), 3)
+          ne_  
+    103   [ <?> ] Type#3
+    108   asbool_  
+    109   brtrue_  3
+    114   br_  4
+3:
+    119   ldfun_  stop
+    124   [ 0, <0>, valid  ] Call#1
+    129   mk_promise_  1
+    134   ; stop(printUsage())
+          call_  1
+    151   pop_  
+4:
+    152   ldvar_cached_  args{0}
+    161   [ <?> ] Type#5
+    166   dup_  
+    167   is_  NonObject
+    172   [ _ ] Test#1
+    177   brfalse_  5
+    182   br_  6
+5:
+    187   push_  1
+    192   br_  7
+6:
+    197   push_  1
+    202   visible_  
+7:
+    203   ; [[(args, 1)
+          extract2_1_  
+    204   [ <?> ] Type#6
+    209   visible_  
+    210   stvar_cached_  name{1}
+    219   ldfun_  strtoi
+    224   [ 0, <0>, valid  ] Call#3
+    229   mk_promise_  2
+    234   ; strtoi([[(args, 2))
+          call_  1
+    251   [ <?> ] Type#9
+    256   stvar_cached_  numIterations{2}
+    265   ldfun_  strtoi
+    270   [ 0, <0>, valid  ] Call#4
+    275   mk_promise_  3
+    280   ; strtoi([[(args, 3))
+          call_  1
+    297   [ <?> ] Type#12
+    302   stvar_cached_  benchmarkParameter{3}
+    311   ldfun_  source
+    316   [ 0, <0>, valid  ] Call#5
+    321   mk_promise_  4
+    326   ; source(file.path(".", paste(name, ".r", sep="")))
+          call_  1
+    343   pop_  
+    344   push_  <blt as.double>
+    349   dup_  
+    350   ldvar_noforce_  as.numeric
+    355   identical_noforce_  
+    356   [ _ ] Test#4
+    361   brtrue_  8
+    366   pop_  
+    367   ldfun_  as.numeric
+    372   [ 0, <0>, valid  ] Call#8
+    377   mk_promise_  5
+    382   ; as.numeric(doRuns(name, numIterations, benchma|...
+          call_  1
+    399   br_  9
+8:
+    404   ldfun_  doRuns
+    409   [ 0, <0>, valid  ] Call#10
+    414   mk_promise_  6
+    419   mk_promise_  7
+    424   mk_promise_  8
+    429   ; doRuns(name, numIterations, benchmarkParameter)
+          call_  3
+    446   [ <?> ] Type#23
+    451   ; as.numeric(doRuns(name, numIterations, benchma|...
+          call_  1
+9:
+    468   [ <?> ] Type#24
+    473   stvar_cached_  total{4}
+    482   ldfun_  cat
+    487   [ 0, <0>, valid  ] Call#11
+    492   mk_promise_  9
+    497   push_  ": "
+    502   push_  "iterations="
+    507   mk_promise_  a
+    512   push_  "; "
+    517   push_  "average: "
+    522   mk_promise_  b
+    527   push_  " us; "
+    532   push_  "total: "
+    537   mk_promise_  c
+    542   push_  "us
+
+"
+    547   push_  ""
+    552   ; cat(name, ": ", "iterations=", numIterations, |...
+          named_call_  12 [ _ _ _ _ _ _ _ _ _ _ _ sep ]
+    617   [ <?> ] Type#33
+    622   ret_  
+
+[Prom (index 0)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#0
+     10   ret_  
+
+[Prom (index 1)]
+0:
+      0   ldfun_  printUsage
+      5   [ 0, <0>, valid  ] Call#2
+     10   ; printUsage()
+          call_  0
+     27   [ <?> ] Type#4
+     32   ret_  
+
+[Prom (index 2)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#7
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#2
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   push_  2
+     36   br_  3
+2:
+     41   push_  2
+     46   visible_  
+3:
+     47   ; [[(args, 2)
+          extract2_1_  
+     48   [ <?> ] Type#8
+     53   visible_  
+     54   ret_  
+
+[Prom (index 3)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#10
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#3
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   push_  3
+     36   br_  3
+2:
+     41   push_  3
+     46   visible_  
+3:
+     47   ; [[(args, 3)
+          extract2_1_  
+     48   [ <?> ] Type#11
+     53   visible_  
+     54   ret_  
+
+[Prom (index 4)]
+0:
+      0   ldfun_  file.path
+      5   [ 0, <0>, valid  ] Call#6
+     10   push_  "."
+     15   mk_promise_  0
+     20   ; file.path(".", paste(name, ".r", sep=""))
+          call_  2
+     37   [ <?> ] Type#15
+     42   ret_  
+
+[Prom (index 4.0)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#7
+     10   mk_promise_  0
+     15   push_  ".r"
+     20   push_  ""
+     25   ; paste(name, ".r", sep="")
+          named_call_  3 [ _ _ sep ]
+     54   [ <?> ] Type#14
+     59   ret_  
+
+[Prom (index 4.0.0)]
+0:
+      0   ldvar_  name
+      5   [ <?> ] Type#13
+     10   ret_  
+
+[Prom (index 5)]
+0:
+      0   ldfun_  doRuns
+      5   [ 0, <0>, valid  ] Call#9
+     10   mk_promise_  0
+     15   mk_promise_  1
+     20   mk_promise_  2
+     25   ; doRuns(name, numIterations, benchmarkParameter)
+          call_  3
+     42   [ <?> ] Type#19
+     47   ret_  
+
+[Prom (index 5.0)]
+0:
+      0   ldvar_  name
+      5   [ <?> ] Type#16
+     10   ret_  
+
+[Prom (index 5.1)]
+0:
+      0   ldvar_  numIterations
+      5   [ <?> ] Type#17
+     10   ret_  
+
+[Prom (index 5.2)]
+0:
+      0   ldvar_  benchmarkParameter
+      5   [ <?> ] Type#18
+     10   ret_  
+
+[Prom (index 6)]
+0:
+      0   ldvar_  name
+      5   [ <?> ] Type#20
+     10   ret_  
+
+[Prom (index 7)]
+0:
+      0   ldvar_  numIterations
+      5   [ <?> ] Type#21
+     10   ret_  
+
+[Prom (index 8)]
+0:
+      0   ldvar_  benchmarkParameter
+      5   [ <?> ] Type#22
+     10   ret_  
+
+[Prom (index 9)]
+0:
+      0   ldvar_  name
+      5   [ <?> ] Type#25
+     10   ret_  
+
+[Prom (index 10)]
+0:
+      0   ldvar_  numIterations
+      5   [ <?> ] Type#26
+     10   ret_  
+
+[Prom (index 11)]
+0:
+      0   ldfun_  round
+      5   [ 0, <0>, valid  ] Call#12
+     10   mk_promise_  0
+     15   ; round(/(total, numIterations))
+          call_  1
+     32   [ <?> ] Type#30
+     37   ret_  
+
+[Prom (index 11.0)]
+0:
+      0   ldvar_  total
+      5   [ <?> ] Type#27
+     10   ldvar_  numIterations
+     15   [ <?> ] Type#28
+     20   ; /(total, numIterations)
+          div_  
+     21   [ <?> ] Type#29
+     26   ret_  
+
+[Prom (index 12)]
+0:
+      0   ldfun_  round
+      5   [ 0, <0>, valid  ] Call#13
+     10   mk_promise_  0
+     15   ; round(total)
+          call_  1
+     32   [ <?> ] Type#32
+     37   ret_  
+
+[Prom (index 12.0)]
+0:
+      0   ldvar_  total
+      5   [ <?> ] Type#31
+     10   ret_  
+
+== closure 0x55abf918e058 (env 0x55abf71854c8) ==
+== dispatch table 0x55abf8279e20 ==
+= version 0 (0x55abf80b4760) =
+[sigature] needsEnv 
+[flags]    
+[stats]    invoked: 0, deopt: 0
+0:
+      0   push_  <blt as.character>
+      5   dup_  
+      6   ldvar_noforce_  as.character
+     11   identical_noforce_  
+     12   [ _ ] Test#0
+     17   brtrue_  1
+     22   pop_  
+     23   ldfun_  as.character
+     28   [ 0, <0>, valid  ] Call#0
+     33   mk_promise_  0
+     38   ; as.character(x)
+          call_  1
+     55   br_  2
+1:
+     60   ldvar_cached_  x{0}
+     69   [ <?> ] Type#1
+     74   ; as.character(x)
+          call_  1
+2:
+     91   [ <?> ] Type#2
+     96   push_  <blt as.integer>
+    101   dup_  
+    102   ldvar_noforce_  as.integer
+    107   identical_noforce_  
+    108   [ _ ] Test#1
+    113   brtrue_  3
+    118   pop_  
+    119   ldfun_  as.integer
+    124   [ 0, <0>, valid  ] Call#1
+    129   mk_promise_  1
+    134   ; as.integer(base)
+          call_  1
+    151   br_  4
+3:
+    156   ldvar_cached_  base{1}
+    165   [ <?> ] Type#4
+    170   ; as.integer(base)
+          call_  1
+4:
+    187   [ <?> ] Type#5
+    192   call_builtin_  2 : <blt strtoi>
+    205   ret_  
+
+[Prom (index 0)]
+0:
+      0   ldvar_  x
+      5   [ <?> ] Type#0
+     10   ret_  
+
+[Prom (index 1)]
+0:
+      0   ldvar_  base
+      5   [ <?> ] Type#3
+     10   ret_  
+
+{
+    envir <- if (isTRUE(local)) 
+        parent.frame()
+    else if (isFALSE(local)) 
+        .GlobalEnv
+    else if (is.environment(local)) 
+        local
+    else stop("'local' must be TRUE, FALSE or an environment")
+    if (!missing(echo)) {
+        if (!is.logical(echo)) 
+            stop("'echo' must be logical")
+        if (!echo && verbose) {
+            warning("'verbose' is TRUE, 'echo' not; ... coercing 'echo <- TRUE'")
+            echo <- TRUE
+        }
+    }
+    if (verbose) {
+        cat("'envir' chosen:")
+        print(envir)
+    }
+    if (use_file <- missing(exprs)) {
+        ofile <- file
+        from_file <- FALSE
+        srcfile <- NULL
+        if (is.character(file)) {
+            have_encoding <- !missing(encoding) && encoding != 
+                "unknown"
+            if (identical(encoding, "unknown")) {
+                enc <- utils::localeToCharset()
+                encoding <- enc[length(enc)]
+            }
+            else enc <- encoding
+            if (length(enc) > 1L) {
+                encoding <- NA
+                owarn <- options(warn = 2)
+                for (e in enc) {
+                  if (is.na(e)) 
+                    next
+                  zz <- file(file, encoding = e)
+                  res <- tryCatch(readLines(zz, warn = FALSE), 
+                    error = identity)
+                  close(zz)
+                  if (!inherits(res, "error")) {
+                    encoding <- e
+                    break
+                  }
+                }
+                options(owarn)
+            }
+            if (is.na(encoding)) 
+                stop("unable to find a plausible encoding")
+            if (verbose) 
+                cat(gettextf("encoding = \"%s\" chosen", encoding), 
+                  "\n", sep = "")
+            if (file == "") {
+                file <- stdin()
+                srcfile <- "<stdin>"
+            }
+            else {
+                filename <- file
+                file <- file(filename, "r", encoding = encoding)
+                on.exit(close(file))
+                if (isTRUE(keep.source)) {
+                  lines <- readLines(file, warn = FALSE)
+                  on.exit()
+                  close(file)
+                  srcfile <- srcfilecopy(filename, lines, file.mtime(filename)[1], 
+                    isFile = TRUE)
+                }
+                else {
+                  from_file <- TRUE
+                  srcfile <- filename
+                }
+                loc <- utils::localeToCharset()[1L]
+                encoding <- if (have_encoding) 
+                  switch(loc, `UTF-8` = "UTF-8", `ISO8859-1` = "latin1", 
+                    "unknown")
+                else "unknown"
+            }
+        }
+        else {
+            lines <- readLines(file, warn = FALSE)
+            srcfile <- if (isTRUE(keep.source)) 
+                srcfilecopy(deparse1(substitute(file), ""), lines)
+            else deparse1(substitute(file), "")
+        }
+        exprs <- if (!from_file) {
+            if (length(lines)) 
+                .Internal(parse(stdin(), n = -1, lines, "?", 
+                  srcfile, encoding))
+            else expression()
+        }
+        else .Internal(parse(file, n = -1, NULL, "?", srcfile, 
+            encoding))
+        on.exit()
+        if (from_file) 
+            close(file)
+        if (verbose) 
+            cat("--> parsed", length(exprs), "expressions; now eval(.)ing them:\n")
+        if (chdir) {
+            if (is.character(ofile)) {
+                if (grepl("^(ftp|http|file)://", ofile)) 
+                  warning("'chdir = TRUE' makes no sense for a URL")
+                else if ((path <- dirname(ofile)) != ".") {
+                  owd <- getwd()
+                  if (is.null(owd)) 
+                    stop("cannot 'chdir' as current directory is unknown")
+                  on.exit(setwd(owd), add = TRUE)
+                  setwd(path)
+                }
+            }
+            else {
+                warning("'chdir = TRUE' makes no sense for a connection")
+            }
+        }
+    }
+    else {
+        if (!missing(file)) 
+            stop("specify either 'file' or 'exprs' but not both")
+        if (!is.expression(exprs)) 
+            exprs <- as.expression(exprs)
+    }
+    Ne <- length(exprs)
+    if (echo) {
+        sd <- "\""
+        nos <- "[^\"]*"
+        oddsd <- paste0("^", nos, sd, "(", nos, sd, nos, sd, 
+            ")*", nos, "$")
+        trySrcLines <- function(srcfile, showfrom, showto) {
+            tryCatch(suppressWarnings(getSrcLines(srcfile, showfrom, 
+                showto)), error = function(e) character())
+        }
+    }
+    yy <- NULL
+    lastshown <- 0
+    srcrefs <- attr(exprs, "srcref")
+    if (verbose && !is.null(srcrefs)) {
+        cat("has srcrefs:\n")
+        utils::str(srcrefs)
+    }
+    for (i in seq_len(Ne + echo)) {
+        tail <- i > Ne
+        if (!tail) {
+            if (verbose) 
+                cat("\n>>>> eval(expression_nr.", i, ")\n\t\t =================\n")
+            ei <- exprs[i]
+        }
+        if (echo) {
+            nd <- 0
+            srcref <- if (tail) 
+                attr(exprs, "wholeSrcref")
+            else if (i <= length(srcrefs)) 
+                srcrefs[[i]]
+            if (!is.null(srcref)) {
+                if (i == 1) 
+                  lastshown <- min(skip.echo, srcref[3L] - 1)
+                if (lastshown < srcref[3L]) {
+                  srcfile <- attr(srcref, "srcfile")
+                  dep <- trySrcLines(srcfile, lastshown + 1, 
+                    srcref[3L])
+                  if (length(dep)) {
+                    leading <- if (tail) 
+                      length(dep)
+                    else srcref[1L] - lastshown
+                    lastshown <- srcref[3L]
+                    while (length(dep) && grepl("^[[:blank:]]*$", 
+                      dep[1L])) {
+                      dep <- dep[-1L]
+                      leading <- leading - 1L
+                    }
+                    dep <- paste0(rep.int(c(prompt.echo, continue.echo), 
+                      pmax(0L, c(leading, length(dep) - leading))), 
+                      dep, collapse = "\n")
+                    nd <- nchar(dep, "c")
+                  }
+                  else srcref <- NULL
+                }
+            }
+            if (is.null(srcref)) {
+                if (!tail) {
+                  dep <- substr(paste(deparse(ei, width.cutoff = width.cutoff, 
+                    control = deparseCtrl), collapse = "\n"), 
+                    12L, 1000000L)
+                  dep <- paste0(prompt.echo, gsub("\n", paste0("\n", 
+                    continue.echo), dep, fixed = TRUE))
+                  nd <- nchar(dep, "c") - 1L
+                }
+            }
+            if (nd) {
+                do.trunc <- nd > max.deparse.length
+                dep <- substr(dep, 1L, if (do.trunc) 
+                  max.deparse.length
+                else nd)
+                cat(if (spaced) 
+                  "\n", dep, if (do.trunc) 
+                  paste(if (grepl(sd, dep) && grepl(oddsd, dep)) 
+                    " ...\" ..."
+                  else " ....", "[TRUNCATED] "), "\n", sep = "")
+            }
+        }
+        if (!tail) {
+            yy <- withVisible(eval(ei, envir))
+            i.symbol <- mode(ei[[1L]]) == "name"
+            if (!i.symbol) {
+                curr.fun <- ei[[1L]][[1L]]
+                if (verbose) {
+                  cat("curr.fun:")
+                  utils::str(curr.fun)
+                }
+            }
+            if (verbose >= 2) {
+                cat(".... mode(ei[[1L]])=", mode(ei[[1L]]), "; paste(curr.fun)=")
+                utils::str(paste(curr.fun))
+            }
+            if (print.eval && yy$visible) {
+                if (isS4(yy$value)) 
+                  methods::show(yy$value)
+                else print(yy$value)
+            }
+            if (verbose) 
+                cat(" .. after ", sQuote(deparse(ei, control = unique(c(deparseCtrl, 
+                  "useSource")))), "\n", sep = "")
+        }
+    }
+    invisible(yy)
+}

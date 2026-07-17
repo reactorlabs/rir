@@ -1,0 +1,2197 @@
+Benchmark 1: bin/R -f ../revComp.R
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> reversecomplement_2 <- function(args) {
++     f <- file(args[[1]], "r")
++     lines <- readLines(f)
++     for (i in 1:length(lines)) {
++         codes <- strsplit(lines[[i]], split="")[[1]]
++         if (codes[[1]] == '>')
++             cat(lines[[i]], "\n", sep="")
++         else {
++             cat(paste(comp_map[codes], collapse=""), "\n",
++                 sep="")
++         }
++     }
++     close(f)
++ }
+> 
+> rir.compile(reversecomplement_2)
+function (args) 
+{
+    f <- file(args[[1]], "r")
+    lines <- readLines(f)
+    for (i in 1:length(lines)) {
+        codes <- strsplit(lines[[i]], split = "")[[1]]
+        if (codes[[1]] == ">") 
+            cat(lines[[i]], "\n", sep = "")
+        else {
+            cat(paste(comp_map[codes], collapse = ""), "\n", 
+                sep = "")
+        }
+    }
+    close(f)
+}
+<bytecode: 0x562ca9668300>
+> rir.disassemble(reversecomplement_2)
+== closure 0x562caace1428 (env 0x562ca8f48218) ==
+== dispatch table 0x562ca9668330 ==
+= version 0 (0x562caa5a57a8) =
+[sigature] needsEnv 
+[flags]    
+[stats]    invoked: 0, deopt: 0
+0:
+      0   ldfun_  file
+      5   [ 0, <0>, valid  ] Call#0
+     10   mk_promise_  0
+     15   push_  "r"
+     20   ; file([[(args, 1), "r")
+          call_  2
+     37   [ <?> ] Type#2
+     42   stvar_cached_  f{0}
+     51   ldfun_  readLines
+     56   [ 0, <0>, valid  ] Call#1
+     61   mk_promise_  1
+     66   ; readLines(f)
+          call_  1
+     83   [ <?> ] Type#4
+     88   stvar_cached_  lines{2}
+     97   push_  1
+    102   visible_  
+    103   force_  
+    104   push_  <blt length>
+    109   dup_  
+    110   ldvar_noforce_  length
+    115   identical_noforce_  
+    116   [ _ ] Test#1
+    121   brtrue_  1
+    126   pop_  
+    127   ldfun_  length
+    132   [ 0, <0>, valid  ] Call#2
+    137   mk_promise_  2
+    142   ; length(lines)
+          call_  1
+    159   br_  2
+1:
+    164   ldvar_cached_  lines{2}
+    173   ; length(lines)
+          call_  1
+2:
+    190   [ <?> ] Type#7
+    195   force_  
+    196   ; :(1, length(lines))
+          colon_input_effects_  
+    197   [ _ ] Test#2
+    202   brtrue_  3
+    207   ; :(1, length(lines))
+          colon_  
+    208   ldfun_  for
+    213   swap_  
+    214   mk_eager_promise_  3
+    219   mk_promise_  4
+    224   ; for(i, :(1, length(lines)), {(<-(codes, [[(str|...
+          call_  2
+    241   pop_  
+    242   br_  23
+3:
+    247   swap_  
+    248   colon_cast_lhs_  
+    249   [ <?> ] Type#31
+    254   ensure_named_  
+    255   swap_  
+    256   colon_cast_rhs_  
+    257   ensure_named_  
+    258   [ <?> ] Type#32
+    263   dup2_  
+    264   ; NULL
+          le_  
+    265   [ _ ] Test#8
+    270   brfalse_  4
+    275   push_  1L
+    280   br_  5
+4:
+    285   push_  -1L
+5:
+    290   swap_  
+    291   pick_  2
+    296   dup2_  
+    297   ; NULL
+          ne_  
+    298   [ _ ] Test#9
+    303   brfalse_  22
+    308   dup_  
+    309   stvar_cached_  i{3}
+    318   pull_  2
+    323   ensure_named_  
+    324   ; NULL
+          add_  
+    325   ldfun_  strsplit
+    330   [ 0, <0>, valid  ] Call#8
+    335   mk_promise_  5
+    340   push_  ""
+    345   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    370   [ <?> ] Type#37
+    375   dup_  
+    376   is_  NonObject
+    381   [ _ ] Test#11
+    386   brfalse_  6
+    391   br_  7
+6:
+    396   push_  1
+    401   br_  8
+7:
+    406   push_  1
+    411   visible_  
+8:
+    412   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    413   [ <?> ] Type#38
+    418   visible_  
+    419   stvar_cached_  codes{4}
+    428   ldvar_cached_  codes{4}
+    437   dup_  
+    438   is_  NonObject
+    443   [ _ ] Test#12
+    448   brfalse_  9
+    453   br_  10
+9:
+    458   push_  1
+    463   br_  11
+10:
+    468   push_  1
+    473   visible_  
+11:
+    474   ; [[(codes, 1)
+          extract2_1_  
+    475   [ <?> ] Type#40
+    480   visible_  
+    481   push_  ">"
+    486   visible_  
+    487   ; ==([[(codes, 1), ">")
+          eq_  
+    488   [ <?> ] Type#41
+    493   asbool_  
+    494   brtrue_  12
+    499   ldfun_  cat
+    504   [ 0, <0>, valid  ] Call#9
+    509   mk_promise_  6
+    514   push_  "
+"
+    519   push_  ""
+    524   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    553   pop_  
+    554   br_  13
+12:
+    559   ldfun_  cat
+    564   [ 0, <0>, valid  ] Call#11
+    569   mk_promise_  7
+    574   push_  "
+"
+    579   push_  ""
+    584   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    613   pop_  
+13:
+    614   dup2_  
+    615   ; NULL
+          ne_  
+    616   brfalse_  22
+    621   dup_  
+    622   stvar_cached_  i{3}
+    631   pull_  2
+    636   ensure_named_  
+    637   ; NULL
+          add_  
+    638   ldfun_  strsplit
+    643   [ 0, <0>, valid  ] Call#12
+    648   mk_promise_  8
+    653   push_  ""
+    658   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    683   [ <?> ] Type#55
+    688   dup_  
+    689   is_  NonObject
+    694   [ _ ] Test#16
+    699   brfalse_  14
+    704   br_  15
+14:
+    709   push_  1
+    714   br_  16
+15:
+    719   push_  1
+    724   visible_  
+16:
+    725   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    726   [ <?> ] Type#56
+    731   visible_  
+    732   stvar_cached_  codes{4}
+    741   ldvar_cached_  codes{4}
+    750   dup_  
+    751   is_  NonObject
+    756   [ _ ] Test#17
+    761   brfalse_  17
+    766   br_  18
+17:
+    771   push_  1
+    776   br_  19
+18:
+    781   push_  1
+    786   visible_  
+19:
+    787   ; [[(codes, 1)
+          extract2_1_  
+    788   [ <?> ] Type#58
+    793   visible_  
+    794   push_  ">"
+    799   visible_  
+    800   ; ==([[(codes, 1), ">")
+          eq_  
+    801   [ <?> ] Type#59
+    806   asbool_  
+    807   brtrue_  20
+    812   ldfun_  cat
+    817   [ 0, <0>, valid  ] Call#13
+    822   mk_promise_  9
+    827   push_  "
+"
+    832   push_  ""
+    837   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    866   pop_  
+    867   br_  21
+20:
+    872   ldfun_  cat
+    877   [ 0, <0>, valid  ] Call#15
+    882   mk_promise_  a
+    887   push_  "
+"
+    892   push_  ""
+    897   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    926   pop_  
+21:
+    927   br_  13
+22:
+    932   popn_  3
+23:
+    937   ldfun_  close
+    942   [ 0, <0>, valid  ] Call#16
+    947   mk_promise_  b
+    952   ; close(f)
+          call_  1
+    969   [ <?> ] Type#70
+    974   ret_  
+
+[Prom (index 0)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#0
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#0
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   push_  1
+     36   br_  3
+2:
+     41   push_  1
+     46   visible_  
+3:
+     47   ; [[(args, 1)
+          extract2_1_  
+     48   [ <?> ] Type#1
+     53   visible_  
+     54   ret_  
+
+[Prom (index 1)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#3
+     10   ret_  
+
+[Prom (index 2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#5
+     10   ret_  
+
+[Prom (index 3)]
+0:
+      0   push_  1
+      5   visible_  
+      6   ldfun_  length
+     11   [ 0, <0>, valid  ] Call#3
+     16   mk_promise_  0
+     21   ; length(lines)
+          call_  1
+     38   [ <?> ] Type#9
+     43   ; :(1, length(lines))
+          colon_  
+     44   [ <?> ] Type#10
+     49   ret_  
+
+[Prom (index 3.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#8
+     10   ret_  
+
+[Prom (index 4)]
+0:
+      0   ldfun_  strsplit
+      5   [ 0, <0>, valid  ] Call#4
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+     45   [ <?> ] Type#15
+     50   dup_  
+     51   is_  NonObject
+     56   [ _ ] Test#4
+     61   brfalse_  1
+     66   br_  2
+1:
+     71   push_  1
+     76   br_  3
+2:
+     81   push_  1
+     86   visible_  
+3:
+     87   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+     88   [ <?> ] Type#16
+     93   visible_  
+     94   stvar_  codes
+     99   ldvar_  codes
+    104   dup_  
+    105   is_  NonObject
+    110   [ _ ] Test#5
+    115   brfalse_  4
+    120   br_  5
+4:
+    125   push_  1
+    130   br_  6
+5:
+    135   push_  1
+    140   visible_  
+6:
+    141   ; [[(codes, 1)
+          extract2_1_  
+    142   [ <?> ] Type#18
+    147   visible_  
+    148   push_  ">"
+    153   visible_  
+    154   ; ==([[(codes, 1), ">")
+          eq_  
+    155   [ <?> ] Type#19
+    160   asbool_  
+    161   brtrue_  7
+    166   ldfun_  cat
+    171   [ 0, <0>, valid  ] Call#5
+    176   mk_promise_  1
+    181   push_  "
+"
+    186   push_  ""
+    191   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    220   [ <?> ] Type#25
+    225   br_  8
+7:
+    230   ldfun_  cat
+    235   [ 0, <0>, valid  ] Call#7
+    240   mk_promise_  2
+    245   push_  "
+"
+    250   push_  ""
+    255   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    284   [ <?> ] Type#30
+8:
+    289   ret_  
+
+[Prom (index 4.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#11
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#3
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#13
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#14
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.0.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#12
+     10   ret_  
+
+[Prom (index 4.1)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#6
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#24
+     50   ret_  
+
+[Prom (index 4.1.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#20
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#6
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#22
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#23
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.1.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#21
+     10   ret_  
+
+[Prom (index 4.2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#26
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#7
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#28
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#29
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.2.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#27
+     10   ret_  
+
+[Prom (index 5)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#33
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#10
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#35
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#36
+     57   visible_  
+     58   ret_  
+
+[Prom (index 5.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#34
+     10   ret_  
+
+[Prom (index 6)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#10
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#46
+     50   ret_  
+
+[Prom (index 6.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#42
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#13
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#44
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#45
+     57   visible_  
+     58   ret_  
+
+[Prom (index 6.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#43
+     10   ret_  
+
+[Prom (index 7)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#47
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#14
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#49
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#50
+     57   visible_  
+     58   ret_  
+
+[Prom (index 7.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#48
+     10   ret_  
+
+[Prom (index 8)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#51
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#15
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#53
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#54
+     57   visible_  
+     58   ret_  
+
+[Prom (index 8.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#52
+     10   ret_  
+
+[Prom (index 9)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#14
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#64
+     50   ret_  
+
+[Prom (index 9.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#60
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#18
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#62
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#63
+     57   visible_  
+     58   ret_  
+
+[Prom (index 9.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#61
+     10   ret_  
+
+[Prom (index 10)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#65
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#19
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#67
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#68
+     57   visible_  
+     58   ret_  
+
+[Prom (index 10.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#66
+     10   ret_  
+
+[Prom (index 11)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#69
+     10   ret_  
+
+NoRecord Type#6 (dep: #4)
+NoRecord Type#17 (dep: #16)
+NoRecord Type#39 (dep: #38)
+NoRecord Type#57 (dep: #56)
+> 
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> reversecomplement_2 <- function(args) {
++     f <- file(args[[1]], "r")
++     lines <- readLines(f)
++     for (i in 1:length(lines)) {
++         codes <- strsplit(lines[[i]], split="")[[1]]
++         if (codes[[1]] == '>')
++             cat(lines[[i]], "\n", sep="")
++         else {
++             cat(paste(comp_map[codes], collapse=""), "\n",
++                 sep="")
++         }
++     }
++     close(f)
++ }
+> 
+> rir.compile(reversecomplement_2)
+function (args) 
+{
+    f <- file(args[[1]], "r")
+    lines <- readLines(f)
+    for (i in 1:length(lines)) {
+        codes <- strsplit(lines[[i]], split = "")[[1]]
+        if (codes[[1]] == ">") 
+            cat(lines[[i]], "\n", sep = "")
+        else {
+            cat(paste(comp_map[codes], collapse = ""), "\n", 
+                sep = "")
+        }
+    }
+    close(f)
+}
+<bytecode: 0x561d3a880300>
+> rir.disassemble(reversecomplement_2)
+== closure 0x561d3bef9428 (env 0x561d3a160218) ==
+== dispatch table 0x561d3a880330 ==
+= version 0 (0x561d3b7bd7a8) =
+[sigature] needsEnv 
+[flags]    
+[stats]    invoked: 0, deopt: 0
+0:
+      0   ldfun_  file
+      5   [ 0, <0>, valid  ] Call#0
+     10   mk_promise_  0
+     15   push_  "r"
+     20   ; file([[(args, 1), "r")
+          call_  2
+     37   [ <?> ] Type#2
+     42   stvar_cached_  f{0}
+     51   ldfun_  readLines
+     56   [ 0, <0>, valid  ] Call#1
+     61   mk_promise_  1
+     66   ; readLines(f)
+          call_  1
+     83   [ <?> ] Type#4
+     88   stvar_cached_  lines{2}
+     97   push_  1
+    102   visible_  
+    103   force_  
+    104   push_  <blt length>
+    109   dup_  
+    110   ldvar_noforce_  length
+    115   identical_noforce_  
+    116   [ _ ] Test#1
+    121   brtrue_  1
+    126   pop_  
+    127   ldfun_  length
+    132   [ 0, <0>, valid  ] Call#2
+    137   mk_promise_  2
+    142   ; length(lines)
+          call_  1
+    159   br_  2
+1:
+    164   ldvar_cached_  lines{2}
+    173   ; length(lines)
+          call_  1
+2:
+    190   [ <?> ] Type#7
+    195   force_  
+    196   ; :(1, length(lines))
+          colon_input_effects_  
+    197   [ _ ] Test#2
+    202   brtrue_  3
+    207   ; :(1, length(lines))
+          colon_  
+    208   ldfun_  for
+    213   swap_  
+    214   mk_eager_promise_  3
+    219   mk_promise_  4
+    224   ; for(i, :(1, length(lines)), {(<-(codes, [[(str|...
+          call_  2
+    241   pop_  
+    242   br_  23
+3:
+    247   swap_  
+    248   colon_cast_lhs_  
+    249   [ <?> ] Type#31
+    254   ensure_named_  
+    255   swap_  
+    256   colon_cast_rhs_  
+    257   ensure_named_  
+    258   [ <?> ] Type#32
+    263   dup2_  
+    264   ; NULL
+          le_  
+    265   [ _ ] Test#8
+    270   brfalse_  4
+    275   push_  1L
+    280   br_  5
+4:
+    285   push_  -1L
+5:
+    290   swap_  
+    291   pick_  2
+    296   dup2_  
+    297   ; NULL
+          ne_  
+    298   [ _ ] Test#9
+    303   brfalse_  22
+    308   dup_  
+    309   stvar_cached_  i{3}
+    318   pull_  2
+    323   ensure_named_  
+    324   ; NULL
+          add_  
+    325   ldfun_  strsplit
+    330   [ 0, <0>, valid  ] Call#8
+    335   mk_promise_  5
+    340   push_  ""
+    345   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    370   [ <?> ] Type#37
+    375   dup_  
+    376   is_  NonObject
+    381   [ _ ] Test#11
+    386   brfalse_  6
+    391   br_  7
+6:
+    396   push_  1
+    401   br_  8
+7:
+    406   push_  1
+    411   visible_  
+8:
+    412   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    413   [ <?> ] Type#38
+    418   visible_  
+    419   stvar_cached_  codes{4}
+    428   ldvar_cached_  codes{4}
+    437   dup_  
+    438   is_  NonObject
+    443   [ _ ] Test#12
+    448   brfalse_  9
+    453   br_  10
+9:
+    458   push_  1
+    463   br_  11
+10:
+    468   push_  1
+    473   visible_  
+11:
+    474   ; [[(codes, 1)
+          extract2_1_  
+    475   [ <?> ] Type#40
+    480   visible_  
+    481   push_  ">"
+    486   visible_  
+    487   ; ==([[(codes, 1), ">")
+          eq_  
+    488   [ <?> ] Type#41
+    493   asbool_  
+    494   brtrue_  12
+    499   ldfun_  cat
+    504   [ 0, <0>, valid  ] Call#9
+    509   mk_promise_  6
+    514   push_  "
+"
+    519   push_  ""
+    524   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    553   pop_  
+    554   br_  13
+12:
+    559   ldfun_  cat
+    564   [ 0, <0>, valid  ] Call#11
+    569   mk_promise_  7
+    574   push_  "
+"
+    579   push_  ""
+    584   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    613   pop_  
+13:
+    614   dup2_  
+    615   ; NULL
+          ne_  
+    616   brfalse_  22
+    621   dup_  
+    622   stvar_cached_  i{3}
+    631   pull_  2
+    636   ensure_named_  
+    637   ; NULL
+          add_  
+    638   ldfun_  strsplit
+    643   [ 0, <0>, valid  ] Call#12
+    648   mk_promise_  8
+    653   push_  ""
+    658   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    683   [ <?> ] Type#55
+    688   dup_  
+    689   is_  NonObject
+    694   [ _ ] Test#16
+    699   brfalse_  14
+    704   br_  15
+14:
+    709   push_  1
+    714   br_  16
+15:
+    719   push_  1
+    724   visible_  
+16:
+    725   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    726   [ <?> ] Type#56
+    731   visible_  
+    732   stvar_cached_  codes{4}
+    741   ldvar_cached_  codes{4}
+    750   dup_  
+    751   is_  NonObject
+    756   [ _ ] Test#17
+    761   brfalse_  17
+    766   br_  18
+17:
+    771   push_  1
+    776   br_  19
+18:
+    781   push_  1
+    786   visible_  
+19:
+    787   ; [[(codes, 1)
+          extract2_1_  
+    788   [ <?> ] Type#58
+    793   visible_  
+    794   push_  ">"
+    799   visible_  
+    800   ; ==([[(codes, 1), ">")
+          eq_  
+    801   [ <?> ] Type#59
+    806   asbool_  
+    807   brtrue_  20
+    812   ldfun_  cat
+    817   [ 0, <0>, valid  ] Call#13
+    822   mk_promise_  9
+    827   push_  "
+"
+    832   push_  ""
+    837   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    866   pop_  
+    867   br_  21
+20:
+    872   ldfun_  cat
+    877   [ 0, <0>, valid  ] Call#15
+    882   mk_promise_  a
+    887   push_  "
+"
+    892   push_  ""
+    897   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    926   pop_  
+21:
+    927   br_  13
+22:
+    932   popn_  3
+23:
+    937   ldfun_  close
+    942   [ 0, <0>, valid  ] Call#16
+    947   mk_promise_  b
+    952   ; close(f)
+          call_  1
+    969   [ <?> ] Type#70
+    974   ret_  
+
+[Prom (index 0)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#0
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#0
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   push_  1
+     36   br_  3
+2:
+     41   push_  1
+     46   visible_  
+3:
+     47   ; [[(args, 1)
+          extract2_1_  
+     48   [ <?> ] Type#1
+     53   visible_  
+     54   ret_  
+
+[Prom (index 1)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#3
+     10   ret_  
+
+[Prom (index 2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#5
+     10   ret_  
+
+[Prom (index 3)]
+0:
+      0   push_  1
+      5   visible_  
+      6   ldfun_  length
+     11   [ 0, <0>, valid  ] Call#3
+     16   mk_promise_  0
+     21   ; length(lines)
+          call_  1
+     38   [ <?> ] Type#9
+     43   ; :(1, length(lines))
+          colon_  
+     44   [ <?> ] Type#10
+     49   ret_  
+
+[Prom (index 3.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#8
+     10   ret_  
+
+[Prom (index 4)]
+0:
+      0   ldfun_  strsplit
+      5   [ 0, <0>, valid  ] Call#4
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+     45   [ <?> ] Type#15
+     50   dup_  
+     51   is_  NonObject
+     56   [ _ ] Test#4
+     61   brfalse_  1
+     66   br_  2
+1:
+     71   push_  1
+     76   br_  3
+2:
+     81   push_  1
+     86   visible_  
+3:
+     87   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+     88   [ <?> ] Type#16
+     93   visible_  
+     94   stvar_  codes
+     99   ldvar_  codes
+    104   dup_  
+    105   is_  NonObject
+    110   [ _ ] Test#5
+    115   brfalse_  4
+    120   br_  5
+4:
+    125   push_  1
+    130   br_  6
+5:
+    135   push_  1
+    140   visible_  
+6:
+    141   ; [[(codes, 1)
+          extract2_1_  
+    142   [ <?> ] Type#18
+    147   visible_  
+    148   push_  ">"
+    153   visible_  
+    154   ; ==([[(codes, 1), ">")
+          eq_  
+    155   [ <?> ] Type#19
+    160   asbool_  
+    161   brtrue_  7
+    166   ldfun_  cat
+    171   [ 0, <0>, valid  ] Call#5
+    176   mk_promise_  1
+    181   push_  "
+"
+    186   push_  ""
+    191   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    220   [ <?> ] Type#25
+    225   br_  8
+7:
+    230   ldfun_  cat
+    235   [ 0, <0>, valid  ] Call#7
+    240   mk_promise_  2
+    245   push_  "
+"
+    250   push_  ""
+    255   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    284   [ <?> ] Type#30
+8:
+    289   ret_  
+
+[Prom (index 4.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#11
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#3
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#13
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#14
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.0.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#12
+     10   ret_  
+
+[Prom (index 4.1)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#6
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#24
+     50   ret_  
+
+[Prom (index 4.1.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#20
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#6
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#22
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#23
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.1.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#21
+     10   ret_  
+
+[Prom (index 4.2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#26
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#7
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#28
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#29
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.2.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#27
+     10   ret_  
+
+[Prom (index 5)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#33
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#10
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#35
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#36
+     57   visible_  
+     58   ret_  
+
+[Prom (index 5.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#34
+     10   ret_  
+
+[Prom (index 6)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#10
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#46
+     50   ret_  
+
+[Prom (index 6.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#42
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#13
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#44
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#45
+     57   visible_  
+     58   ret_  
+
+[Prom (index 6.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#43
+     10   ret_  
+
+[Prom (index 7)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#47
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#14
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#49
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#50
+     57   visible_  
+     58   ret_  
+
+[Prom (index 7.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#48
+     10   ret_  
+
+[Prom (index 8)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#51
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#15
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#53
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#54
+     57   visible_  
+     58   ret_  
+
+[Prom (index 8.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#52
+     10   ret_  
+
+[Prom (index 9)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#14
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#64
+     50   ret_  
+
+[Prom (index 9.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#60
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#18
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#62
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#63
+     57   visible_  
+     58   ret_  
+
+[Prom (index 9.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#61
+     10   ret_  
+
+[Prom (index 10)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#65
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#19
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#67
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#68
+     57   visible_  
+     58   ret_  
+
+[Prom (index 10.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#66
+     10   ret_  
+
+[Prom (index 11)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#69
+     10   ret_  
+
+NoRecord Type#6 (dep: #4)
+NoRecord Type#17 (dep: #16)
+NoRecord Type#39 (dep: #38)
+NoRecord Type#57 (dep: #56)
+> 
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> reversecomplement_2 <- function(args) {
++     f <- file(args[[1]], "r")
++     lines <- readLines(f)
++     for (i in 1:length(lines)) {
++         codes <- strsplit(lines[[i]], split="")[[1]]
++         if (codes[[1]] == '>')
++             cat(lines[[i]], "\n", sep="")
++         else {
++             cat(paste(comp_map[codes], collapse=""), "\n",
++                 sep="")
++         }
++     }
++     close(f)
++ }
+> 
+> rir.compile(reversecomplement_2)
+function (args) 
+{
+    f <- file(args[[1]], "r")
+    lines <- readLines(f)
+    for (i in 1:length(lines)) {
+        codes <- strsplit(lines[[i]], split = "")[[1]]
+        if (codes[[1]] == ">") 
+            cat(lines[[i]], "\n", sep = "")
+        else {
+            cat(paste(comp_map[codes], collapse = ""), "\n", 
+                sep = "")
+        }
+    }
+    close(f)
+}
+<bytecode: 0x556e5a324300>
+> rir.disassemble(reversecomplement_2)
+== closure 0x556e5b99d428 (env 0x556e59c04218) ==
+== dispatch table 0x556e5a324330 ==
+= version 0 (0x556e5b2617a8) =
+[sigature] needsEnv 
+[flags]    
+[stats]    invoked: 0, deopt: 0
+0:
+      0   ldfun_  file
+      5   [ 0, <0>, valid  ] Call#0
+     10   mk_promise_  0
+     15   push_  "r"
+     20   ; file([[(args, 1), "r")
+          call_  2
+     37   [ <?> ] Type#2
+     42   stvar_cached_  f{0}
+     51   ldfun_  readLines
+     56   [ 0, <0>, valid  ] Call#1
+     61   mk_promise_  1
+     66   ; readLines(f)
+          call_  1
+     83   [ <?> ] Type#4
+     88   stvar_cached_  lines{2}
+     97   push_  1
+    102   visible_  
+    103   force_  
+    104   push_  <blt length>
+    109   dup_  
+    110   ldvar_noforce_  length
+    115   identical_noforce_  
+    116   [ _ ] Test#1
+    121   brtrue_  1
+    126   pop_  
+    127   ldfun_  length
+    132   [ 0, <0>, valid  ] Call#2
+    137   mk_promise_  2
+    142   ; length(lines)
+          call_  1
+    159   br_  2
+1:
+    164   ldvar_cached_  lines{2}
+    173   ; length(lines)
+          call_  1
+2:
+    190   [ <?> ] Type#7
+    195   force_  
+    196   ; :(1, length(lines))
+          colon_input_effects_  
+    197   [ _ ] Test#2
+    202   brtrue_  3
+    207   ; :(1, length(lines))
+          colon_  
+    208   ldfun_  for
+    213   swap_  
+    214   mk_eager_promise_  3
+    219   mk_promise_  4
+    224   ; for(i, :(1, length(lines)), {(<-(codes, [[(str|...
+          call_  2
+    241   pop_  
+    242   br_  23
+3:
+    247   swap_  
+    248   colon_cast_lhs_  
+    249   [ <?> ] Type#31
+    254   ensure_named_  
+    255   swap_  
+    256   colon_cast_rhs_  
+    257   ensure_named_  
+    258   [ <?> ] Type#32
+    263   dup2_  
+    264   ; NULL
+          le_  
+    265   [ _ ] Test#8
+    270   brfalse_  4
+    275   push_  1L
+    280   br_  5
+4:
+    285   push_  -1L
+5:
+    290   swap_  
+    291   pick_  2
+    296   dup2_  
+    297   ; NULL
+          ne_  
+    298   [ _ ] Test#9
+    303   brfalse_  22
+    308   dup_  
+    309   stvar_cached_  i{3}
+    318   pull_  2
+    323   ensure_named_  
+    324   ; NULL
+          add_  
+    325   ldfun_  strsplit
+    330   [ 0, <0>, valid  ] Call#8
+    335   mk_promise_  5
+    340   push_  ""
+    345   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    370   [ <?> ] Type#37
+    375   dup_  
+    376   is_  NonObject
+    381   [ _ ] Test#11
+    386   brfalse_  6
+    391   br_  7
+6:
+    396   push_  1
+    401   br_  8
+7:
+    406   push_  1
+    411   visible_  
+8:
+    412   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    413   [ <?> ] Type#38
+    418   visible_  
+    419   stvar_cached_  codes{4}
+    428   ldvar_cached_  codes{4}
+    437   dup_  
+    438   is_  NonObject
+    443   [ _ ] Test#12
+    448   brfalse_  9
+    453   br_  10
+9:
+    458   push_  1
+    463   br_  11
+10:
+    468   push_  1
+    473   visible_  
+11:
+    474   ; [[(codes, 1)
+          extract2_1_  
+    475   [ <?> ] Type#40
+    480   visible_  
+    481   push_  ">"
+    486   visible_  
+    487   ; ==([[(codes, 1), ">")
+          eq_  
+    488   [ <?> ] Type#41
+    493   asbool_  
+    494   brtrue_  12
+    499   ldfun_  cat
+    504   [ 0, <0>, valid  ] Call#9
+    509   mk_promise_  6
+    514   push_  "
+"
+    519   push_  ""
+    524   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    553   pop_  
+    554   br_  13
+12:
+    559   ldfun_  cat
+    564   [ 0, <0>, valid  ] Call#11
+    569   mk_promise_  7
+    574   push_  "
+"
+    579   push_  ""
+    584   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    613   pop_  
+13:
+    614   dup2_  
+    615   ; NULL
+          ne_  
+    616   brfalse_  22
+    621   dup_  
+    622   stvar_cached_  i{3}
+    631   pull_  2
+    636   ensure_named_  
+    637   ; NULL
+          add_  
+    638   ldfun_  strsplit
+    643   [ 0, <0>, valid  ] Call#12
+    648   mk_promise_  8
+    653   push_  ""
+    658   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+    683   [ <?> ] Type#55
+    688   dup_  
+    689   is_  NonObject
+    694   [ _ ] Test#16
+    699   brfalse_  14
+    704   br_  15
+14:
+    709   push_  1
+    714   br_  16
+15:
+    719   push_  1
+    724   visible_  
+16:
+    725   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+    726   [ <?> ] Type#56
+    731   visible_  
+    732   stvar_cached_  codes{4}
+    741   ldvar_cached_  codes{4}
+    750   dup_  
+    751   is_  NonObject
+    756   [ _ ] Test#17
+    761   brfalse_  17
+    766   br_  18
+17:
+    771   push_  1
+    776   br_  19
+18:
+    781   push_  1
+    786   visible_  
+19:
+    787   ; [[(codes, 1)
+          extract2_1_  
+    788   [ <?> ] Type#58
+    793   visible_  
+    794   push_  ">"
+    799   visible_  
+    800   ; ==([[(codes, 1), ">")
+          eq_  
+    801   [ <?> ] Type#59
+    806   asbool_  
+    807   brtrue_  20
+    812   ldfun_  cat
+    817   [ 0, <0>, valid  ] Call#13
+    822   mk_promise_  9
+    827   push_  "
+"
+    832   push_  ""
+    837   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    866   pop_  
+    867   br_  21
+20:
+    872   ldfun_  cat
+    877   [ 0, <0>, valid  ] Call#15
+    882   mk_promise_  a
+    887   push_  "
+"
+    892   push_  ""
+    897   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    926   pop_  
+21:
+    927   br_  13
+22:
+    932   popn_  3
+23:
+    937   ldfun_  close
+    942   [ 0, <0>, valid  ] Call#16
+    947   mk_promise_  b
+    952   ; close(f)
+          call_  1
+    969   [ <?> ] Type#70
+    974   ret_  
+
+[Prom (index 0)]
+0:
+      0   ldvar_  args
+      5   [ <?> ] Type#0
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#0
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   push_  1
+     36   br_  3
+2:
+     41   push_  1
+     46   visible_  
+3:
+     47   ; [[(args, 1)
+          extract2_1_  
+     48   [ <?> ] Type#1
+     53   visible_  
+     54   ret_  
+
+[Prom (index 1)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#3
+     10   ret_  
+
+[Prom (index 2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#5
+     10   ret_  
+
+[Prom (index 3)]
+0:
+      0   push_  1
+      5   visible_  
+      6   ldfun_  length
+     11   [ 0, <0>, valid  ] Call#3
+     16   mk_promise_  0
+     21   ; length(lines)
+          call_  1
+     38   [ <?> ] Type#9
+     43   ; :(1, length(lines))
+          colon_  
+     44   [ <?> ] Type#10
+     49   ret_  
+
+[Prom (index 3.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#8
+     10   ret_  
+
+[Prom (index 4)]
+0:
+      0   ldfun_  strsplit
+      5   [ 0, <0>, valid  ] Call#4
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; strsplit([[(lines, i), split="")
+          named_call_  2 [ _ split ]
+     45   [ <?> ] Type#15
+     50   dup_  
+     51   is_  NonObject
+     56   [ _ ] Test#4
+     61   brfalse_  1
+     66   br_  2
+1:
+     71   push_  1
+     76   br_  3
+2:
+     81   push_  1
+     86   visible_  
+3:
+     87   ; [[(strsplit([[(lines, i), split=""), 1)
+          extract2_1_  
+     88   [ <?> ] Type#16
+     93   visible_  
+     94   stvar_  codes
+     99   ldvar_  codes
+    104   dup_  
+    105   is_  NonObject
+    110   [ _ ] Test#5
+    115   brfalse_  4
+    120   br_  5
+4:
+    125   push_  1
+    130   br_  6
+5:
+    135   push_  1
+    140   visible_  
+6:
+    141   ; [[(codes, 1)
+          extract2_1_  
+    142   [ <?> ] Type#18
+    147   visible_  
+    148   push_  ">"
+    153   visible_  
+    154   ; ==([[(codes, 1), ">")
+          eq_  
+    155   [ <?> ] Type#19
+    160   asbool_  
+    161   brtrue_  7
+    166   ldfun_  cat
+    171   [ 0, <0>, valid  ] Call#5
+    176   mk_promise_  1
+    181   push_  "
+"
+    186   push_  ""
+    191   ; cat(paste([(comp_map, codes), collapse=""), "
+|...
+          named_call_  3 [ _ _ sep ]
+    220   [ <?> ] Type#25
+    225   br_  8
+7:
+    230   ldfun_  cat
+    235   [ 0, <0>, valid  ] Call#7
+    240   mk_promise_  2
+    245   push_  "
+"
+    250   push_  ""
+    255   ; cat([[(lines, i), "
+", sep="")
+          named_call_  3 [ _ _ sep ]
+    284   [ <?> ] Type#30
+8:
+    289   ret_  
+
+[Prom (index 4.0)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#11
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#3
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#13
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#14
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.0.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#12
+     10   ret_  
+
+[Prom (index 4.1)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#6
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#24
+     50   ret_  
+
+[Prom (index 4.1.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#20
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#6
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#22
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#23
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.1.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#21
+     10   ret_  
+
+[Prom (index 4.2)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#26
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#7
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#28
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#29
+     57   visible_  
+     58   ret_  
+
+[Prom (index 4.2.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#27
+     10   ret_  
+
+[Prom (index 5)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#33
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#10
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#35
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#36
+     57   visible_  
+     58   ret_  
+
+[Prom (index 5.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#34
+     10   ret_  
+
+[Prom (index 6)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#10
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#46
+     50   ret_  
+
+[Prom (index 6.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#42
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#13
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#44
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#45
+     57   visible_  
+     58   ret_  
+
+[Prom (index 6.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#43
+     10   ret_  
+
+[Prom (index 7)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#47
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#14
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#49
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#50
+     57   visible_  
+     58   ret_  
+
+[Prom (index 7.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#48
+     10   ret_  
+
+[Prom (index 8)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#51
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#15
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#53
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#54
+     57   visible_  
+     58   ret_  
+
+[Prom (index 8.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#52
+     10   ret_  
+
+[Prom (index 9)]
+0:
+      0   ldfun_  paste
+      5   [ 0, <0>, valid  ] Call#14
+     10   mk_promise_  0
+     15   push_  ""
+     20   ; paste([(comp_map, codes), collapse="")
+          named_call_  2 [ _ collapse ]
+     45   [ <?> ] Type#64
+     50   ret_  
+
+[Prom (index 9.0)]
+0:
+      0   ldvar_  comp_map
+      5   [ <?> ] Type#60
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#18
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  codes
+     46   [ <?> ] Type#62
+3:
+     51   ; [(comp_map, codes)
+          extract1_1_  
+     52   [ <?> ] Type#63
+     57   visible_  
+     58   ret_  
+
+[Prom (index 9.0.0)]
+0:
+      0   ldvar_  codes
+      5   [ <?> ] Type#61
+     10   ret_  
+
+[Prom (index 10)]
+0:
+      0   ldvar_  lines
+      5   [ <?> ] Type#65
+     10   dup_  
+     11   is_  NonObject
+     16   [ _ ] Test#19
+     21   brfalse_  1
+     26   br_  2
+1:
+     31   mk_promise_  0
+     36   br_  3
+2:
+     41   ldvar_  i
+     46   [ <?> ] Type#67
+3:
+     51   ; [[(lines, i)
+          extract2_1_  
+     52   [ <?> ] Type#68
+     57   visible_  
+     58   ret_  
+
+[Prom (index 10.0)]
+0:
+      0   ldvar_  i
+      5   [ <?> ] Type#66
+     10   ret_  
+
+[Prom (index 11)]
+0:
+      0   ldvar_  f
+      5   [ <?> ] Type#69
+     10   ret_  
+
+NoRecord Type#6 (dep: #4)
+NoRecord Type#17 (dep: #16)
+NoRecord Type#39 (dep: #38)
+NoRecord Type#57 (dep: #56)
+> 
+  Time (mean ± σ):     184.8 ms ±   4.4 ms    [User: 129.6 ms, System: 58.0 ms]
+  Range (min … max):   181.5 ms … 189.7 ms    3 runs
+ 

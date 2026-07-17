@@ -1,0 +1,41 @@
++     cat("  benchmark           - benchmark class name\n")
++     cat("  num-iterations      - number of times to execute benchmark\n")
++     cat("  benchmark-parameter - size of the benchmark problem\n")
++     cat("  inner-iter          - number of times the benchmark is executed in an inner loop,\n")
++     cat("                        which is measured in total, default: 1\n")
++ }
+>
+> run(commandArgs(trailingOnly=TRUE))
+[1] 21767.2
+volcano: iterations=1 runtime: 73764927us
+[1] 21767.2
+volcano: iterations=1 runtime: 74119383us
+[1] 21767.2
+volcano: iterations=1 runtime: 74101578us
+volcano: iterations=3; average: 73995296 us; total: 221985888us
+
+>
+
+=== RIR type-record stats ===
+
+Overall (vs. record-everything baseline)
+  site                  |          should |        recorded |         skipped |  skip%
+  ----------------------+-----------------+-----------------+-----------------+-------
+  leaves                |   2,104,989,324 |   1,448,759,221 |     656,230,103 |  31.2%
+  inner nodes           |     884,942,047 |               3 |     884,942,044 | ≈100.0%
+  untracked             |       7,965,803 |       7,965,803 |               0 |   0.0%
+  TOTAL                 |   2,997,897,174 |   1,456,725,027 |   1,541,172,147 |  51.4%
+
+leaves (total): 2,104,989,324
+  class              |                 should |        recorded |            skip |  skip%
+  -------------------+------------------------+-----------------+-----------------+-------
+  RecordAlways       |  1,436,891,062 (68.3%) |   1,436,891,062 |               0 |   0.0%
+  RecordOnce         |    420,812,346 (20.0%) |      11,868,159 |     408,944,187 |  97.2%
+  NoRecord (elided)  |    247,285,916 (11.7%) |               0 |     247,285,916 | 100.0%
+
+inner nodes (total): 884,942,047
+  class              |                 should |        recorded |      suppressed |  skip%
+  -------------------+------------------------+-----------------+-----------------+-------
+  root_inner         |    465,403,233 (52.6%) |               0 |     465,403,233 | 100.0%
+  inner_node         |    419,538,814 (47.4%) |               3 |     419,538,811 | ≈100.0%
+Shell cwd was reset to /home/skrynski/rsh-recordLess

@@ -1,0 +1,41 @@
+mandelbrot: iterations=1 runtime: 4974505us
+mandelbrot: iterations=1 runtime: 4980739us
+mandelbrot: iterations=1 runtime: 5046688us
+mandelbrot: iterations=1 runtime: 5033147us
+mandelbrot: iterations=1 runtime: 4962163us
+mandelbrot: iterations=1 runtime: 4978028us
+mandelbrot: iterations=1 runtime: 5051063us
+mandelbrot: iterations=1 runtime: 4987141us
+mandelbrot: iterations=1 runtime: 4966386us
+mandelbrot: iterations=1 runtime: 4966726us
+mandelbrot: iterations=1 runtime: 5056251us
+mandelbrot: iterations=1 runtime: 5029932us
+mandelbrot: iterations=1 runtime: 5153365us
+mandelbrot: iterations=1 runtime: 5097634us
+mandelbrot: iterations=15; average: 5019689 us; total: 75295340us
+
+>
+
+=== RIR type-record stats ===
+
+Overall (vs. record-everything baseline)
+  site                  |          should |        recorded |         skipped |  skip%
+  ----------------------+-----------------+-----------------+-----------------+-------
+  leaves                |   1,903,912,331 |     790,530,914 |   1,113,381,417 |  58.5%
+  inner nodes           |   1,391,057,655 |              15 |   1,391,057,640 | ≈100.0%
+  untracked             |              22 |              22 |               0 |   0.0%
+  TOTAL                 |   3,294,970,008 |     790,530,951 |   2,504,439,057 |  76.0%
+
+leaves (total): 1,903,912,331
+  class              |                 should |        recorded |            skip |  skip%
+  -------------------+------------------------+-----------------+-----------------+-------
+  RecordAlways       |    783,015,845 (41.1%) |     783,015,845 |               0 |   0.0%
+  RecordOnce         |    252,901,479 (13.3%) |       7,515,069 |     245,386,410 |  97.0%
+  NoRecord (elided)  |    867,995,007 (45.6%) |               0 |     867,995,007 | 100.0%
+
+inner nodes (total): 1,391,057,655
+  class              |                 should |        recorded |      suppressed |  skip%
+  -------------------+------------------------+-----------------+-----------------+-------
+  root_inner         |    888,554,814 (63.9%) |               0 |     888,554,814 | 100.0%
+  inner_node         |    502,502,841 (36.1%) |              15 |     502,502,826 | ≈100.0%
+Shell cwd was reset to /home/skrynski/rsh-recordLess
