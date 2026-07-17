@@ -478,13 +478,18 @@ DEF_INSTR(record_type_once_, 1, 1, 1)
 //   opcode or both                   covers all three; there is no separate
 //   _dep_
 //                             opcode for a parentless source.
-//   inner node             -> record_type_root_inner_ / record_type_inner_node_
-//                             (skipIfSuppressed + doRecord [+ notifyParent])
+//   inner node, isolated   -> record_type_inner_
+//   (no parent, no deps)      (skipIfSuppressed + doRecord; nothing to notify)
+//   inner node, notifies   -> record_type_inner_notify_
+//   (non-root has a parent;   (skipIfSuppressed + doRecord +
+//   notifyRelatedNodes: a root source has deps)   own parent AND/OR dependents'
+//   parents, once —
+//                             whichever applies; the empty branch is a no-op)
 #ifdef RECORDLESS_EXPTREE_ENABLED
 DEF_INSTR(record_type_leaf_notify_, 1, 1, 1)
 DEF_INSTR(record_type_leaf_notify_once_, 1, 1, 1)
-DEF_INSTR(record_type_root_inner_, 1, 1, 1)
-DEF_INSTR(record_type_inner_node_, 1, 1, 1)
+DEF_INSTR(record_type_inner_, 1, 1, 1)
+DEF_INSTR(record_type_inner_notify_, 1, 1, 1)
 #endif
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)

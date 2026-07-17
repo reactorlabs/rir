@@ -343,8 +343,8 @@ class BC {
 #ifdef RECORDLESS_EXPTREE_ENABLED
                || bc == Opcode::record_type_leaf_notify_ ||
                bc == Opcode::record_type_leaf_notify_once_ ||
-               bc == Opcode::record_type_root_inner_ ||
-               bc == Opcode::record_type_inner_node_
+               bc == Opcode::record_type_inner_ ||
+               bc == Opcode::record_type_inner_notify_
 #endif
             ;
     }
@@ -662,8 +662,8 @@ class BC {
 #ifdef RECORDLESS_EXPTREE_ENABLED
         case Opcode::record_type_leaf_notify_:
         case Opcode::record_type_leaf_notify_once_:
-        case Opcode::record_type_root_inner_:
-        case Opcode::record_type_inner_node_:
+        case Opcode::record_type_inner_:
+        case Opcode::record_type_inner_notify_:
 #endif
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;

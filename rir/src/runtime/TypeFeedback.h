@@ -277,49 +277,25 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
-    inline void notifyParent() {
-        if (object && parent && !hasPropagatedNotification) {
-            parent->shouldNotRecord = false;
-            hasPropagatedNotification = true;
-        }
-    }
-#endif
-
     // Used by record_type_ / record_type_once_: plain leaves (no parent, no
     // dependents). Leaves are never suppressed (the compiler sets
     // shouldNotRecord = !isLeaf, and the post-pass routes every suppressible
-    // inner node to root_inner_/inner_node_), so there is no skip check and no
+    // inner node to inner_/inner_notify_), so there is no skip check and no
     // notify — just doRecord.
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
   public:
-    // Four specializations corresponding to the expression-tree node type.
-    // Only compiled when RECORD_LESS_ENABLED; callers select the right one
-    // at compile time (different record_ opcodes / TypeFeedback entry points).
-    //
-    //  root  leaf   case
-    //   0     0     inner node:       A (skip if suppressed) + doRecord + B
-    //   (notify parent) 0     1     leaf with parent: doRecord + B (never
-    //   skipped, but notifies parent) 1     0     root inner:       A +
-    //   doRecord           (no parent to notify) 1     1     variable lookup:
-    //   doRecord               (no A, no B)
-
+    // Inner-node record: skip if suppressed, else doRecord. Any un-suppression
+    // of related nodes (own parent and/or NoRecord dependents' parents) is done
+    // by the caller (a TypeFeedback record_type_inner_notify method) via
+    // notifyRelatedNodes — an isolated inner node (record_type_inner_) skips
+    // that entirely, as it has no parent and no dependents to notify.
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    __attribute__((__always_inline__)) void recordInnerNode(SEXP e) {
+    __attribute__((__always_inline__)) void recordInner(SEXP e) {
         if (shouldNotRecord)
-            return; // A
-        doRecord(e);
-        notifyParent(); // B
-    }
-
-    __attribute__((__always_inline__)) void
-    recordRootInner(SEXP e) { // root=1, leaf=0
-        if (shouldNotRecord)
-            return; // A
+            return;
         doRecord(e);
     }
-
 #endif
 };
 
@@ -534,23 +510,27 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     }
 
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    __attribute__((noinline)) void record_type_inner_node(uint32_t idx,
-                                                          const SEXP e) {
-        // A non-root inner node always has a parent, so it can never be a
-        // variable's def — hence never a NoRecord source. It only notifies its
-        // own parent (done inside recordInnerNode); no propagate needed.
-        types(idx).recordInnerNode(e);
+    // Isolated inner node: no parent (it is a root) and no NoRecord dependents
+    // (not a source). Nothing to un-suppress, so it skips the notify machinery
+    // entirely — just skipIfSuppressed + doRecord.
+    __attribute__((noinline)) void record_type_inner(uint32_t idx,
+                                                     const SEXP e) {
+        types(idx).recordInner(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
-    __attribute__((noinline)) void record_type_root_inner(uint32_t idx,
-                                                          const SEXP e) {
-        // A root inner node IS the top of an expression assigned to a variable,
-        // so it may be a NoRecord source. After recording, always check for
-        // dependents and propagate (cheap no-op when it has none).
+    // Inner node that must un-suppress a related node when it sees an object:
+    // a non-root inner node un-suppresses its own parent; a root inner node
+    // that is a NoRecord source un-suppresses its dependents' parents. (A
+    // non-root inner node is never a source — it always has a parent, so it is
+    // never a variable's def.) notifyRelatedNodes handles own-parent AND any
+    // dependents together, once — the branch that does not apply is a no-op —
+    // so one opcode covers both.
+    __attribute__((noinline)) void record_type_inner_notify(uint32_t idx,
+                                                            const SEXP e) {
         ObservedValues& slot = types(idx);
-        slot.recordRootInner(e); // skipIfSuppressed + doRecord
+        slot.recordInner(e); // skipIfSuppressed + doRecord
         notifyRelatedNodes(slot, slot.object,
-                           idx); // enable dependents' parents if obj
+                           idx); // own parent and/or dependents' parents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
     // A simple leaf that must un-suppress related nodes when it sees an object:

@@ -2093,11 +2093,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // elided. No-op unless RIR_RECORD_STATS is enabled.
 #ifdef RIR_RECORD_STATS
 #ifdef RECORDLESS_EXPTREE_ENABLED
-        // record_type_ .. record_type_inner_node_ are the contiguous value-type
-        // record opcodes (record_call_/record_test_ sit just outside the
+        // record_type_ .. record_type_inner_notify_ are the contiguous value-
+        // type record opcodes (record_call_/record_test_ sit just outside the
         // range).
 #define REC_STAT_IS_RECORD(op)                                                 \
-    ((op) >= Opcode::record_type_ && (op) <= Opcode::record_type_inner_node_)
+    ((op) >= Opcode::record_type_ && (op) <= Opcode::record_type_inner_notify_)
 #else
 #define REC_STAT_IS_RECORD(op)                                                 \
     ((op) == Opcode::record_type_ || (op) == Opcode::record_type_once_)
@@ -2517,23 +2517,23 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(record_type_root_inner_) {
+        INSTRUCTION(record_type_inner_) {
             Immediate idx = readImmediate();
             advanceImmediate();
             REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
-                         g_recStats.rootInnerSkip++;
-                     else g_recStats.rootInnerRec++);
-            typeFeedback->record_type_root_inner(idx, ostack_top());
+                         g_recStats.innerSkip++;
+                     else g_recStats.innerRec++);
+            typeFeedback->record_type_inner(idx, ostack_top());
             NEXT();
         }
 
-        INSTRUCTION(record_type_inner_node_) {
+        INSTRUCTION(record_type_inner_notify_) {
             Immediate idx = readImmediate();
             advanceImmediate();
             REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
-                         g_recStats.innerNodeSkip++;
-                     else g_recStats.innerNodeRec++);
-            typeFeedback->record_type_inner_node(idx, ostack_top());
+                         g_recStats.innerNotifySkip++;
+                     else g_recStats.innerNotifyRec++);
+            typeFeedback->record_type_inner_notify(idx, ostack_top());
             NEXT();
         }
 #endif

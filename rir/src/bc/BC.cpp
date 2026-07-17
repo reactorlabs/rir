@@ -89,8 +89,8 @@ void BC::write(CodeStream& cs) const {
 #ifdef RECORDLESS_EXPTREE_ENABLED
     case Opcode::record_type_leaf_notify_:
     case Opcode::record_type_leaf_notify_once_:
-    case Opcode::record_type_root_inner_:
-    case Opcode::record_type_inner_node_:
+    case Opcode::record_type_inner_:
+    case Opcode::record_type_inner_notify_:
 #endif
         cs.insert(immediate.i);
         return;
@@ -177,8 +177,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
 #ifdef RECORDLESS_EXPTREE_ENABLED
         case Opcode::record_type_leaf_notify_:
         case Opcode::record_type_leaf_notify_once_:
-        case Opcode::record_type_root_inner_:
-        case Opcode::record_type_inner_node_:
+        case Opcode::record_type_inner_:
+        case Opcode::record_type_inner_notify_:
 #endif
         case Opcode::record_test_:
         case Opcode::clear_record_type_once_bit_:
@@ -278,8 +278,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
 #ifdef RECORDLESS_EXPTREE_ENABLED
         case Opcode::record_type_leaf_notify_:
         case Opcode::record_type_leaf_notify_once_:
-        case Opcode::record_type_root_inner_:
-        case Opcode::record_type_inner_node_:
+        case Opcode::record_type_inner_:
+        case Opcode::record_type_inner_notify_:
 #endif
         case Opcode::record_test_:
         case Opcode::clear_record_type_once_bit_:
@@ -421,8 +421,8 @@ void BC::print(std::ostream& out) const {
 #ifdef RECORDLESS_EXPTREE_ENABLED
     case Opcode::record_type_leaf_notify_:
     case Opcode::record_type_leaf_notify_once_:
-    case Opcode::record_type_root_inner_:
-    case Opcode::record_type_inner_node_:
+    case Opcode::record_type_inner_:
+    case Opcode::record_type_inner_notify_:
 #endif
     case Opcode::record_call_:
         out << "#" << immediate.i;

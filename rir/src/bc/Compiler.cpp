@@ -357,8 +357,15 @@ class CompilerContext {
                     bool isRoot = childSlots.find(slot) == childSlots.end();
                     bool isSrc = sourceSlots.find(slot) != sourceSlots.end();
                     if (!once && !isLeaf) {
-                        *pc = isRoot ? Opcode::record_type_root_inner_
-                                     : Opcode::record_type_inner_node_;
+                        // Split inner nodes on whether they notify anything: an
+                        // isolated inner node (root, no deps) notifies nothing;
+                        // a non-root notifies its parent and a root source
+                        // notifies its dependents — both via record_type_
+                        // inner_notify_. Notification is one-time (latched), so
+                        // the shared notifier's usually-empty branch is free.
+                        bool notifies = !isRoot || isSrc;
+                        *pc = notifies ? Opcode::record_type_inner_notify_
+                                       : Opcode::record_type_inner_;
                     } else if (isRoot && !isSrc) {
                         // Non-source simple leaf (root + leaf) — and every
                         // untracked record, which is also isLeaf && isRoot &&
@@ -383,8 +390,8 @@ class CompilerContext {
 #endif
 
     // Tracked: participates in the expression-tree optimization. Registered in
-    // the slot tree, so the post-pass specializes it (root_inner_/inner_node_
-    // for inner nodes, leaf_notify_* for leaves that notify a parent and/or
+    // the slot tree, so the post-pass specializes it (inner_/inner_notify_ for
+    // inner nodes, leaf_notify_* for leaves that notify a parent and/or
     // dependents). A tracked but parent-less non-source leaf stays plain
     // record_type_ (same as untracked).
 #ifdef RECORDLESS_EXPTREE_ENABLED
@@ -1601,10 +1608,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // SEXPTYPE as x for non-object x, so its result type is
                 // inferable from the lhs leaf — record it as an inner node
                 // (elidable). If x is ever an object (S3/S4 `[` dispatch can
-                // return anything), the lhs leaf's notifyParent re-enables this
-                // record. `[[` (DoubleBracket) extracts an *element* whose type
-                // varies (e.g. list(3,"hello")[[i]]) and is not inferable, so
-                // it must keep recording.
+                // return anything), the lhs leaf's notifyRelatedNodes
+                // re-enables this record. `[[` (DoubleBracket) extracts an
+                // *element* whose type varies (e.g. list(3,"hello")[[i]]) and
+                // is not inferable, so it must keep recording.
                 if (fun == symbol::Bracket)
                     cs << ctx.recordTypeTracked(true);
                 else

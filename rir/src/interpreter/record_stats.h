@@ -45,10 +45,10 @@ struct RecordSkipStats {
     // inner nodes (counted at the inner record_type_* handlers; exptree only).
     // "skip" here = suppressed via shouldNotRecord (the expression-tree
     // elision).
-    uint64_t rootInnerRec = 0;  // record_type_root_inner_  — recorded
-    uint64_t rootInnerSkip = 0; // record_type_root_inner_  — suppressed
-    uint64_t innerNodeRec = 0;  // record_type_inner_node_  — recorded
-    uint64_t innerNodeSkip = 0; // record_type_inner_node_  — suppressed
+    uint64_t innerRec = 0;        // record_type_inner_         — recorded
+    uint64_t innerSkip = 0;       // record_type_inner_         — suppressed
+    uint64_t innerNotifyRec = 0;  // record_type_inner_notify_  — recorded
+    uint64_t innerNotifySkip = 0; // record_type_inner_notify_  — suppressed
     // Untracked records — every execution of a plain record_type_ opcode that
     // came from recordTypeUntracked() (sites excluded from the optimization:
     // loop bounds, super-assign target, default args, statement results, [[
