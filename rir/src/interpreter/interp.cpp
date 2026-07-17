@@ -2062,11 +2062,23 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         recordFbAtSlot(idx, s);
     };
 
-    // For ldvar_cached_ (RecordAlways): the next instruction is always
-    // record_type_, so unconditionally record.
+    // For ldvar_cached_ (RecordAlways): the next instruction is always a plain
+    // (non-once) leaf record whose raw slot index sits at pc+1, so read it
+    // directly — no opcode peek, no unpacking. The compiler emits base
+    // ldvar_cached_ only for RecordAlways uses (classifyUse pairs Always solely
+    // with RecordAlways), which emit recordTypeTracked → record_type_, possibly
+    // specialized by the post-pass to record_type_leaf_notify_ (still non-once,
+    // still a raw slot immediate — an ldvar record is always a leaf). The two
+    // cases that would break a blind pc+1 read — a NoRecord elision (no opcode)
+    // and a packed _once_ immediate — are exactly the ones patched away to
+    // ldvar_cached_noRecordFB_ / ldvar_cached_fbRecordOnce_. Pin that
+    // invariant.
     auto recordForceBehaviorAlways = [&](SEXP s) __attribute__((noinline)) {
-        // assert(*pc == Opcode::record_type_);
-
+        SLOWASSERT(*pc == Opcode::record_type_
+#ifdef RECORDLESS_EXPTREE_ENABLED
+                   || *pc == Opcode::record_type_leaf_notify_
+#endif
+        );
         Immediate slotIdx = *(Immediate*)(pc + 1);
         recordFbAtSlot(slotIdx, s);
     };
