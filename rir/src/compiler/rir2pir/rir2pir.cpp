@@ -403,12 +403,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     // case Opcode::record_type_once_promise_:
     case Opcode::record_type_once_:
-#ifdef RECORDLESS_EXPTREE_ENABLED
     case Opcode::record_type_leaf_notify_:
     case Opcode::record_type_leaf_notify_once_:
     case Opcode::record_type_inner_:
     case Opcode::record_type_inner_notify_:
-#endif
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
         auto& feedback = typeFeedback->types(idx);

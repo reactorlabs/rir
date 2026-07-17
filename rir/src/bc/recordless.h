@@ -5,8 +5,6 @@
 // no definitions. The runtime flag Compiler::recordLess_Leaf_Enabled (the
 // ldvar-leaf optimization) is defined in Compiler.cpp.
 
-// Expression-tree inner-node elision optimization toggle.
-#define RECORDLESS_EXPTREE_ENABLED // comment out to disable
-#ifdef RECORDLESS_EXPTREE_ENABLED
+// The expression-tree inner-node elision optimization is always compiled in
+// (formerly gated behind RECORDLESS_EXPTREE_ENABLED).
 //    #define RECORDLESS_EXPTREE_DEBUG // uncomment to enable debug prints
-#endif

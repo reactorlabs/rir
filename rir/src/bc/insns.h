@@ -465,10 +465,10 @@ DEF_INSTR(record_type_once_, 1, 1, 1)
 // disabled
 // Records are classified along {simple-leaf, leaf-that-notifies, inner} x
 // {always, once} x {no NoRecord dependents, source}. The SIMPLE-LEAF family is
-// the plain record_type_ / record_type_once_; these also serve as the pre-patch
-// placeholders and the opcodes used when RECORDLESS_EXPTREE_ENABLED is off, and
-// untracked records (recordTypeUntracked) stay record_type_. The compiler
-// post-pass specializes the rest by (isLeaf, isRoot, isSource):
+// the plain record_type_ / record_type_once_; these also serve as the
+// pre-patch placeholders, and untracked records (recordTypeUntracked) stay
+// record_type_. The compiler post-pass specializes the rest by (isLeaf,
+// isRoot, isSource):
 //   simple leaf,    no-dep -> record_type_         (plain doRecord; unchanged)
 //   simple leaf,    once   -> record_type_once_    (unchanged)
 //   leaf that must         -> record_type_leaf_notify_[once_]
@@ -485,12 +485,10 @@ DEF_INSTR(record_type_once_, 1, 1, 1)
 //   notifyRelatedNodes: a root source has deps)   own parent AND/OR dependents'
 //   parents, once —
 //                             whichever applies; the empty branch is a no-op)
-#ifdef RECORDLESS_EXPTREE_ENABLED
 DEF_INSTR(record_type_leaf_notify_, 1, 1, 1)
 DEF_INSTR(record_type_leaf_notify_once_, 1, 1, 1)
 DEF_INSTR(record_type_inner_, 1, 1, 1)
 DEF_INSTR(record_type_inner_notify_, 1, 1, 1)
-#endif
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)

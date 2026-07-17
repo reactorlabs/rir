@@ -9,7 +9,7 @@ export PIR_OSR=0
 
 CURRENTDIR=$(pwd)
 
-BUILD=release
+BUILD=../build/release
 OUTERITER=15
 
 # BENCHMARK_FOLDER=shootout

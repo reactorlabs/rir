@@ -2074,11 +2074,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // ldvar_cached_noRecordFB_ / ldvar_cached_fbRecordOnce_. Pin that
     // invariant.
     auto recordForceBehaviorAlways = [&](SEXP s) __attribute__((noinline)) {
-        SLOWASSERT(*pc == Opcode::record_type_
-#ifdef RECORDLESS_EXPTREE_ENABLED
-                   || *pc == Opcode::record_type_leaf_notify_
-#endif
-        );
+        SLOWASSERT(*pc == Opcode::record_type_ ||
+                   *pc == Opcode::record_type_leaf_notify_);
+
         Immediate slotIdx = *(Immediate*)(pc + 1);
         recordFbAtSlot(slotIdx, s);
     };
@@ -2104,16 +2102,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // whose next opcode is NOT a value-type record opcode had its record
         // elided. No-op unless RIR_RECORD_STATS is enabled.
 #ifdef RIR_RECORD_STATS
-#ifdef RECORDLESS_EXPTREE_ENABLED
         // record_type_ .. record_type_inner_notify_ are the contiguous value-
         // type record opcodes (record_call_/record_test_ sit just outside the
         // range).
 #define REC_STAT_IS_RECORD(op)                                                 \
     ((op) >= Opcode::record_type_ && (op) <= Opcode::record_type_inner_notify_)
-#else
-#define REC_STAT_IS_RECORD(op)                                                 \
-    ((op) == Opcode::record_type_ || (op) == Opcode::record_type_once_)
-#endif
 #define REC_STAT_LDVAR_CLASSIFY()                                              \
     do {                                                                       \
         if (!REC_STAT_IS_RECORD(*pc))                                          \
@@ -2503,7 +2496,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
         // (simple leaves are plain record_type_ / record_type_once_; only the
         // simple-leaf *source* variants below are specialized.)
         INSTRUCTION(record_type_leaf_notify_) {
@@ -2548,7 +2540,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             typeFeedback->record_type_inner_notify(idx, ostack_top());
             NEXT();
         }
-#endif
 
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT

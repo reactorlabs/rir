@@ -113,11 +113,9 @@ class CompilerContext {
     // // Used to gate the post-subassign record_type_ emission.
     // std::unordered_set<SEXP> readVars_;
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
     std::stack<std::vector<uint32_t>> slotsStack;
     std::map<uint32_t, uint32_t> parents;
     std::vector<Code*> allCodes_;
-#endif
 #ifdef RIR_RECORD_STATS
     // Stats only: slot indices emitted via recordTypeUntracked(), handed to the
     // TypeFeedback at finalize so the record_type_ handler can attribute them
@@ -249,9 +247,7 @@ class CompilerContext {
             pushedPromiseContexts--;
         delete code.top();
         code.pop();
-#ifdef RECORDLESS_EXPTREE_ENABLED
         allCodes_.push_back(res);
-#endif
         return res;
     }
 
@@ -265,7 +261,6 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
     void popNodeForSlots() {
         // Always pop the inner vector for this LANGSXP. If it still has
         // unhandled child slots (non-profiled call — no recordType(true) was
@@ -302,9 +297,7 @@ class CompilerContext {
             currentSlots.push_back(slotIdx);
         }
     }
-#endif
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
     void setTypeFeedbackParents(TypeFeedback& tf) {
         // Set up parent pointers in TypeFeedback.
         for (auto& kv : parents) {
@@ -387,26 +380,18 @@ class CompilerContext {
             }
         }
     }
-#endif
 
     // Tracked: participates in the expression-tree optimization. Registered in
     // the slot tree, so the post-pass specializes it (inner_/inner_notify_ for
     // inner nodes, leaf_notify_* for leaves that notify a parent and/or
     // dependents). A tracked but parent-less non-source leaf stays plain
     // record_type_ (same as untracked).
-#ifdef RECORDLESS_EXPTREE_ENABLED
     BC recordTypeTracked(bool isParent) {
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack.empty())
             registerSlot(slotIdx, isParent);
         return BC::recordType(slotIdx);
     }
-#else
-    BC recordTypeTracked(bool isParent) {
-        (void)isParent;
-        return BC::recordType(typeFeedbackBuilder.addType());
-    }
-#endif
 
     // Untracked: genuinely outside the analysis — the slot is never a def, a
     // source, or an inner-node operand. Just emits a record_type_ and registers
@@ -429,16 +414,12 @@ class CompilerContext {
 
     // Register a slot that the leaf optimization allocated directly (emitting
     // record_type_ / record_type_once_) as a leaf child in the expression tree,
-    // so its parent pointer is wired and its record notifies the parent. No-op
-    // when the expression-tree optimization is compiled out. Mirrors the
-    // registerSlot(false) that recordType() does for the non-leaf-opt path.
+    // so its parent pointer is wired and its record notifies the parent.
+    // Mirrors the registerSlot(false) that recordType() does for the non-leaf-
+    // opt path.
     void registerLeafSlot(uint32_t slotIdx) {
-#ifdef RECORDLESS_EXPTREE_ENABLED
         if (!slotsStack.empty())
             registerSlot(slotIdx, /*isParent=*/false);
-#else
-        (void)slotIdx;
-#endif
     }
 
     BC recordTypeTracked(SEXP name) {
@@ -891,11 +872,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-#ifdef RECORDLESS_EXPTREE_ENABLED
             cs << ctx.recordTypeTracked(true);
-#else
-            cs << ctx.recordTypeUntracked();
-#endif
 
         return true;
     }
@@ -1603,7 +1580,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         if (!voidContext) {
             if (Compiler::profile) {
-#ifdef RECORDLESS_EXPTREE_ENABLED
                 // `[` (Bracket) is type-preserving: x[...] has the same
                 // SEXPTYPE as x for non-object x, so its result type is
                 // inferable from the lhs leaf — record it as an inner node
@@ -1620,9 +1596,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     // an opaque always-record leaf (def candidate / inner-node
                     // operand), not untracked.
                     cs << ctx.recordTypeTracked(/*isParent=*/false);
-#else
-                cs << ctx.recordTypeUntracked();
-#endif
             }
             cs << BC::visible();
         } else {
@@ -2587,23 +2560,19 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         // Function application
     case LANGSXP: {
 
-#if defined(RECORDLESS_EXPTREE_ENABLED) && defined(RECORDLESS_EXPTREE_DEBUG)
+#ifdef RECORDLESS_EXPTREE_DEBUG
         std::cerr << "pushing slot node for expr: \n";
         Rf_PrintValue(exp);
         std::cerr << "\n\n";
 #endif
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
         ctx.pushNewNodeForSlots();
-#endif
 
         auto fun = CAR(exp);
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
         ctx.popNodeForSlots();
-#endif
 
     } break;
         // Variable lookup
@@ -2747,10 +2716,8 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
-#ifdef RECORDLESS_EXPTREE_ENABLED
     ctx.setTypeFeedbackParents(*feedback);
     feedback->buildNoRecordReverseMap();
-#endif
 #ifdef RIR_RECORD_STATS
     feedback->setStatsUntrackedSlots(ctx.untrackedStatsSlots_);
 #endif

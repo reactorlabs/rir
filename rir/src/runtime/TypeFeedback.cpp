@@ -226,7 +226,6 @@ void ObservedValues::print(std::ostream& out) const {
         out << "<?>";
     }
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
     out << " @ " << this;
     if (parent) {
         out << " -> " << parent;
@@ -235,7 +234,6 @@ void ObservedValues::print(std::ostream& out) const {
     // prints a character glyph (0x00/0x01 control chars), not the digits 0/1.
     out << ", isLeaf: " << (int)isLeaf
         << ", should not record: " << (int)shouldNotRecord;
-#endif
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }

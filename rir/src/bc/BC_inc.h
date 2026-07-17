@@ -338,15 +338,13 @@ class BC {
 
     bool isRecord() const {
         return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
-               bc == Opcode::record_type_ || bc == Opcode::record_type_once_
-        // || bc == Opcode::record_type_once_promise_;  // disabled
-#ifdef RECORDLESS_EXPTREE_ENABLED
+               bc == Opcode::record_type_ ||
+               bc == Opcode::record_type_once_
+               // || bc == Opcode::record_type_once_promise_;  // disabled
                || bc == Opcode::record_type_leaf_notify_ ||
                bc == Opcode::record_type_leaf_notify_once_ ||
                bc == Opcode::record_type_inner_ ||
-               bc == Opcode::record_type_inner_notify_
-#endif
-            ;
+               bc == Opcode::record_type_inner_notify_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -659,12 +657,10 @@ class BC {
         // case Opcode::record_type_once_promise_:  // disabled
         case Opcode::clear_record_type_once_bit_:
         case Opcode::clear_record_type_once_bits_range_:
-#ifdef RECORDLESS_EXPTREE_ENABLED
         case Opcode::record_type_leaf_notify_:
         case Opcode::record_type_leaf_notify_once_:
         case Opcode::record_type_inner_:
         case Opcode::record_type_inner_notify_:
-#endif
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:

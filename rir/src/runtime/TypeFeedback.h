@@ -219,20 +219,15 @@ struct ObservedValues {
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-#ifdef RECORDLESS_EXPTREE_ENABLED
     // byte 1: expression-tree flags (5 bits spare)
     uint8_t isLeaf : 1;
     uint8_t shouldNotRecord : 1;
     uint8_t hasPropagatedNotification : 1;
-#endif
-    // bytes 2-4 (or 1-3 without recordless): type observations
+    // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
-#ifdef RECORDLESS_EXPTREE_ENABLED
     // bytes 5-7: implicit padding to 8-byte align the pointer below
     ObservedValues* parent;
-    // total with recordless:    1+1+3+3(pad)+8 = 16 bytes
-    // total without recordless: 1+3 = 4 bytes (matches original static_assert)
-#endif
+    // total: 1+1+3+3(pad)+8 = 16 bytes
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
@@ -290,19 +285,12 @@ struct ObservedValues {
     // by the caller (a TypeFeedback record_type_inner_notify method) via
     // notifyRelatedNodes — an isolated inner node (record_type_inner_) skips
     // that entirely, as it has no parent and no dependents to notify.
-#ifdef RECORDLESS_EXPTREE_ENABLED
     __attribute__((__always_inline__)) void recordInner(SEXP e) {
         if (shouldNotRecord)
             return;
         doRecord(e);
     }
-#endif
 };
-
-#ifndef RECORDLESS_EXPTREE_ENABLED
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
-              "Size needs to fit inside a record_ bc immediate args");
-#endif
 
 enum class Opcode : uint8_t;
 
@@ -416,7 +404,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // Parallel to types_: forceBehaviorKinds_[i] is the compile-time FB
     // recording decision for slot i (default ForceBehaviorKind::Always).
     uint8_t* forceBehaviorKinds_;
-#ifdef RECORDLESS_EXPTREE_ENABLED
     // Reverse of typeDeps_: source slot -> its NoRecord dependent slots. Built
     // in-memory at compile time (buildNoRecordReverseMap); empty when the
     // function has no NoRecord uses. Used at runtime so that when a source
@@ -425,7 +412,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // themselves (the "two-step notification"). Not serialized (like parent
     // pointers, it is reconstructed by the compiler).
     std::vector<std::vector<uint32_t>> noRecordSourceToDeps_;
-#endif
 #ifdef RIR_RECORD_STATS
     // Stats only: which slots were emitted via the compiler's
     // recordTypeUntracked() — the genuinely untracked sites (loop bounds,
@@ -509,7 +495,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
-#ifdef RECORDLESS_EXPTREE_ENABLED
     // Isolated inner node: no parent (it is a root) and no NoRecord dependents
     // (not a source). Nothing to un-suppress, so it skips the notify machinery
     // entirely — just skipIfSuppressed + doRecord.
@@ -579,7 +564,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
                 noRecordSourceToDeps_[s].push_back((uint32_t)d);
         }
     }
-#endif
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
         ObservedValues& slot = types(idx);
