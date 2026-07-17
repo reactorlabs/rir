@@ -87,10 +87,8 @@ void BC::write(CodeStream& cs) const {
     case Opcode::clear_record_type_once_bit_:
     case Opcode::clear_record_type_once_bits_range_:
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    case Opcode::record_type_dep_:
-    case Opcode::record_type_once_dep_:
-    case Opcode::record_type_leafWithParent_:
-    case Opcode::record_type_leafWithParent_once_:
+    case Opcode::record_type_leaf_notify_:
+    case Opcode::record_type_leaf_notify_once_:
     case Opcode::record_type_root_inner_:
     case Opcode::record_type_inner_node_:
 #endif
@@ -177,10 +175,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::record_type_once_:
         // case Opcode::record_type_once_promise_:
 #ifdef RECORDLESS_EXPTREE_ENABLED
-        case Opcode::record_type_dep_:
-        case Opcode::record_type_once_dep_:
-        case Opcode::record_type_leafWithParent_:
-        case Opcode::record_type_leafWithParent_once_:
+        case Opcode::record_type_leaf_notify_:
+        case Opcode::record_type_leaf_notify_once_:
         case Opcode::record_type_root_inner_:
         case Opcode::record_type_inner_node_:
 #endif
@@ -280,10 +276,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::record_type_once_:
         // case Opcode::record_type_once_promise_:
 #ifdef RECORDLESS_EXPTREE_ENABLED
-        case Opcode::record_type_dep_:
-        case Opcode::record_type_once_dep_:
-        case Opcode::record_type_leafWithParent_:
-        case Opcode::record_type_leafWithParent_once_:
+        case Opcode::record_type_leaf_notify_:
+        case Opcode::record_type_leaf_notify_once_:
         case Opcode::record_type_root_inner_:
         case Opcode::record_type_inner_node_:
 #endif
@@ -425,10 +419,8 @@ void BC::print(std::ostream& out) const {
     case Opcode::record_test_:
     case Opcode::record_type_:
 #ifdef RECORDLESS_EXPTREE_ENABLED
-    case Opcode::record_type_dep_:
-    case Opcode::record_type_once_dep_:
-    case Opcode::record_type_leafWithParent_:
-    case Opcode::record_type_leafWithParent_once_:
+    case Opcode::record_type_leaf_notify_:
+    case Opcode::record_type_leaf_notify_once_:
     case Opcode::record_type_root_inner_:
     case Opcode::record_type_inner_node_:
 #endif

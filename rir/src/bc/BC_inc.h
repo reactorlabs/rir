@@ -341,10 +341,8 @@ class BC {
                bc == Opcode::record_type_ || bc == Opcode::record_type_once_
         // || bc == Opcode::record_type_once_promise_;  // disabled
 #ifdef RECORDLESS_EXPTREE_ENABLED
-               || bc == Opcode::record_type_dep_ ||
-               bc == Opcode::record_type_once_dep_ ||
-               bc == Opcode::record_type_leafWithParent_ ||
-               bc == Opcode::record_type_leafWithParent_once_ ||
+               || bc == Opcode::record_type_leaf_notify_ ||
+               bc == Opcode::record_type_leaf_notify_once_ ||
                bc == Opcode::record_type_root_inner_ ||
                bc == Opcode::record_type_inner_node_
 #endif
@@ -662,10 +660,8 @@ class BC {
         case Opcode::clear_record_type_once_bit_:
         case Opcode::clear_record_type_once_bits_range_:
 #ifdef RECORDLESS_EXPTREE_ENABLED
-        case Opcode::record_type_dep_:
-        case Opcode::record_type_once_dep_:
-        case Opcode::record_type_leafWithParent_:
-        case Opcode::record_type_leafWithParent_once_:
+        case Opcode::record_type_leaf_notify_:
+        case Opcode::record_type_leaf_notify_once_:
         case Opcode::record_type_root_inner_:
         case Opcode::record_type_inner_node_:
 #endif

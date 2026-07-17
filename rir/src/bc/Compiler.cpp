@@ -328,11 +328,11 @@ class CompilerContext {
 
         // Source slots: those a NoRecord (elided) use depends on AND whose
         // dependent has a parent to un-suppress. When such a slot records an
-        // object it must propagate to its dependents' parents — that is the
-        // ONLY thing the _dep_ opcode does. A source whose dependents are all
-        // parentless leaves (e.g. `a <- f(); a`, where the elided read of `a`
-        // is a standalone leaf) has nothing to propagate to, so it stays a
-        // plain record_type_ rather than a pointless record_type_dep_.
+        // object it must propagate to its dependents' parents (via
+        // record_type_leaf_notify_'s notifyRelatedNodes). A source whose
+        // dependents are all parentless leaves (e.g. `a <- f(); a`, where the
+        // elided read of `a` is a standalone leaf) has nothing to propagate to,
+        // so it stays a plain record_type_ rather than a specialized opcode.
         std::set<uint32_t> sourceSlots;
         for (size_t d = 0; d < tf.types_size(); d++)
             if (tf.hasTypeDep(d) && childSlots.find(d) != childSlots.end())
@@ -359,25 +359,21 @@ class CompilerContext {
                     if (!once && !isLeaf) {
                         *pc = isRoot ? Opcode::record_type_root_inner_
                                      : Opcode::record_type_inner_node_;
-                    } else if (isRoot) { // simple leaf (root + leaf)
-                        // Non-source simple leaves — and every untracked
-                        // record, which is also isLeaf && isRoot && !isSrc —
-                        // stay plain record_type_ / record_type_once_ (doRecord
-                        // only). Only a simple-leaf *source* needs a
-                        // specialized opcode so it can propagate to its
-                        // NoRecord dependents' parents.
-                        if (isSrc)
-                            *pc = once ? Opcode::record_type_once_dep_
-                                       : Opcode::record_type_dep_;
-                        // else: leave record_type_ / record_type_once_
-                        // unchanged
-                    } else { // leaf with a parent
-                        // One opcode per once-ness — no _dep_ split. The
-                        // handler always propagates to its own parent and to
-                        // any deps (empty list when not a source), so isSrc is
-                        // irrelevant.
-                        *pc = once ? Opcode::record_type_leafWithParent_once_
-                                   : Opcode::record_type_leafWithParent_;
+                    } else if (isRoot && !isSrc) {
+                        // Non-source simple leaf (root + leaf) — and every
+                        // untracked record, which is also isLeaf && isRoot &&
+                        // !isSrc — stays plain record_type_ / record_type_once_
+                        // (doRecord only, no notification).
+                    } else {
+                        // A leaf that must notify related nodes: a source
+                        // (propagate to its NoRecord dependents' parents), a
+                        // leaf with a parent (un-suppress its own parent), or
+                        // both. record_type_leaf_notify_ handles all three —
+                        // notifyRelatedNodes does own-parent + any deps
+                        // together (the usually-empty branch is a no-op) — so
+                        // there is no separate _dep_ opcode.
+                        *pc = once ? Opcode::record_type_leaf_notify_once_
+                                   : Opcode::record_type_leaf_notify_;
                     }
                 }
                 pc = BC::next(pc);
@@ -388,8 +384,9 @@ class CompilerContext {
 
     // Tracked: participates in the expression-tree optimization. Registered in
     // the slot tree, so the post-pass specializes it (root_inner_/inner_node_
-    // for inner nodes, leafWithParent_* for leaves with a parent). A tracked
-    // but parent-less leaf stays plain record_type_ (same as untracked).
+    // for inner nodes, leaf_notify_* for leaves that notify a parent and/or
+    // dependents). A tracked but parent-less non-source leaf stays plain
+    // record_type_ (same as untracked).
 #ifdef RECORDLESS_EXPTREE_ENABLED
     BC recordTypeTracked(bool isParent) {
         auto slotIdx = typeFeedbackBuilder.addType();

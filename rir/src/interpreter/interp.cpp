@@ -2494,45 +2494,23 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 #ifdef RECORDLESS_EXPTREE_ENABLED
         // (simple leaves are plain record_type_ / record_type_once_; only the
         // simple-leaf *source* variants below are specialized.)
-        INSTRUCTION(record_type_dep_) {
-            Immediate idx = readImmediate();
-            advanceImmediate();
-            typeFeedback->record_type_dep(idx, ostack_top());
-            REC_STAT(g_recStats.leafAlwaysRec++);
-            NEXT();
-        }
-
-        INSTRUCTION(record_type_once_dep_) {
-            uint32_t raw = readImmediate();
-            advanceImmediate();
-            RECORD_TYPE_ONCE_GATE(fired, raw, {
-                REC_STAT(g_recStats.leafOnceSkip++);
-                NEXT();
-            });
-            typeFeedback->record_type_dep(RECORD_TYPE_ONCE_SLOT_IDX(raw),
-                                          ostack_top());
-            RECORD_TYPE_ONCE_SET(fired, raw);
-            REC_STAT(g_recStats.leafOnceRec++);
-            NEXT();
-        }
-
-        INSTRUCTION(record_type_leafWithParent_) {
+        INSTRUCTION(record_type_leaf_notify_) {
             Immediate idx = readImmediate();
             advanceImmediate();
             // doRecord + propagate (own parent + any deps, together)
-            typeFeedback->record_type_leafWithParent(idx, ostack_top());
+            typeFeedback->record_type_leaf_notify(idx, ostack_top());
             REC_STAT(g_recStats.leafAlwaysRec++);
             NEXT();
         }
 
-        INSTRUCTION(record_type_leafWithParent_once_) {
+        INSTRUCTION(record_type_leaf_notify_once_) {
             uint32_t raw = readImmediate();
             advanceImmediate();
             RECORD_TYPE_ONCE_GATE(fired, raw, {
                 REC_STAT(g_recStats.leafOnceSkip++);
                 NEXT();
             });
-            typeFeedback->record_type_leafWithParent(
+            typeFeedback->record_type_leaf_notify(
                 RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top());
             RECORD_TYPE_ONCE_SET(fired, raw);
             REC_STAT(g_recStats.leafOnceRec++);

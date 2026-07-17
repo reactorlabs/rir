@@ -463,30 +463,26 @@ DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_type_once_, 1, 1, 1)
 // DEF_INSTR(record_type_once_promise_, 1, 1, 1)  // env-bitmap optimization
 // disabled
-// Records are classified along {simple-leaf, leaf-with-parent, inner} x
+// Records are classified along {simple-leaf, leaf-that-notifies, inner} x
 // {always, once} x {no NoRecord dependents, source}. The SIMPLE-LEAF family is
-// the plain record_type_ / record_type_once_ (and the _dep_ variants below for
-// sources); these also serve as the pre-patch placeholders and the opcodes used
-// when RECORDLESS_EXPTREE_ENABLED is off, and untracked records (recordType
-// Untracked) stay record_type_. The compiler post-pass specializes the rest by
-// (isLeaf, isRoot, isSource):
+// the plain record_type_ / record_type_once_; these also serve as the pre-patch
+// placeholders and the opcodes used when RECORDLESS_EXPTREE_ENABLED is off, and
+// untracked records (recordTypeUntracked) stay record_type_. The compiler
+// post-pass specializes the rest by (isLeaf, isRoot, isSource):
 //   simple leaf,    no-dep -> record_type_         (plain doRecord; unchanged)
 //   simple leaf,    once   -> record_type_once_    (unchanged)
-//   simple leaf,    source -> record_type_dep_ / record_type_once_dep_
-//                             (doRecord + propagate to dependents)
-//   leaf w/ parent         -> record_type_leafWithParent_[once_]
-//                             (doRecord + propagate: own parent + any deps,
-//                             together — a leaf-with-parent already pays the
-//                             object-check + notify cost, so the (usually
-//                             empty) deps loop is folded in rather than split
-//                             into a separate _dep_ opcode)
+//   leaf that must         -> record_type_leaf_notify_[once_]
+//   notify related            (doRecord + notifyRelatedNodes: own parent AND
+//   nodes: a source,          any NoRecord dependents' parents, together, once
+//   a leaf w/ parent,         — the usually-empty branch is a no-op). One
+//   opcode or both                   covers all three; there is no separate
+//   _dep_
+//                             opcode for a parentless source.
 //   inner node             -> record_type_root_inner_ / record_type_inner_node_
 //                             (skipIfSuppressed + doRecord [+ notifyParent])
 #ifdef RECORDLESS_EXPTREE_ENABLED
-DEF_INSTR(record_type_dep_, 1, 1, 1)
-DEF_INSTR(record_type_once_dep_, 1, 1, 1)
-DEF_INSTR(record_type_leafWithParent_, 1, 1, 1)
-DEF_INSTR(record_type_leafWithParent_once_, 1, 1, 1)
+DEF_INSTR(record_type_leaf_notify_, 1, 1, 1)
+DEF_INSTR(record_type_leaf_notify_once_, 1, 1, 1)
 DEF_INSTR(record_type_root_inner_, 1, 1, 1)
 DEF_INSTR(record_type_inner_node_, 1, 1, 1)
 #endif
