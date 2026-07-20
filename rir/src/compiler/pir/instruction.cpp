@@ -877,6 +877,19 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
         inferred = PirType(RType::vec).orAttribsOrObj();
     }
 
+    if ("dim" == name) {
+        if (!getType(callArg(0).val())
+                 .maybeObj()) { // TODO: is it necessary to check this?
+            // inferred = (PirType(RType::integer) | RType::nil)
+            //                .notMissing()
+            //                .orAttribsOrObj();
+
+            // if (!getType(callArg(0).val()).maybeHasAttrs()) {
+            //     inferred = PirType(RType::nil);
+            // }
+        }
+    }
+
     if (inferred != PirType::bottom())
         return inferred & type;
 

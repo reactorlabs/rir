@@ -95,14 +95,17 @@ void PirType::merge(SEXPTYPE sexptype) {
 // contain NaN for the benefit, so we simple assume they do
 static const R_xlen_t MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK = 1;
 
-static bool maybeContainsNAOrNaN(SEXP vector) {
+static bool maybeContainsNAOrNaN(SEXP vector, bool exact) {
     if (TYPEOF(vector) == CHARSXP) {
         return vector == NA_STRING;
     } else if (TYPEOF(vector) == INTSXP || TYPEOF(vector) == REALSXP ||
                TYPEOF(vector) == LGLSXP || TYPEOF(vector) == CPLXSXP ||
                TYPEOF(vector) == STRSXP) {
-        if (XLENGTH(vector) > MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK) {
-            return true;
+
+        if (!exact) {
+            if (XLENGTH(vector) > MAX_SIZE_OF_VECTOR_FOR_NAN_CHECK) {
+                return true;
+            }
         }
         for (int i = 0; i < XLENGTH(vector); i++) {
             switch (TYPEOF(vector)) {
@@ -137,7 +140,7 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
     }
 }
 
-PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
+PirType::PirType(SEXP e, bool exact) : flags_(topRTypeFlags()), t_(RTypeSet()) {
 
     if (e == R_MissingArg) {
         *this = theMissingValue();
@@ -179,7 +182,7 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
     if (t != LISTSXP && t != EXTERNALSXP && t != BCODESXP && t != LANGSXP)
         if (Rf_xlength(e) == 1)
             flags_.reset(TypeFlags::maybeNotScalar);
-    if (!maybeContainsNAOrNaN(e))
+    if (!maybeContainsNAOrNaN(e, exact))
         flags_.reset(TypeFlags::maybeNAOrNaN);
 }
 
@@ -210,14 +213,14 @@ void PirType::merge(const ObservedValues& other) {
         *this = orSexpTypes(any());
 }
 
-bool PirType::isInstance(SEXP val) const {
+bool PirType::isInstance(SEXP val, bool exact) const {
     if (isRType()) {
         if (TYPEOF(val) == PROMSXP) {
             assert(!Rf_isObject(val));
             if (maybePromiseWrapped() && !maybeLazy()) {
                 auto v = PRVALUE(val);
                 return v != R_UnboundValue &&
-                       notMissing().forced().isInstance(v);
+                       notMissing().forced().isInstance(v, exact);
             }
             return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
         }
@@ -229,7 +232,9 @@ bool PirType::isInstance(SEXP val) const {
             return IS_SIMPLE_SCALAR(val, LGLSXP) &&
                    LOGICAL(val)[0] != NA_LOGICAL;
         }
-        return PirType(val).isA(*this);
+
+        return PirType(val, exact).isA(*this);
+        ;
     } else {
         std::cerr << "can't check val is instance of " << *this << ", value:\n";
         Rf_PrintValue(val);
