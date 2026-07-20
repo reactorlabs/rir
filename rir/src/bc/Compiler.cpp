@@ -78,6 +78,7 @@ class CompilerContext {
         std::stack<LoopContext> loops;
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
+        bool inliningPromise = false;
 
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), parent(p) {}
@@ -117,7 +118,6 @@ class CompilerContext {
     };
 
     class PromiseContext : public CodeContext {
-
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : CodeContext(ast, fun, p) {}
@@ -146,6 +146,9 @@ class CompilerContext {
     ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
+
+    bool inliningPromise() const { return code.top()->inliningPromise; }
+    void setInliningPromise(bool val) { code.top()->inliningPromise = val; }
 
     LoopContext& loop() { return code.top()->loops.top(); }
 
@@ -1106,7 +1109,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (ctx.inLoop() || ctx.isInPromise())
+        if (ctx.inLoop() || ctx.isInPromise() || ctx.inliningPromise())
             cs << BC::return_();
         else
             cs << BC::ret();
@@ -1757,12 +1760,14 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     }
 
     if (arg_type == ArgType::RAW_VALUE) {
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         return;
     }
 
     // Constant arguments do not need to be promise wrapped
-    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS)
+    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS) {
         switch (TYPEOF(CAR(arg))) {
         case LANGSXP:
         case SYMSXP:
@@ -1780,21 +1785,26 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
             cs << BC::push(eager);
             return;
         }
+    }
 
     Code* prom;
     if (arg_type == ArgType::EAGER_PROMISE) {
         // Compile the expression to evaluate it eagerly, and
         // wrap the return value in a promise without rir code
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         prom = compilePromiseNoRir(ctx, CAR(arg));
     } else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         // The value we want to wrap in the argument's promise is
-        // already on TOS, no nead to compile the expression.
+        // already on TOS, no need to compile the expression.
         // Wrap it in a promise without rir code.
         prom = compilePromiseNoRir(ctx, CAR(arg));
-    } else { // ArgType::PROMISE
+    } else if (arg_type == ArgType::PROMISE) {
         // Compile the expression as a promise.
         prom = compilePromise(ctx, CAR(arg));
+    } else {
+        assert(false);
     }
 
     size_t idx = cs.addPromise(prom);

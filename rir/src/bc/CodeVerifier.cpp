@@ -123,7 +123,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
     Opcode* cptr = code->code();
     q.push(State(cptr));
 
-    while (not q.empty()) {
+    while (!q.empty()) {
         State i = q.top();
         q.pop();
         if (state.find(i.pc) != state.end()) {
@@ -259,7 +259,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp) {
                     Rf_error("RIR Verifier: cached clear_binding_cache_ with "
                              "invalid index");
             }
-
             if (*cptr == Opcode::mk_promise_ ||
                 *cptr == Opcode::mk_eager_promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
