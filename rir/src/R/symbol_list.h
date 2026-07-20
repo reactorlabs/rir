@@ -56,6 +56,7 @@
     V(ispairlist, "is.pairlist")                                               \
     V(quote, "quote")                                                          \
     V(Missing, "missing")                                                      \
+    V(Invisible, "invisible")                                                  \
     V(seq, "seq")                                                              \
     V(lapply, "lapply")                                                        \
     V(aslist, "as.list")                                                       \
