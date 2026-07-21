@@ -1106,8 +1106,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             emitGuardForNamePrimitive(cs, fun);
 
             if (maybeChanges(target, rhs)) {
+                // Protective read: value is immediately setShared + popped and
+                // is never followed by a record instruction. Use the noRecordFB
+                // cached variant so it skips the force-behavior dispatcher (the
+                // non-cached ldvarForUpdate still harmlessly bails in the
+                // dispatcher — no dedicated variant for it).
                 if (ctx.code.top()->isCached(target))
-                    cs << BC::ldvarForUpdateCached(
+                    cs << BC::ldvarForUpdateCachedNoRecordFB(
                         target, ctx.code.top()->cacheSlotFor(target));
                 else
                     cs << BC::ldvarForUpdate(target);

@@ -60,8 +60,15 @@ DEF_INSTR(ldvar_cached_fbRecordOnce_, 2, 0, 1)
 /**
  * ldvar_:: like ldvar.
  * Additionally Increment named count if the variable is not local.
+ *
+ * ldvar_for_update_cache_noRecordFB_ is the cached for-update read used only
+ * for the discarded "protective" read of a subassign target (ldvarForUpdate;
+ * setShared; pop — see Compiler.cpp). Its value is immediately popped and it
+ * is never followed by a record instruction, so unlike ldvar_for_update_cache_
+ * it does NOT run the force-behavior dispatcher (which would always bail).
  */
 DEF_INSTR(ldvar_for_update_cache_, 2, 0, 1)
+DEF_INSTR(ldvar_for_update_cache_noRecordFB_, 2, 0, 1)
 DEF_INSTR(ldvar_for_update_, 1, 0, 1)
 
 /**

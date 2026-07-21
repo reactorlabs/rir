@@ -412,6 +412,8 @@ class BC {
     // inline static BC ldvarCachedEnvRecordFB — disabled
     inline static BC ldvarCachedFbRecordOnce(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
+    inline static BC ldvarForUpdateCachedNoRecordFB(SEXP sym,
+                                                    uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
     inline static BC ldvarSuper(SEXP sym);
     inline static BC ldddvar(SEXP sym);
@@ -618,6 +620,7 @@ class BC {
             break;
             LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
+        case Opcode::ldvar_for_update_cache_noRecordFB_:
         case Opcode::stvar_cached_:
             memcpy(&immediate.poolAndCache, pc,
                    sizeof(PoolAndCachePositionRange));

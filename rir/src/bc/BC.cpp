@@ -39,6 +39,7 @@ void BC::write(CodeStream& cs) const {
 
         LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_cache_:
+    case Opcode::ldvar_for_update_cache_noRecordFB_:
     case Opcode::stvar_cached_:
         cs.insert(immediate.poolAndCache);
         return;
@@ -137,6 +138,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
             LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
+        case Opcode::ldvar_for_update_cache_noRecordFB_:
         case Opcode::stvar_cached_:
             i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
             i.poolAndCache.cacheIndex = InInteger(inp);
@@ -240,6 +242,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
             LDVAR_CACHED_OPCODES_CASES
         case Opcode::ldvar_for_update_cache_:
+        case Opcode::ldvar_for_update_cache_noRecordFB_:
         case Opcode::stvar_cached_:
             WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
             OutInteger(out, i.poolAndCache.cacheIndex);
@@ -391,6 +394,7 @@ void BC::print(std::ostream& out) const {
         break;
         LDVAR_CACHED_OPCODES_CASES
     case Opcode::ldvar_for_update_cache_:
+    case Opcode::ldvar_for_update_cache_noRecordFB_:
     case Opcode::stvar_cached_:
         out << CHAR(PRINTNAME(immediateConst())) << "{"
             << immediate.poolAndCache.cacheIndex << "}";

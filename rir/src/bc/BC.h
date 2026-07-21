@@ -154,6 +154,16 @@ BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     return BC(Opcode::ldvar_for_update_cache_, i);
 }
 
+BC BC::ldvarForUpdateCachedNoRecordFB(SEXP sym, uint32_t cacheSlot) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    assert(cacheSlot != (uint32_t)-1);
+    ImmediateArguments i;
+    i.poolAndCache.poolIndex = Pool::insert(sym);
+    i.poolAndCache.cacheIndex = cacheSlot;
+    return BC(Opcode::ldvar_for_update_cache_noRecordFB_, i);
+}
+
 BC BC::ldvarForUpdate(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

@@ -2223,48 +2223,55 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(ldvar_for_update_cache_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate cacheIndex = readImmediate();
-            advanceImmediate();
-            assert(!LazyEnvironment::check(env));
-            SEXP loc = getCellFromCache(env, id, cacheIndex, bindingCache);
-            bool isLocal = loc;
-            SEXP res = nullptr;
+// Shared body for the cached ldvar_for_update_* variants. `record_fb_action`
+// is the force-behavior recording statement (or nothing for the noRecordFB
+// variant used by the discarded subassign protective read).
+#define LDVAR_FOR_UPDATE_CACHE_BODY(record_fb_action)                          \
+    Immediate id = readImmediate();                                            \
+    advanceImmediate();                                                        \
+    Immediate cacheIndex = readImmediate();                                    \
+    advanceImmediate();                                                        \
+    assert(!LazyEnvironment::check(env));                                      \
+    SEXP loc = getCellFromCache(env, id, cacheIndex, bindingCache);            \
+    bool isLocal = loc;                                                        \
+    SEXP res = nullptr;                                                        \
+    if (isLocal && CAR(loc) != R_UnboundValue) {                               \
+        res = CAR(loc);                                                        \
+    } else {                                                                   \
+        SEXP sym = cp_pool_at(id);                                             \
+        res = Rf_findVar(sym, ENCLOS(env));                                    \
+    }                                                                          \
+    if (res == R_UnboundValue) {                                               \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));               \
+    } else if (res == R_MissingArg) {                                          \
+        SEXP sym = cp_pool_at(id);                                             \
+        Rf_error("argument \"%s\" is missing, with no default",                \
+                 CHAR(PRINTNAME(sym)));                                        \
+    }                                                                          \
+    /* if promise, evaluate & return */                                        \
+    REC_STAT_LDVAR_CLASSIFY();                                                 \
+    record_fb_action;                                                          \
+    if (TYPEOF(res) == PROMSXP)                                                \
+        res = evaluatePromise(res);                                            \
+    if (res != R_NilValue) {                                                   \
+        if (isLocal)                                                           \
+            ENSURE_NAMED(res);                                                 \
+        else                                                                   \
+            res = Rf_shallow_duplicate(res);                                   \
+    }                                                                          \
+    ostack_push(res);                                                          \
+    NEXT();
 
-            if (isLocal && CAR(loc) != R_UnboundValue) {
-                res = CAR(loc);
-            } else {
-                SEXP sym = cp_pool_at(id);
-                res = Rf_findVar(sym, ENCLOS(env));
-            }
+        INSTRUCTION(ldvar_for_update_cache_){
+            LDVAR_FOR_UPDATE_CACHE_BODY(recordForceBehavior(res))}
 
-            if (res == R_UnboundValue) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
-            } else if (res == R_MissingArg) {
-                SEXP sym = cp_pool_at(id);
-                Rf_error("argument \"%s\" is missing, with no default",
-                         CHAR(PRINTNAME(sym)));
-            }
-
-            // if promise, evaluate & return
-            REC_STAT_LDVAR_CLASSIFY();
-            recordForceBehavior(res);
-            if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
-
-            if (res != R_NilValue) {
-                if (isLocal)
-                    ENSURE_NAMED(res);
-                else
-                    res = Rf_shallow_duplicate(res);
-            }
-
-            ostack_push(res);
-            NEXT();
-        }
+        // Discarded protective read of a subassign target (ldvarForUpdate;
+        // setShared; pop): value is popped and never followed by a record
+        // instruction, so skip the force-behavior dispatcher entirely.
+        INSTRUCTION(ldvar_for_update_cache_noRecordFB_){
+            LDVAR_FOR_UPDATE_CACHE_BODY(
+                /* protective read: no FB, no record */)}
 
         INSTRUCTION(ldvar_) {
             SEXP sym = readConst(readImmediate());

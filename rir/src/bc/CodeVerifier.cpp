@@ -236,7 +236,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp) {
                     Rf_error("RIR Verifier: load/store empty binding name");
             }
             if (cur.isLdvarCachedKind() || *cptr == Opcode::stvar_cached_ ||
-                *cptr == Opcode::ldvar_for_update_cache_) {
+                *cptr == Opcode::ldvar_for_update_cache_ ||
+                *cptr == Opcode::ldvar_for_update_cache_noRecordFB_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 if (*argsIndex >= cp_pool_length())
                     Rf_error("RIR Verifier: Invalid arglist index");
