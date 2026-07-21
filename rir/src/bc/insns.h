@@ -478,7 +478,7 @@ DEF_INSTR(record_type_once_, 1, 1, 1)
 //   opcode or both                   covers all three; there is no separate
 //   _dep_
 //                             opcode for a parentless source.
-//   inner node, isolated   -> record_type_inner_
+//   inner node, standalone -> record_type_inner_
 //   (no parent, no deps)      (skipIfSuppressed + doRecord; nothing to notify)
 //   inner node, notifies   -> record_type_inner_notify_
 //   (non-root has a parent;   (skipIfSuppressed + doRecord +

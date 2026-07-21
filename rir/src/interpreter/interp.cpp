@@ -2061,13 +2061,18 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         case Opcode::record_type_once_:
         case Opcode::record_type_leaf_notify_once_:
             // once: gated by the per-code `fired` bitmap; slot idx is packed
-            RECORD_TYPE_ONCE_GATE(fired, raw, return );
+            RECORD_TYPE_ONCE_GATE(fired, raw, {
+                REC_STAT(g_recStats.fbGenericSkip++);
+                return;
+            });
             idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
             break;
         default:
+            REC_STAT(g_recStats.fbGenericBail++);
             return; // no value-type record follows this load
         }
         recordFbAtSlot(idx, s);
+        REC_STAT(g_recStats.fbGenericRec++);
     };
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always a plain
@@ -2087,6 +2092,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         Immediate slotIdx = *(Immediate*)(pc + 1);
         recordFbAtSlot(slotIdx, s);
+        REC_STAT(g_recStats.fbAlwaysRec++);
     };
 
     // ldvar_cached_envRecordFB_ / record_type_once_promise_ disabled.
@@ -2100,8 +2106,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // assert(*pc == Opcode::record_type_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
-        RECORD_TYPE_ONCE_GATE(fired, raw, return );
+        RECORD_TYPE_ONCE_GATE(fired, raw, {
+            REC_STAT(g_recStats.fbRecordOnceSkip++);
+            return;
+        });
         recordFbAtSlot(RECORD_TYPE_ONCE_SLOT_IDX(raw), s);
+        REC_STAT(g_recStats.fbRecordOnceRec++);
     };
 
         // REC_STAT_LDVAR_CLASSIFY: at this point `pc` references the opcode
@@ -2341,7 +2351,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             LDVAR_CACHED_BODY(recordForceBehaviorAlways(res))}
 
         INSTRUCTION(ldvar_cached_noRecordFB_){
-            LDVAR_CACHED_BODY(/* skip force-behavior recording */)}
+            LDVAR_CACHED_BODY(REC_STAT(g_recStats.fbNoRecordSkip++))}
 
         // INSTRUCTION(ldvar_cached_envRecordFB_) disabled — opcode removed
 
@@ -2362,7 +2372,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehavior(res);
+            recordForceBehaviorAlways(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 

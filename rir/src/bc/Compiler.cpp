@@ -350,9 +350,10 @@ class CompilerContext {
                     bool isRoot = childSlots.find(slot) == childSlots.end();
                     bool isSrc = sourceSlots.find(slot) != sourceSlots.end();
                     if (!once && !isLeaf) {
-                        // Split inner nodes on whether they notify anything: an
-                        // isolated inner node (root, no deps) notifies nothing;
-                        // a non-root notifies its parent and a root source
+                        // Split inner nodes on whether they notify anything: a
+                        // standalone inner node (root, no deps) notifies
+                        // nothing; a non-root notifies its parent and a root
+                        // source
                         // notifies its dependents — both via record_type_
                         // inner_notify_. Notification is one-time (latched), so
                         // the shared notifier's usually-empty branch is free.

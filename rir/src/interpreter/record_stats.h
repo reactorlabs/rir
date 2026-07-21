@@ -57,6 +57,31 @@ struct RecordSkipStats {
     // to leafAlwaysRec, recovered at runtime via
     // TypeFeedback::isStatsUntracked.
     uint64_t untrackedRec = 0;
+    // Force-behavior (FB) recording — a separate feedback dimension
+    // (ObservedValues::stateBeforeLastForce) piggybacked on the same slots but
+    // driven by its own dispatch in interp.cpp. In the baseline there is a
+    // single recordForceBehavior function used by every load; recordless
+    // splits the ldvar_cached_ family into per-FB-kind opcodes/wrappers, but
+    // still needs the original generic dispatcher for non-cached loads
+    // (ldvar_, ldvar_for_update_*, ldvar_super_, ldddvar_).
+    uint64_t fbGenericRec = 0;  // recordForceBehavior (generic) — recorded
+    uint64_t fbGenericSkip = 0; // recordForceBehavior (generic) — skipped
+                                // (once-gated-and-fired)
+    uint64_t fbGenericBail = 0; // recordForceBehavior (generic) — the opcode
+                                // after the load matched none of the
+                                // recognized value-type record opcodes
+                                // (NoRecord elision, ldddvar_, ...), so no
+                                // record follows at all. Reported separately,
+                                // not as a table row.
+    uint64_t fbAlwaysRec = 0;   // recordForceBehaviorAlways (ldvar_cached_) —
+                                // unconditional, never skipped
+    uint64_t fbRecordOnceRec = 0;  // recordForceBehaviorRecordOnce
+                                   // (ldvar_cached_fbRecordOnce_) — first hit
+    uint64_t fbRecordOnceSkip = 0; // recordForceBehaviorRecordOnce — gated
+                                   // (already fired)
+    uint64_t fbNoRecordSkip =
+        0; // ldvar_cached_noRecordFB_ (FBValue/Infer) —
+           // FB recording skipped entirely at compile time
     // Prints the summary at exit.
     ~RecordSkipStats();
 };
