@@ -2086,7 +2086,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // and a packed _once_ immediate — are exactly the ones patched away to
     // ldvar_cached_noRecordFB_ / ldvar_cached_fbRecordOnce_. Pin that
     // invariant.
-    auto recordForceBehaviorAlways = [&](SEXP s) __attribute__((noinline)) {
+    auto recordForceBehaviorNoCheck = [&](SEXP s) __attribute__((noinline)) {
         SLOWASSERT(*pc == Opcode::record_type_ ||
                    *pc == Opcode::record_type_leaf_notify_);
 
@@ -2102,8 +2102,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // captures the highest lattice point the variable reaches (a formal/outer-
     // controlled var may still be an unforced promise on the first iteration);
     // later iterations are equal or more precise.
-    auto recordForceBehaviorRecordOnce = [&](SEXP s) __attribute__((noinline)) {
-        // assert(*pc == Opcode::record_type_once_);
+    auto recordForceBehaviorRecordOnceNoCheck = [&](SEXP s)
+        __attribute__((noinline)) {
+        SLOWASSERT(*pc == Opcode::record_type_once_ ||
+                   *pc == Opcode::record_type_leaf_notify_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
         RECORD_TYPE_ONCE_GATE(fired, raw, {
@@ -2348,7 +2350,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     NEXT();
 
         INSTRUCTION(ldvar_cached_){
-            LDVAR_CACHED_BODY(recordForceBehaviorAlways(res))}
+            LDVAR_CACHED_BODY(recordForceBehaviorNoCheck(res))}
 
         INSTRUCTION(ldvar_cached_noRecordFB_){
             LDVAR_CACHED_BODY(REC_STAT(g_recStats.fbNoRecordSkip++))}
@@ -2356,7 +2358,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         // INSTRUCTION(ldvar_cached_envRecordFB_) disabled — opcode removed
 
         INSTRUCTION(ldvar_cached_fbRecordOnce_){
-            LDVAR_CACHED_BODY(recordForceBehaviorRecordOnce(res))}
+            LDVAR_CACHED_BODY(recordForceBehaviorRecordOnceNoCheck(res))}
 
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(readImmediate());
@@ -2372,7 +2374,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            recordForceBehaviorAlways(res);
+            recordForceBehaviorNoCheck(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
 
