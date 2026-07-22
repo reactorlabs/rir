@@ -2016,20 +2016,62 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto recordFbAtSlot = [&](uint32_t slotIdx, SEXP s)
         __attribute__((always_inline)) {
         // FIXME: cf. #1260
-        ObservedValues::StateBeforeLastForce state =
-            ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else if (PRVALUE(s) != R_UnboundValue) {
-            state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {
-            state = ObservedValues::StateBeforeLastForce::value;
-        } else {
-            state = ObservedValues::StateBeforeLastForce::promise;
-        }
+        // ObservedValues::StateBeforeLastForce state =
+        //     ObservedValues::StateBeforeLastForce::unknown;
+        // if (TYPEOF(s) != PROMSXP) {
+        //     state = ObservedValues::StateBeforeLastForce::value;
+        // } else if (PRVALUE(s) != R_UnboundValue) {
+        //     state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
+        // } else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) {
+        //     state = ObservedValues::StateBeforeLastForce::value;
+        // } else {
+        //     state = ObservedValues::StateBeforeLastForce::promise;
+        // }
+        // ObservedValues& fb__ = typeFeedback->types(slotIdx);
+        // if (fb__.stateBeforeLastForce < state)
+        //     fb__.stateBeforeLastForce = state;
+
+        // The lattice (unknown < value < evaluatedPromise < promise) is
+        // monotonic: a slot's stateBeforeLastForce only ever moves up. Switch
+        // on the current state and inspect `s` only as far as it could still
+        // rise — the checks that can only yield an equal-or-lower
+        // classification are skipped. (`s` classifies to one of
+        // value/evaluatedPromise/promise; `promise` = an unforced, non-lazyLoad
+        // promise.)
+        using SBLF = ObservedValues::StateBeforeLastForce;
         ObservedValues& fb__ = typeFeedback->types(slotIdx);
-        if (fb__.stateBeforeLastForce < state)
-            fb__.stateBeforeLastForce = state;
+        switch (fb__.stateBeforeLastForce) {
+        case SBLF::promise:
+            // top of the lattice — nothing can raise it; don't touch `s`
+            break;
+        case SBLF::evaluatedPromise:
+            // only `promise` is higher: an unforced, non-lazyLoad promise
+            if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&
+                CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)
+                fb__.stateBeforeLastForce = SBLF::promise;
+            break;
+        case SBLF::value:
+            // can rise to evaluatedPromise or promise; both need a promise.
+            // A non-promise (or lazyLoad promise) stays `value`.
+            if (TYPEOF(s) == PROMSXP) {
+                if (PRVALUE(s) != R_UnboundValue)
+                    fb__.stateBeforeLastForce = SBLF::evaluatedPromise;
+                else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)
+                    fb__.stateBeforeLastForce = SBLF::promise;
+            }
+            break;
+        case SBLF::unknown:
+            // nothing recorded yet — full classification
+            if (TYPEOF(s) != PROMSXP)
+                fb__.stateBeforeLastForce = SBLF::value;
+            else if (PRVALUE(s) != R_UnboundValue)
+                fb__.stateBeforeLastForce = SBLF::evaluatedPromise;
+            else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
+                fb__.stateBeforeLastForce = SBLF::value;
+            else
+                fb__.stateBeforeLastForce = SBLF::promise;
+            break;
+        }
     };
 
     // General recordForceBehavior used by non-ldvar_cached_* loads (ldvar_,
