@@ -1989,11 +1989,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
     // Per-invocation "has this once-slot fired yet" flags — one bool per
-    // once-slot, alloca'd and zeroed to exactly what this function uses (no
-    // fixed cap, no bit-packing).
-    bool* fired = nullptr;
+    // once-slot, fixed-size (RECORD_TYPE_ONCE_MAX_IIDX cap), no bit-packing.
+    // Only the prefix this function actually uses is zeroed.
+    bool fired[RECORD_TYPE_ONCE_MAX_IIDX];
     if (c->recordTypeOnceCount > 0) {
-        fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
         memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
     }
 
