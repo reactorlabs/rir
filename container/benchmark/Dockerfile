@@ -1,7 +1,7 @@
 ARG CI_COMMIT_SHA
 FROM registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pip sudo time && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pip sudo time cpuset && \
     apt-get clean && rm -rf /var/cache/apt/lists && \
     git clone https://github.com/smarr/ReBench.git /opt/ReBench && \
     cd /opt/ReBench && \
