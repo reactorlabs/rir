@@ -1,15 +1,25 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot as of **2026-07-24**. The author is actively
-iterating; see *Current implementation status* for what is stable vs. in flux.
+**Status:** working design snapshot, last revised **2026-07-27**. The author is
+actively iterating; see *Current implementation status* (§7) for what is stable
+vs. in flux.
 
-**Scope / provenance note.** This document was reconstructed from a single long
-working session. A few pieces of framing (notably the "observation vs.
-persistence" distinction and the "is this general or Ř-specific?" concern raised
-at an ECOOP defense) were referenced as already-settled but their originating
-discussion was **not fully available** when this was written — those spots are
-flagged inline with **[RECONSTRUCTED]** or **[GAP]**. Treat flagged passages as
-prompts to cross-check against the author's own notes, not as authoritative.
+**Scope.** This document covers the **producer side only**: what the compiler
+emits and what the interpreter does at runtime. PIR/JIT-side consumption of the
+new feedback (using `typeDeps_`, `ForceBehaviorKind`, etc.) has deliberately
+**not been started** and is out of scope here — where a mechanism ends at the
+boundary, the doc says so rather than describing intended consumer behaviour.
+
+**Provenance.** Reconstructed from a long working session, then **re-verified
+directly against the source tree on 2026-07-27** (`classifyUse`,
+`setTypeFeedbackParents`, `LoopScopeGuards.h`, `notifyRelatedNodes`, the opcode
+tables, and the baseline diff were all read rather than recalled; statements
+sourced that way are marked "verified"). Two pieces of framing — the
+"observation vs. persistence" distinction and the "is this general or
+Ř-specific?" concern raised at an ECOOP defense — were referred to as
+already-settled but their originating discussion was **not available**; they are
+flagged **[RECONSTRUCTED]** / **[GAP]** inline and should be cross-checked
+against the author's own notes rather than treated as authoritative.
 
 ---
 
@@ -50,8 +60,8 @@ over-approximation):
    invocation and skip the rest.
 2. **No-record (def-site subsumption)** — for a use whose value is provably the
    same as one already observed at another instrumented site, emit *no* opcode
-   at all and, at JIT time, copy the source slot's persisted feedback into the
-   dependent slot.
+   at all, annotating the dependent slot with a compile-time dependency so the
+   JIT can copy the source slot's persisted feedback into it.
 3. **Expression-tree inner-node elision** — for an interior node of an
    expression whose result type is inferable from its operands' (leaves')
    recorded types, suppress recording unless something makes it non-inferable
@@ -77,7 +87,7 @@ The comparison baseline is the git branch **`recordLess-baseline-outline`**,
 whose tip (`7580761b`) is **the merge-base ancestor of the current branch**. In
 other words the baseline is the pre-recordless state, and the *entire* diff
 `recordLess-baseline-outline → HEAD` (≈ **3,100 insertions across 28 files**) is
-the recordless contribution. (Verified 2026-07-24 against
+the recordless contribution. (Verified 2026-07-27 against
 `recordLess-baseline-outline` and current `HEAD` `38d498c6`.)
 
 **Baseline recording model — "record after every load."** Baseline
@@ -173,9 +183,48 @@ result). The compiler classifies each leaf via `DefUseAnalysis::classifyUse`
 - **RecordOnce** → emit `record_type_once_` (or `record_type_leaf_notify_once_`).
   Records on the first execution *per function invocation*, gated by a
   per-invocation bitmap (§2A.2). Later executions are skipped.
-- **NoRecord** → emit **no opcode at all**. The type is recovered at JIT time
-  from a *source* slot via a compile-time dependency (`typeDeps_`; the soundness
-  argument is §3).
+- **NoRecord** → emit **no opcode at all**. A slot is still allocated and
+  annotated with a compile-time dependency on a *source* slot (`typeDeps_`); the
+  intended JIT-side recovery is §2A.3 and the soundness argument is §3.
+
+### 2A.1.1 The full classification, in decision order
+
+`classifyUse` (verified against `DefUseAnalysis.h`, 2026-07-27) returns
+`{UseKind, sourceSlot, ForceBehaviorKind}`. The order matters — the first
+matching rule wins:
+
+| # | condition | result | FB kind |
+|---|---|---|---|
+| 0 | `isArgAssigned(name)` — assigned in a **promise-argument position** | `RecordAlways` | `Always` |
+| 1 | *(eligible)* ∧ ∃ recorded use `ud` with `dominates(ud) ∧ postDominates(ud)` | `NoRecord` → `ud.feedbackSlot` | `FBValue` if local-stvar-reach or for-loop var, else `Infer` |
+| 2 | reaching def `d` ∧ `isLocalOrParam` ∧ `postDominates(*d)` ∧ `d` has a slot | `NoRecord` → `d.feedbackSlot` | `FBValue` |
+| 3 | `d` ∧ local/param ∧ `loopDepth_>0` ∧ `!assignedInInnermostLoop` ∧ `assignedInEnclosingLoop` | `RecordOnce` *(dynamic — bit gets cleared)* | `FBValue` |
+| 4 | *optimizable* ∧ `loopDepth_>0` ∧ `!assignedInEnclosingLoop` | `RecordOnce` *(stable — bit excluded from clear range)* | `FBValue` if local-stvar-reach, else `RecordOnce` |
+| 5 | `isRangeBasedForLoopVar` ∧ `loopDepth_>0` | `RecordOnce` | `FBValue` |
+| 6 | *(fallthrough)* | `RecordAlways` | `Always` |
+
+where **eligible** (rule 1) = *optimizable* ∨ `isForLoopVar` ∨ (local/param with
+a dominating def), and ***optimizable*** = `isFormal(name) ∨
+isOuterControlled(name) ∨ (isLocalOrParam(name) ∧ reaching-def exists)`.
+
+Three consequences worth stating explicitly, none of which were obvious from the
+prose description:
+
+- **Record-once is a *loop* optimization.** Every RecordOnce rule (3, 4, 5) is
+  guarded by `loopDepth_ > 0`. Outside any loop a use is either NoRecord (if
+  subsumed) or RecordAlways — never once-gated. This makes sense: outside a loop
+  a site executes once per activation anyway, so gating would add a check and
+  save nothing.
+- **There is a soundness carve-out for promise-argument assignment** (rule 0).
+  Variables assigned in promise-argument position are excluded from *all*
+  optimizations, because the assignment runs when the promise is forced, which is
+  invisible to the main code's `stvar` sequence — so the def-use analysis cannot
+  see it and its dominance conclusions would be wrong. This is the one place the
+  analysis explicitly bails for R's lazy-evaluation semantics.
+- **Free variables that are not stable captures are always recorded.** Only
+  formals, outer-*controlled* captures, and locals/params with a reaching def are
+  even eligible; an arbitrary free variable from an enclosing scope falls through
+  to RecordAlways.
 
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
@@ -263,31 +312,102 @@ recursive callee still observes its own values) and the reason "once" is cheap
 
 #### 2A.2.2 Clearing once-bits for nested loops
 
-A RecordOnce variable that is *re-assigned in an enclosing loop* may take a
-different type on each outer iteration, so its "once" must be reset per outer
-iteration. Two opcodes clear bits at loop boundaries:
+"Once per invocation" is too coarse for a variable that is **re-assigned by an
+enclosing loop**: its type may differ on each outer iteration, so its once-bit
+must be reset before each run of the inner loop. Two opcodes do this:
 
 - `clear_record_type_once_bit_` — clear a single bit.
 - `clear_record_type_once_bits_range_` — clear a contiguous `[start, start+count)`
-  range (packed immediate, same low16/high16 split as the once immediate but
-  meaning start/count). Implemented as `memset(fired + start, 0, count)`.
+  range. Its immediate uses the same low16/high16 packing, but meaning
+  `start`/`count` (`RECORD_TYPE_ONCE_RANGE_PACK/_START/_COUNT`). The handler is
+  simply `memset(fired + start, 0, count * sizeof(bool))`.
 
-The compiler defers bit assignment for such "dynamic" variables to the innermost
-*clearable scope* so that stable once-bits never interleave with a cleared
-range (see `emitRecordTypeForVar`: the `isRangeBasedForLoopVar` and
-`assignedInEnclosingLoop && hasClearableScope` branches, which call
-`registerRangeVarUse` / `registerClearableUse`; supported by `LoopScopeGuards.h`).
-Range-based for-loop iteration variables (`:`, `seq_len`, `seq_along`) are
-treated as stable-within-this-loop but cleared on entry so a different outer
-iteration can re-record.
+The range form is why once-bits must be **contiguous per clearable scope**, and
+that in turn is why bit assignment is *deferred*: when the compiler enters a
+loop it does not yet know how many dynamic once-uses the body will contain.
 
-### 2A.3 No-record: def-site subsumption
+**Two-phase placeholder-and-patch (`bc/LoopScopeGuards.h`).** The mechanism is a
+pair of RAII guards that emit placeholders on scope entry and patch them on
+scope exit:
 
-The strongest leaf optimization: emit **nothing**. When a use's value is
-provably the same as a value already observed at another instrumented site (a
-def, or an earlier use), the use's slot is fed at JIT time by *copying* the
-source slot's feedback (`typeDeps_[use] = source`). The static condition that
-makes this sound is the subject of §3.
+1. **On entering a nested loop** (`loopDepth() > 0`), emit a *placeholder*
+   `clearRecordTypeOnceBitsRange(0, 0)` **in the enclosing scope** (before the
+   loop) and remember its bytecode position.
+2. **While compiling the body**, each dynamic RecordOnce use emits
+   `recordTypeOnce(slot, 0)` with a *placeholder* `iidx` of 0, registering its
+   bytecode position and slot (`registerClearableUse` / `registerRangeVarUse`).
+3. **On leaving the scope** (`finish()`), allocate a contiguous range
+   `[base, base+count)` out of `CodeContext::recordTypeOnceBitmapSize`, then
+   back-patch:
+   - each use site's immediate → `RECORD_TYPE_ONCE_PACK(slot, base + i)`;
+   - the clear placeholder → `RECORD_TYPE_ONCE_RANGE_PACK(base, count)`;
+   - and bump `bitmapSize += count`.
+4. **If `count == 0`** (no dynamic use materialized), the placeholder is
+   **deleted** from the bytecode (`cs.remove(clearTemplatePos)`) rather than left
+   as a no-op clear.
+
+This required two new `CodeStream` primitives added by recordless:
+`patchImmediate(bcPos, val)` and `patchOpcode(bcPos, op)` (the latter is also
+what the specialization post-pass and the FB-variant patching use, §2C.5, §4.3).
+
+**The two guards.**
+
+- **`ClearableScopeGuard`** — the general case: user variables assigned in an
+  outer loop and used inside this loop. Active for *all* loop kinds when nested.
+- **`RangeBasedIterVarScope`** — for range-based for-loop iteration variables
+  (`for (i in 1:n)`, `seq_len`, `seq_along`). The iteration variable's type is
+  stable across iterations of *this* loop (so RecordOnce is sound despite the
+  implicit per-iteration reassignment), but a different *outer* iteration could
+  see a different element type, so a nested range loop still gets a clear
+  placeholder. Its pending entries are assigned in **reverse order**
+  (`pending.rbegin()`) once the outermost range scope completes
+  (`rangeVarAssignmentReady`), so nested range loops get properly nested ranges.
+
+**Why stable and dynamic bits must not interleave.** A *stable* RecordOnce use
+(rule 4 in §2A.1.1 — not reassigned in any enclosing loop) must **not** be
+cleared, or it would re-record every outer iteration and lose the optimization.
+A *dynamic* use (rule 3) must be cleared. Since clearing is done by contiguous
+range, the dynamic bits of a scope must form an uninterrupted block with no
+stable bit inside it — which the deferred, patch-on-scope-exit assignment
+guarantees by allocating each scope's dynamic bits together at the moment the
+scope closes.
+
+**Interaction with the `RECORD_TYPE_ONCE_MAX_IIDX` cap.** Bit assignment checks
+the running total (`bitmapSize` plus any pending range-var bits) against the 512
+cap; if a use cannot get a bit, the compiler falls back to emitting a plain
+`record_type_` (always-record) for it rather than a once variant. This fallback
+is also what makes the FB `RecordOnce` → `ldvar_cached_fbRecordOnce_` patch
+conditional on `emittedRecordTypeOnce` (§4.3).
+
+### 2A.3 No-record: def-site subsumption, and its data path
+
+The strongest leaf optimization: emit **nothing** at the use. When a use's value
+is provably the same as a value already observed at another instrumented site (a
+def, or an earlier use), the use's feedback is intended to be recovered from that
+source rather than observed. The static condition that makes this sound is §3.
+
+The data path, end to end (verified 2026-07-27):
+
+1. **Compile time.** `emitRecordTypeForVar` sees `UseKind::NoRecord` and calls
+   `CompilerContext::registerNoRecordDep(uc.defSlot)`, which:
+   - allocates a *real* feedback slot for the elided use
+     (`typeFeedbackBuilder.addType()`),
+   - records the dependency `typeDeps_[slot] = sourceSlot`
+     (`Builder::setTypeDep`), and
+   - calls `registerLeafSlot(slot)` so the elided use still gets a **parent
+     pointer** in the expression tree — this is what lets the source's
+     notification reach the elided use's enclosing inner node (§2C.4).
+   No opcode is emitted.
+2. **`Compiler::finalize`.** `buildNoRecordReverseMap()` inverts `typeDeps_` into
+   `noRecordSourceToDeps_` (source → list of dependent slots), so the runtime can
+   walk a source's dependents.
+3. **Runtime.** The dependent slot is never written (no opcode). The *notify*
+   half is live: when the source observes an object, `notifyRelatedNodes` walks
+   `noRecordSourceToDeps_[source]` and un-suppresses each dependent's parent.
+4. **Consumer side (out of scope here).** `TypeFeedback::propagateDeps()` exists
+   as the intended recovery step (`types_[i] = types_[typeDeps_[i]]` for every
+   slot with a dep). Wiring it into the JIT is future work and is not covered by
+   this document — see the scope boundary in §7.
 
 ### 2A.4 Force-behavior rides on the leaf load
 
@@ -509,9 +629,42 @@ set, consulted only under `RIR_RECORD_STATS`).
 
 ### 2C.5 Compile-time construction and the specialization post-pass
 
-- During compilation, a `slotsStack` and a `parents` map record the tree shape as
-  expressions are compiled (`registerSlot`, `registerLeafSlot`;
-  `bc/CodeContext.h`, `bc/CompilerCFG.{h,cpp}` support the CFG/scope side).
+**Building the tree during a single compile pass.** The expression tree is never
+materialized as a data structure; it is discovered with a **stack of pending
+child-slot lists** (`slotsStack`) plus a flat `parents` map (child slot → parent
+slot):
+
+- `compileExpr`'s `LANGSXP` case brackets every call/expression with
+  `pushNewNodeForSlots()` … `compileCall(...)` … `popNodeForSlots()`. One stack
+  level per nested expression; `compileExpr` is the *single owner* of the
+  push/pop balance.
+- `registerSlot(slotIdx, isParent)`:
+  ```cpp
+  if (!isParent) {
+      currentSlots.push_back(slotIdx);        // a leaf/operand at this level
+  } else {
+      for (auto child : currentSlots)         // this slot is the result of the
+          parents[child] = slotIdx;           //   expression → adopt the pending
+      currentSlots.clear();                   //   operands as children,
+      currentSlots.push_back(slotIdx);        //   then stand in for them
+  }
+  ```
+  So `recordTypeTracked(isParent=true)` (emitted for a type-preserving
+  sub-expression result) **collapses** the operands registered at the current
+  level into children of the new node, and the new node becomes the single
+  pending slot at that level — which the *enclosing* expression will in turn
+  adopt. That is how `a <- f(x) + 1` links `x`→`+` etc. without an explicit tree.
+- `popNodeForSlots()` moves any still-unadopted slots **up to the enclosing
+  level** rather than dropping them. This matters for non-profiled or
+  non-type-preserving calls, where no `recordTypeTracked(true)` was emitted for
+  the result: the operands would otherwise be orphaned (and the stack would go
+  out of balance).
+- `registerLeafSlot(slot)` is the `isParent=false` shorthand, used for
+  RecordAlways/RecordOnce leaves *and* for NoRecord elided uses (so the elided
+  use still gets a parent, §2A.3).
+- `bc/CodeContext.h` holds the per-Code compile state (including
+  `recordTypeOnceBitmapSize`); `bc/CompilerCFG.{h,cpp}` supplies the CFG/scope
+  structure the dominance approximation reads (§3).
 - A post-pass, `TypeFeedback::setTypeFeedbackParents` (called from
   `Compiler::finalize`), then: sets each slot's `parent`, sets `isLeaf`
   (a slot with no children) and `shouldNotRecord = !isLeaf`, computes the
@@ -534,15 +687,17 @@ feedback from another slot.
 **Claim.** A use `U` of variable `v` need not be instrumented if there is an
 already-instrumented site `S` (a definition of `v`, or an earlier recorded use)
 such that the value observed at `U` is *necessarily* the value observed at `S`.
-Then at JIT time the compiler copies `S`'s persisted feedback into `U`'s slot
-(the `typeDeps_` map: `typeDeps_[U] = S`), and `U` emits no opcode.
+Then `U` emits no opcode, and `U`'s slot is annotated `typeDeps_[U] = S` so the
+JIT can recover `U`'s feedback by copying `S`'s persisted state
+(`propagateDeps`, §2A.3 — defined but not yet wired up, as PIR-side adaptation
+has not started).
 
 **The control-flow condition.** "Necessarily the same value" is established from
 def-use analysis with dominance/postdominance. In `DefUseAnalysis::classifyUse`
 the two No-Record returns are:
 
 The two predicates, as actually defined in `DefUseAnalysis.h` (verified
-2026-07-24):
+2026-07-27):
 
 - `dominates(D)` → **D dominates the current use U** (D is on every path from
   entry to U). Approximated structurally: true iff D's scope is still open on the
@@ -820,7 +975,6 @@ dedicated variant added).
   register allocation across the whole `evalRirCode` (see §7). Giving the family
   one uniform explicit signature would remove that sensitivity (a *stability*,
   not *speed*, improvement). Not done.
-- **Exact dom/postdom predicate directions** in `classifyUse` (see §3 gap).
 - **Whether the generic `recordForceBehavior` should honor `fbKind`.** Non-cached
   loads currently ignore the compile-time FB strategy (they always attempt FB via
   the peek). This is inherited from the pre-recordless single-dispatcher design;
@@ -838,15 +992,20 @@ dedicated variant added).
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-07-24)
+## 7. Current implementation status (snapshot, 2026-07-27)
 
 Working branch: `recordLessNew2-alloca` (the canonical/"official" branch).
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
 
+**Scope boundary.** This work is **interpreter/compiler-side only**. PIR has not
+been adapted to the new feedback-recording strategy — that is not started, and is
+out of scope for this document. Everything below describes the producer side:
+what the compiler emits and what the interpreter does at runtime.
+
 **Stable / committed:**
-- The three recording classes (RecordAlways/RecordOnce/NoRecord) and the
-  `typeDeps_` copy-at-JIT mechanism.
+- The three recording classes (RecordAlways/RecordOnce/NoRecord); `typeDeps_`
+  is produced and stored for the future JIT-side consumer.
 - Record-once with the per-invocation `fired` array (committed form: `alloca`).
 - The expression-tree suppress/notify scheme; `notifyRelatedNodes`.
 - The FB dimension and the `ldvar_cached_` FB opcode variants.
