@@ -387,7 +387,21 @@ class CompilerContext {
     // inner nodes, leaf_notify_* for leaves that notify a parent and/or
     // dependents). A tracked but parent-less non-source leaf stays plain
     // record_type_ (same as untracked).
+    //
+    // Degrades to recordTypeUntracked() outside the analysis's domain, so that
+    // such records both always record (matching the baseline, which has no
+    // suppression anywhere) and are attributed to the "untracked" stats row:
+    //   * !mainBodyCtx_ — compiling default formal arguments. Variable loads
+    //     there are already untracked (emitRecordTypeForVar bails before
+    //     classifyUse), so a tracked inner node would have untracked operands
+    //     that hold no parent pointer and therefore could never un-suppress it.
+    //   * leaf optimization off — likewise, all leaves are untracked.
+    // Without this, a default-arg expression such as `a + f(1)` would suppress
+    // the `+` on the strength of the tracked call result while `a` (untracked,
+    // possibly an object) had no way to revoke the elision.
     BC recordTypeTracked(bool isParent) {
+        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
+            return recordTypeUntracked();
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack.empty())
             registerSlot(slotIdx, isParent);

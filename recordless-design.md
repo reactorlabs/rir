@@ -433,14 +433,123 @@ The data path, end to end (verified 2026-07-27):
    slot with a dep). Wiring it into the JIT is future work and is not covered by
    this document — see the scope boundary in §7.
 
-### 2A.4 Force-behavior rides on the leaf load
+### 2A.4 Def/use tracking and invalidation (where source slots come from)
+
+The classification in §2A.1.1 consumes two pieces of analysis state that the
+compiler maintains as it walks the body. Both live in `DefUseAnalysis`:
+
+- **`defs_[name]`** — the *most recent definition* of `name`: its scope id, the
+  closed-return / loop-exit counters used by the dominance tests, and a
+  `feedbackSlot`.
+- **`useDefs_[name]`** — a list of *previously recorded uses* of `name`, each with
+  the same scope metadata plus the slot that recorded it.
+
+```cpp
+void trackUseDef(SEXP name, int slot) {              // a use recorded itself
+    useDefs_[name].push_back({currentScopeId(), closedReturnCount_,
+                              currentLoopExitCount(), slot});
+}
+
+void trackDef(SEXP name, int feedbackSlot = kNoSlot) {   // name was (re)defined
+    useDefs_.erase(name);                                //  (1) invalidate uses
+    defs_[name] = {currentScopeId(), closedReturnCount_,
+                   currentLoopExitCount(), feedbackSlot}; //  (2) reseat the def
+    bumpSeen(name);                                       //  (3) loop bookkeeping
+}
+```
+
+There are exactly four call sites (verified 2026-07-27):
+
+| site | construct | what it records |
+|---|---|---|
+| `Compiler.cpp:428` | `recordTypeTracked(name)` — a **RecordAlways** leaf | `trackUseDef(name, slot)` — this use is now a subsumption candidate |
+| `Compiler.cpp:2438` | a **RecordOnce** leaf | `trackUseDef(name, slot)` — same |
+| `Compiler.cpp:1029` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
+| `Compiler.cpp:1199` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
+
+**Plain assignment donates its rhs's slot.** At site 1029 the def's feedback slot
+is *the last type slot allocated while compiling the rhs*:
+
+```cpp
+int defSlot = (ctx.typeSlotCount() > typesBefore) ? (int)ctx.typeSlotCount() - 1
+                                                 : DefUseAnalysis::kNoSlot;
+ctx.defUseAnalysis().trackDef(lhs, defSlot);
+```
+
+That slot is exactly the one that observed the value being stored, so it is a
+sound source for later reads of `x` — this is the `a <- expr; …; a` subsumption of
+§2A.1.1 rule 2. If the rhs produced no record at all, the def is slot-less.
+
+**Subassignment is a type barrier.** At site 1199 (`x[i] <- v`, `x[[i]] <- v`,
+and the multi-dim forms), the emitted sequence is
+`subassign1_1/…; stvar[Cached]` — **no `record_type_` follows**, so nothing
+observed the new value of `x`. Hence `kNoSlot`. This matters because a
+subassignment can *change the type*:
+
+```r
+x <- c(1, 2, 3)   # REALSXP
+x[1] <- "a"       # x is now STRSXP
+```
+
+Without invalidation, a later read of `x` could be classified NoRecord against a
+def or use from *before* the subassign and inherit a stale type — and since
+NoRecord is a correctness commitment (§3), that would simply be wrong feedback.
+
+**Why `defs_` is reseated rather than erased.** This is the subtle part. The three
+operations in `trackDef` have distinct effects, and the split is deliberate:
+
+- `useDefs_.erase(name)` kills **use-to-use** subsumption (rule 1).
+- `feedbackSlot = kNoSlot` kills **def-to-use** subsumption (rule 2 requires
+  `d->feedbackSlot != kNoSlot`).
+- Keeping an entry in `defs_` preserves `d != nullptr`, which still gates
+  `optimizable`, `hasLocalStvarReach`, and the **RecordOnce** rules 3 and 4.
+
+So a slot-less def says precisely: *"`x` was redefined here; I have no type for
+the new value, but it is still a tracked local with a known def site."* Erasing
+`defs_` instead would make `d == nullptr`, and for a plain local (not a formal,
+not an outer-controlled capture) `optimizable` would go false — so rules 3 and 4
+could not fire and the next read would degrade all the way to **RecordAlways**.
+That is strictly more conservative than necessary: the type is unknown, but the
+variable is still locally controlled, so "observe once per activation" remains
+sound (rules 3/4 carry their own `!assignedInInnermostLoop` /
+`!assignedInEnclosingLoop` guards for the cases a loop could change it between
+iterations).
+
+Erasing would also lose **force-behavior precision**: `hasLocalStvarReach =
+(d != nullptr && isLocalOrParam(name))`, and rule 4 returns
+`hasLocalStvarReach ? FBValue : RecordOnce`. After a subassign `x` definitely
+holds a materialised value — never an unforced promise — so `FBValue` is correct
+and patches the load to `ldvar_cached_noRecordFB_`, skipping FB recording
+entirely (§4.2–4.3). With the def erased this would fall back to a runtime FB
+gate for no reason.
+
+Note that locality is *not* what `defs_` signals: `isLocalOrParam`, `isFormal`
+and `isOuterControlled` all read pre-scan sets (`localOrParam_`, `formalNames_`,
+`outerControlled_`) and never consult `defs_`.
+
+**Two related details.**
+
+- **`bumpSeen(name)`** feeds `hasUnseenLoopDef`, which makes `findReachingDef`
+  return `nullptr` when a loop body still contains a def it has not compiled yet
+  — preventing a def from being used as a source when a later iteration will
+  overwrite it.
+- **Super-assignment deliberately does not track.** The `superAssign` branch
+  emits `stvarSuper` and skips `trackDef`: the write targets an *enclosing*
+  environment, not the local binding, so local def/use reasoning does not apply
+  (and such names are not `isLocalOrParam` anyway).
+
+This is the same family of guard as the `isArgAssigned` carve-out (rule 0,
+§2A.1.1): both are points where a write happens that the naive `stvar` sequence
+would otherwise misrepresent.
+
+### 2A.5 Force-behavior rides on the leaf load
 
 The orthogonal force-behavior axis (§4) is recorded at the *load* — so its
 strategy selection (`ldvar_cached_` / `ldvar_cached_noRecordFB_` /
 `ldvar_cached_fbRecordOnce_`) is a leaf-level concern, chosen by the same
 `classifyUse`/`emitRecordTypeForVar` pass.
 
-### 2A.5 Problems specific to leaves
+### 2A.6 Problems specific to leaves
 
 - **RecordOnce staleness across enclosing-loop reassignment.** A once-recorded
   type is only invariant *within* one activation; a var reassigned in an outer
@@ -583,10 +692,23 @@ result node in the list above.
   soundness relies on *some* child always observing the object before the inner
   node's (elided) feedback is consumed.
 - **Graceful degradation / leaning on leaves.** An inner node can only be elided
-  if it has registered tracked children to lean on. An inner node with no tracked
-  children cannot infer anything and must fall back to always-record. This is
-  precisely why opaque value results were reclassified from untracked to
-  *tracked* leaves (§2C.4) — to give enclosing inner nodes something to lean on.
+  if at least one child registered under it: the post-pass sets
+  `isLeaf = (slot ∉ parentSlots)` and `shouldNotRecord = !isLeaf`, and
+  `registerSlot(parent, /*isParent=*/true)` only enters `parents` for the slots
+  pending at that level. So an expression whose operands registered nothing stays
+  `isLeaf` and falls back to always-record — it degrades rather than eliding
+  unsoundly.
+
+  Keep this distinct from the *soundness* requirement, which is the stronger one:
+  it is not enough for an inner node to have **some** child — the child that
+  actually **produces its operand** must be tracked, or an object appearing only
+  in that operand will never un-suppress the node. That is the real reason opaque
+  value results are `recordTypeTracked(false)` rather than untracked; see the
+  worked `x[[i]] + 1` counterexample in §2C.4. (Note the two can come apart:
+  because `popNodeForSlots` propagates unadopted slots upward, an enclosing node
+  often has the *inner* expression's operands as children even when the inner
+  result itself is untracked — enough to make it an inner node, not enough to make
+  the elision sound.)
 - **Root inner nodes that are also sources.** The top of an assigned expression
   (`a <- f(x)+1`) is an inner node that may *also* be a NoRecord source for other
   reads of `a`; when it observes an object it must notify its *dependents'*
@@ -682,11 +804,29 @@ The `ObservedValues` recording primitives:
 
 **Untracked records** (a leaf concern that touches the shared opcode). Not every
 `record_type_` participates in the analysis. `recordTypeUntracked()` emits a
-plain `record_type_` and registers nowhere, so the post-pass leaves it untouched
-(`isLeaf && isRoot && !isSource`): always records, never notifies, never
-suppressed, never NoRecord/RecordOnce. The truly-untracked sites: the colon
-`m:n` operand casts (×2), the super-assign target read-for-update, and the
-`ldvar` fallback while compiling default formal args (no main-body context).
+plain `record_type_` and registers nowhere, so the post-pass leaves it untouched:
+always records, never notifies, never suppressed, never NoRecord/RecordOnce. The
+truly-untracked sites: the colon `m:n` operand casts (×2), the super-assign
+target read-for-update, and the `ldvar` fallback while compiling default formal
+args (no main-body context).
+
+`recordTypeTracked` also **degrades to untracked while compiling default formal
+arguments** (`!mainBodyCtx_`), so every record inside a default arg records always
+and is attributed to the untracked row — matching the baseline, which has no
+suppression anywhere. Without this, an expression like `a + f(1)` in a default arg
+would suppress the `+` on the strength of the tracked call result while `a`, being
+untracked, held no parent pointer to revoke it.
+
+Not registering guarantees `isLeaf && isRoot` — nothing maps to or from the slot
+in `parents`. It does **not** structurally guarantee `!isSource`: the post-pass
+derives `sourceSlots` from `typeDeps_` targets, and `trackDef` records a raw slot
+index (`typeSlotCount() - 1`) without regard to tracking (§2A.4), so an untracked
+slot could in principle be named as a def's feedback slot and then be specialized
+to `record_type_leaf_notify_`. In practice it never is, but *contingently*, for a
+different reason at each site: the colon casts and the default-arg fallback are
+never reached by `trackDef` at all (the latter returns before `classifyUse`), and
+the super-assign branch deliberately skips `trackDef` (§2A.4). Worth re-checking
+if a new untracked site is ever added.
 Because a genuine untracked record and a RecordAlways leaf share the *same*
 opcode, the stats build distinguishes them at runtime via
 `setStatsUntrackedSlots` / `isStatsUntracked(idx)` (a compile-time-populated slot
@@ -699,16 +839,50 @@ set, consulted only under `RIR_RECORD_STATS`).
   leaves depending on it. When the source (an inner node) records an object it
   must un-suppress the *dependent leaves' parents* — a "two-step" propagation
   that `notifyRelatedNodes`'s dependents loop performs.
-- **Inner nodes lean on leaves for graceful degradation.** An inner node is only
-  elidable if it has tracked children; the reclassification of opaque value
-  results (call return, `[[`, `for` element, replacement-fn) from *untracked* to
-  `recordTypeTracked(isParent=false)` was done specifically so they act as
-  defs/sources and as children an enclosing inner node can lean on, letting the
-  inner node degrade gracefully instead of being pinned to always-record.
+- **An inner node's elision is sound only if the node that *produces* its operand
+  can un-suppress it.** This is why opaque value results (call return, `[`, `[[`,
+  `for` element, replacement-fn) use `recordTypeTracked(isParent=false)` rather
+  than `recordTypeUntracked()`. The two helpers differ in exactly one line —
+  `recordTypeTracked` calls `registerSlot(slotIdx, isParent)`, so the slot joins
+  `slotsStack.top()` as a child candidate and the enclosing
+  `recordTypeTracked(true)` adopts it, giving it a **`parent` pointer**. An
+  untracked slot never gets one, so it can never un-suppress anything.
+
+  Why that is not academic — `g <- function(x, i) x[[i]] + 1` run with
+  `x = list(structure(1, class = "myclass"))` and a `+.myclass` method
+  (measured 2026-07-27):
+
+  ```
+  x       → [ list    (s)    … ] Type#0   ← NOT an object
+  i       → [ integer (s)    … ] Type#2   ← NOT an object
+  x[[i]]  → [ double  (oavs) … ] Type#3   ← IS an object;  parent -> Type#4
+  add_    → [ double  (oavs) … should not record: 0 ] Type#4  ← un-suppressed
+  ```
+
+  `x[[i]]` is an object while `x` and `i` are not, so the `[[` result is the
+  *only* node that can tell `+` its inference has broken. Because it is tracked it
+  holds `parent -> Type#4`, so its `notifyRelatedNodes` cleared `+`'s
+  `shouldNotRecord` and `+` correctly recorded the S3-dispatched result. Had the
+  `[[` result been untracked, `+`'s children would be only `x` and `i` — both
+  non-objects — so **nothing would ever have un-suppressed `+`**: it would have
+  kept empty feedback while dispatching to `+.myclass` and returning an object.
+
+  **Runtime cost of tracking: none.** The same `record_type_` opcode is emitted,
+  and a tracked slot that ends up with no parent and no dependents is left plain
+  by the post-pass. It is compile-time bookkeeping that *enables* the enclosing
+  elision. (Only other effect: stats attribution — tracked leaves are counted in
+  the "leaves" row, untracked ones in the "untracked" row.)
+
+  Note this benefit is specifically about the **parent edge**. Acting as a *def's
+  feedback slot* does **not** require tracking: `trackDef` records
+  `typeSlotCount() - 1`, the raw slot index, regardless of whether the slot was
+  ever registered in the tree (§2A.4).
 - **The `tracked` vs `untracked` distinction is the bridge.**
   `recordTypeTracked(isParent)` registers a slot in the expression-tree structure
-  (parent/leaf role) so the post-pass can specialize it and inner nodes can lean
-  on it; `recordTypeUntracked()` opts a slot out entirely.
+  (parent/leaf role) so the post-pass can specialize it and an enclosing inner
+  node can lean on it; `recordTypeUntracked()` opts a slot out entirely. The
+  genuinely untracked sites (§2C.3) are the ones that can never be the operand of
+  a tracked expression, so they have no parent edge to lose.
 
 ### 2C.5 Compile-time construction and the specialization post-pass
 
@@ -752,7 +926,7 @@ slot):
   `Compiler::finalize`), then: sets each slot's `parent`, sets `isLeaf`
   (a slot with no children) and `shouldNotRecord = !isLeaf`, computes the
   `sourceSlots` set (a def is a notifying source only if its NoRecord dependent
-  is a registered child — the over-marking fix of §2A.5), and **specializes each
+  is a registered child — the over-marking fix of §2A.6), and **specializes each
   placeholder `record_type_`/`record_type_once_` opcode** into the right family
   member (`leaf_notify_[once_]` / `inner_` / `inner_notify_`) by `(isLeaf, isRoot,
   isSource)`.
@@ -1118,13 +1292,22 @@ by direct inspection, not recalled:
   (`fbgeneric` / `always` / `record_once` / `no_record` + `fbgeneric_bail`
   reported separately). Compile-time toggle, **off** by default.
 
-**Recent change, not yet benchmarked.** `[` (`Bracket`) was demoted from an
-elidable inner node to a tracked leaf (`recordTypeTracked(false)`) — see §2B.3
-for the justification and the measured counterexample. Verified: builds clean,
-benchmarks produce correct results, `x[i]`'s result slot is now
-`isLeaf: 1, should not record: 0` while `x + y` still yields a suppressed inner
-node. The stats impact across the suite has **not** been re-measured; since this
-converts inner-node elisions into leaf records, the §8 figures predate it.
+**Two recent changes (uncommitted at the time of writing).**
+
+1. **`[` (`Bracket`) demoted** from an elidable inner node to a tracked leaf
+   (`recordTypeTracked(false)`) — justification and the measured counterexample in
+   §2B.3. Verified: `x[i]`'s result slot is now
+   `isLeaf: 1, should not record: 0`, while `x + y` still yields a suppressed
+   inner node.
+2. **`recordTypeTracked` degrades to untracked in default formal arguments**
+   (§2C.3), so default-arg records both always record and are attributed to the
+   `untracked` row — matching the baseline. Verified with a program whose only
+   binary op and only call sit in a default arg: `inner nodes` = 0, the records
+   appearing under `untracked`; a main-body `a + b` still reports
+   `inner nodes 200, 100% skipped`.
+
+Both build clean and all checked benchmarks produce correct results. The §8
+figures have been **re-measured on this tree** and include both changes.
 
 To collect stats: flip `//#define RIR_RECORD_STATS` on in
 `rir/src/interpreter/record_stats.h`, rebuild, run; **flip it back off for any
@@ -1187,17 +1370,38 @@ columns (skip% = skipped/should):
 recordless build skips is substantial and stable across runs (these are counts,
 not timings, so they are trustworthy). Representative figures:
 
-- **mandelbrot (areWeFast):** overall ~76% of baseline type-record sites skipped
-  (leaves ~58% skipped; inner nodes ~100% skipped in that run; ~45% of leaves are
-  NoRecord-elided, ~13% RecordOnce with ~97% of those gated away). Value-type
-  record counts were **byte-identical** between two commits that differed only in
-  the inner-node opcode split — confirming the refactor preserved recording
-  behavior.
-- **nbody_naive_inner:** overall ~52% skipped; force-behavior table showed
-  `no_record` as the dominant FB class (compiler proved most cached loads
+Measured 2026-07-27, interpreter-only (`PIR_ENABLE=off PIR_OSR=0`), on the current
+tree (i.e. **after** the `[` demotion and the default-arg degradation):
+
+| benchmark (inner iters) | should | recorded | skipped | skip% |
+|---|---|---|---|---|
+| mandelbrot ×300 (areWeFast) | 79,025,387 | 18,961,792 | 60,063,595 | **76.0%** |
+| nbody_naive_inner ×3000 | 6,790,298 | 3,232,083 | 3,558,215 | **52.4%** |
+| fasta_naive_2 ×20000 | 9,093,124 | 4,818,981 | 4,274,143 | **47.0%** |
+| spectralnorm ×3 | 1,466 | 923 | 543 | **37.0%** |
+| binarytrees_naive ×3 | 164,292 | 126,712 | 37,580 | **22.9%** |
+
+Shape of the wins, by benchmark character:
+
+- **mandelbrot** — the best case: leaves ~58% skipped (~45% of leaves NoRecord-
+  elided, ~13% RecordOnce with ~97% of those gated away) and inner nodes ~100%
+  suppressed.
+- **nbody_naive_inner** — ~52% overall; the force-behavior table shows
+  `no_record` as the dominant FB class (the compiler proved most cached loads
   statically value/inferable), `record_once` ~76% gated.
-- **storage / binarytrees_naive:** much lower leaf skip% (~0–4%) — object- and
+- **binarytrees_naive / storage** — much lower leaf skip% (~0–4%): object- and
   allocation-heavy code where most leaves are genuine RecordAlways.
+
+**Effect of the two most recent changes: negligible on these programs.** Every
+`TOTAL should` above is *identical* to the pre-change measurement, and each
+benchmark's skip% moved by ≤0.5pp. The small per-row deltas (tens of records) are
+the default-arg reattribution (records moving from leaves/inner into `untracked`),
+not the `[` demotion. That the `[` demotion barely registers here is a property of
+these benchmarks, not of the change: in a deliberately `[`-heavy loop
+(`for (i in 1:n) s <- s + v[i]`, 5,000 iterations) the demotion is clearly
+visible — inner nodes are exactly 5,000 (the `+` alone) with the 5,000 `v[i]`
+results now counted as RecordAlways leaves, where previously both would have been
+inner nodes.
 
 **Bottom line for the paper:** lead with the *recording-elision counts* (sound,
 reproducible) and the *observation-cost* argument; treat wall-clock deltas on
