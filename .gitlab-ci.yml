@@ -108,6 +108,7 @@ report_results:
 benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
+  timeout: 8h
   variables:
     GIT_STRATEGY: none
   tags:
