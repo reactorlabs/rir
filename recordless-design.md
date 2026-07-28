@@ -48,24 +48,52 @@ recording conflates two things that can be pulled apart:
 - **Persistence** — the state that ends up in the feedback slot that the JIT
   actually reads at compile time.
 
-The JIT only cares about *persistence*: it needs each slot it consults to hold a
-sound, sufficiently-precise summary by the time it compiles. It does **not** care
-how many times, or at which bytecode site, the underlying observation happened.
+The JIT only cares about *persistence*: it needs each slot it consults to hold
+the right summary by the time it compiles. It does **not** care how many times,
+or at which bytecode site, the underlying observation happened.
+
 "Recordless" is the family of transformations that lower observation cost while
-keeping the persisted feedback the JIT consumes unchanged (or a sound
-over-approximation):
+keeping the persisted feedback the JIT consumes **exactly unchanged**. This is a
+*losslessness* claim, not an approximation: the goal is bit-identical feedback at
+lower cost, and each mechanism is only applied where a static condition
+guarantees that. Concretely:
 
 1. **Record-once** — for a value whose observed type is invariant across a
    function activation, observe on the first execution of the site per
    invocation and skip the rest.
+   *Why lossless:* `doRecord` is idempotent for a repeated value-type (it folds
+   into a set of `seen[]` types and monotone flags), so observing an invariant
+   value once produces **bit-identical** slot state to observing it N times. The
+   classification only assigns RecordOnce where the analysis establishes that
+   invariance (§2A.1.1).
 2. **No-record (def-site subsumption)** — for a use whose value is provably the
    same as one already observed at another instrumented site, emit *no* opcode
    at all, annotating the dependent slot with a compile-time dependency so the
-   JIT can copy the source slot's persisted feedback into it.
+   source slot's persisted feedback can be copied into it.
+   *Why lossless:* the enabling condition is mutual dominance (source dominates
+   the use, use post-dominates the source, binding unchanged in between, §3), so
+   the two sites execute the same number of times on the same value. The source
+   slot therefore already holds exactly what the use would have accumulated; the
+   copy reproduces it.
 3. **Expression-tree inner-node elision** — for an interior node of an
    expression whose result type is inferable from its operands' (leaves')
    recorded types, suppress recording unless something makes it non-inferable
    (an object appears, triggering S3/S4 dispatch that can return anything).
+   *Why lossless:* "inferable" means exactly reconstructible from the operands,
+   and the moment inferability could break — an object is observed — suppression
+   is reverted and the node records normally (§2B.2). Losslessness here is
+   therefore a *proof obligation on the inference rule chosen per operator*
+   rather than a property of the runtime mechanism; see the open question in §6
+   about reconstructing the auxiliary flags (`notScalar`, `attribs`,
+   `notFastVecelt`), not just the SEXPTYPE.
+
+**Failure mode, for the record.** If one of these static conditions were wrong,
+the result would *not* be a safe over-approximation — it would be feedback that
+is too **narrow** (a type the site really does see never gets recorded). In a
+guarded speculative JIT that is not a memory-safety problem (the guard catches
+it), but it is a correctness problem for the feedback and shows up as extra
+deoptimization. So the conditions carry real weight; none of them is a
+"conservative default."
 
 There is a second, **orthogonal feedback dimension** that rides on the same
 machinery: **force-behavior (FB) recording** (§4). It records whether a loaded
@@ -123,10 +151,15 @@ variants. Recordless's contribution to the FB axis is therefore narrow and
 should be described as such in any writeup:
 
 1. compile-time **per-slot strategy selection** (`ForceBehaviorKind`) surfaced as
-   the `ldvar_cached_{,noRecordFB_,fbRecordOnce_}` opcode split;
+   the `ldvar_cached_{,noRecordFB_,fbRecordOnce_}` opcode split, with the
+   peek-free helpers `recordForceBehaviorNoCheck` /
+   `recordForceBehaviorRecordOnceNoCheck`;
 2. **once-gating** of FB via the shared `fired` bitmap;
-3. (this session) the **monotonic early-out** in `recordFbAtSlot` (§4.1) and the
-   generic dispatcher recognizing the `leaf_notify_` opcodes.
+3. teaching the generic dispatcher to recognize the `leaf_notify_` opcodes
+   (without which FB was silently dropped for tree-participating non-cached
+   leaves).
+
+`recordFbAtSlot` itself is unchanged from the baseline formulation (§4.1).
 
 The value-type recording scheme (record-once / no-record / inner-node elision)
 is the genuinely new part.
@@ -248,30 +281,21 @@ Packing/unpacking macros live in `bc/BC_inc.h`:
 zeroed with `memset`, living for exactly one `evalRirCode` activation.** This is
 the crux of both correctness (reentrancy, §2A.2.1) and cheapness.
 
-Two storage forms have been used (see §5 for the trade-off):
+**Current form on this branch — `alloca`** (verified 2026-07-27,
+`interp.cpp` in `evalRirCode`):
 
-- **`alloca` form (original / committed):**
-  ```cpp
-  bool* fired = nullptr;
-  if (c->recordTypeOnceCount > 0) {
-      fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
-      memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
-  }
-  ```
-  Sized to exactly what this Code object uses (`recordTypeOnceCount`), no fixed
-  cap, no bit-packing.
+```cpp
+bool* fired = nullptr;
+if (c->recordTypeOnceCount > 0) {
+    fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
+    memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
+}
+```
 
-- **Fixed-size form (working-tree, this session):**
-  ```cpp
-  bool fired[RECORD_TYPE_ONCE_MAX_IIDX];   // 512 bytes on the stack frame
-  if (c->recordTypeOnceCount > 0)
-      memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
-  ```
-  Only the used prefix is zeroed. The 512 cap is *already* enforced at compile
-  time (the compiler never assigns an `iidx >= RECORD_TYPE_ONCE_MAX_IIDX`; see
-  the `bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX` guards in `emitRecordTypeForVar`),
-  so the fixed array can never be over-run — it is a representation change, not a
-  new limit.
+Sized to exactly what this Code object uses (`Code::recordTypeOnceCount`, set in
+`CompilerContext::pop()` from the context's `recordTypeOnceBitmapSize`), no fixed
+cap in the frame, no bit-packing. (A fixed-size alternative was evaluated and not
+adopted — see §5.)
 
 **`bool` per flag, not bit-packing.** Direct byte indexing avoids shift/mask on
 the hot test. The gate is branch-hinted toward "already fired" (the common
@@ -478,24 +502,83 @@ The reversal is the subtle part of inner-node optimization: getting it cheap
 (don't pay on every non-object load) *and* sound (never miss an object that
 would invalidate the inference) is what the object-gate + one-shot latch buy.
 
-### 2B.3 Which inner nodes are inferable (`[` vs `[[`, colon)
+### 2B.3 What actually becomes an inner node
 
-Inferability is decided per primitive at compile time:
+There is exactly **one** `recordTypeTracked(true)` call site in the compiler
+(verified 2026-07-27, `Compiler.cpp:876`) — that call is the *only* way a slot
+becomes an inner node, and it covers a fixed list of **14 binary operators**:
 
-- `[` (`Bracket`) is **type-preserving**: `x[...]` has the same SEXPTYPE as `x`
-  for non-object `x`, so its result is inferable from the lhs leaf → recorded as
-  an **elidable inner node** (`recordTypeTracked(true)`). If `x` is ever an
-  object, the lhs leaf's `notifyRelatedNodes` un-suppresses this record.
-- `[[` (`DoubleBracket`) extracts an *element* whose type varies (e.g.
-  `list(3, "hello")[[i]]`) — **not** inferable, so it stays a tracked
-  always-record leaf (`recordTypeTracked(false)`), *not* an inner node.
-- Colon `m:n` operand casts are internal and untracked.
+> `Add Sub Mul Div Idiv Mod Pow` (arithmetic), `Eq Ne Lt Le Gt Ge` (comparison),
+> `Colon`.
+
+Everything else — general calls, `[`, `[[`, replacement functions, `for`
+elements — is a **leaf**, not an inner node.
+
+**The inference rule is per-operator, and not "result type = operand type."**
+Three distinct shapes among the 14:
+
+- **Arithmetic** (`+ - * / %/% %% ^`): result SEXPTYPE follows the usual
+  promotion rules over the operands, and result length is
+  `max(operand lengths)` — so *scalar-ness is also derivable* (result is scalar
+  iff both operands are). Both the type and the `notScalar` flag are inferable.
+- **Comparison** (`== != < <= > >=`): result is **always `LGLSXP`**, independent
+  of operand types; length again `max(operand lengths)`. Inferable, but by a
+  constant rule, not by propagation.
+- **`Colon`** (`m:n`): produces a *sequence* — so a vector result from scalar
+  operands (`notScalar` flips relative to the operands). Inferable in principle
+  from the semantics of `:`, but not by copying operand flags.
+
+**Why `[` is *not* an inner node (it was, until it was demoted).** From
+2026-06-03 (`b659827e`, "optimnize for extract1") until recently, `[` (`Bracket`)
+*was* emitted as an elidable inner node, on the justification: "`x[...]` has the
+same SEXPTYPE as `x` for non-object `x`, so its result type is inferable from the
+lhs leaf." The SEXPTYPE half is true; the conclusion does not follow, because
+eliding the node discards the **entire** `ObservedValues`, and `notScalar` is not
+inherited. Measured on the baseline (record-everything) build with
+`f <- function(x,i) x[i]`, `x = c(1,2,3)`, `i = 1L`:
+
+```
+ldvar_cached_ x   → [ double () | promise ]   Type#0    ← lhs: notScalar
+ldvar_cached_ i   → [ integer (s) | value ]   Type#2
+extract1_1_       → [ double (s) ]            Type#3    ← result: scalar
+```
+
+(flags are `(o)`bject `(a)`ttribs `(v)`notFastVecelt `(s)`calar.)
+
+Worse, `notScalar` for `x[i]` is **not inferable from the operands' feedback at
+all** — it depends on the *length of the index value*, which type feedback never
+records (`x[1]` is scalar, `x[1:2]` is not; `i` is `INTSXP` in both). The best a
+consumer could do is conservatively assume `notScalar`, which is a precision loss
+— i.e. exactly the over-approximation the design is meant to avoid (§1). Since
+scalar-ness drives PIR's unboxing and fast-path selection, this is a materially
+useful bit to lose.
+
+`[` has therefore been **demoted to `recordTypeTracked(false)`** — a tracked
+always-record leaf, the same treatment as `[[`. Confirmed in the emitted
+bytecode: `x[i]`'s result slot is now `isLeaf: 1, should not record: 0` and its
+operands carry no parent pointer, while `x + y` still yields a suppressed inner
+node.
+
+The general lesson, worth carrying into any future inner-node candidate: **the
+inference obligation is over the whole `ObservedValues`, not just the SEXPTYPE.**
+An operator qualifies only if *every* recorded field — type set, `notScalar`,
+`attribs`, `notFastVecelt` — is derivable from the operands' recorded feedback.
+`[` fails on `notScalar`; the arithmetic ops pass because result length is
+`max(operand lengths)`.
+
+`[[` (`DoubleBracket`) extracts an *element* whose type genuinely varies (e.g.
+`list(3, "hello")[[i]]`), so it was never a candidate. The colon *operand casts*
+(`colonCastLhs/Rhs`) are internal and untracked — distinct from the `Colon`
+result node in the list above.
 
 ### 2B.4 Problems specific to inner nodes
 
-- **Determining inferability** is per-operator and conservative. `[[`, general
-  calls, and anything whose result type isn't a function of operand types must
-  *not* be made an elidable inner node, or the JIT gets wrong feedback.
+- **Determining inferability** is per-operator, conservative, and easy to get
+  wrong. `[[`, general calls, and anything whose recorded feedback isn't a
+  function of the operands' recorded feedback must *not* be made an elidable
+  inner node. Note the obligation covers the **whole `ObservedValues`**, not just
+  the SEXPTYPE — `[` was demoted for exactly this reason (§2B.3), having been an
+  inner node for ~7 weeks on a SEXPTYPE-only argument.
 - **Sound + cheap reversal** (§2B.2). Cheapness relies on the object-gate/latch;
   soundness relies on *some* child always observing the object before the inner
   node's (elided) feedback is consumed.
@@ -776,41 +859,28 @@ forcing is likely cheap.
 
 ### 4.1 Recording core (`recordFbAtSlot`)
 
-Classifies the loaded SEXP `s` and moves the slot up the lattice. This session it
-was rewritten to **switch on the current state and inspect `s` only as far as the
-current state still leaves room to rise** (monotonicity → skip checks that cannot
-raise the state):
+Classifies the loaded SEXP `s` and raises the slot's state if the new
+classification is higher on the lattice (verified 2026-07-27):
 
 ```cpp
-using SBLF = ObservedValues::StateBeforeLastForce;
-ObservedValues& fb__ = typeFeedback->types(slotIdx);
-switch (fb__.stateBeforeLastForce) {
-case SBLF::promise:           break;                    // top — never touch `s`
-case SBLF::evaluatedPromise:                            // only `promise` is higher
-    if (TYPEOF(s) == PROMSXP && PRVALUE(s) == R_UnboundValue &&
-        CAR(PREXPR(s)) != symbol::lazyLoadDBfetch)
-        fb__.stateBeforeLastForce = SBLF::promise;
-    break;
-case SBLF::value:                                       // rises only via a promise
-    if (TYPEOF(s) == PROMSXP) {
-        if (PRVALUE(s) != R_UnboundValue) fb__.stateBeforeLastForce = SBLF::evaluatedPromise;
-        else if (CAR(PREXPR(s)) != symbol::lazyLoadDBfetch) fb__.stateBeforeLastForce = SBLF::promise;
-    }
-    break;
-case SBLF::unknown:                                     // full classification
-    if (TYPEOF(s) != PROMSXP) fb__.stateBeforeLastForce = SBLF::value;
-    else if (PRVALUE(s) != R_UnboundValue) fb__.stateBeforeLastForce = SBLF::evaluatedPromise;
-    else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) fb__.stateBeforeLastForce = SBLF::value;
-    else fb__.stateBeforeLastForce = SBLF::promise;
-    break;
-}
+auto recordFbAtSlot = [&](uint32_t slotIdx, SEXP s) __attribute__((always_inline)) {
+    ObservedValues::StateBeforeLastForce state = /* unknown */;
+    if      (TYPEOF(s) != PROMSXP)                      state = value;
+    else if (PRVALUE(s) != R_UnboundValue)              state = evaluatedPromise;
+    else if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch) state = value;
+    else                                                state = promise;
+
+    ObservedValues& fb__ = typeFeedback->types(slotIdx);
+    if (fb__.stateBeforeLastForce < state)
+        fb__.stateBeforeLastForce = state;
+};
 ```
 
-The classification of `s`: not a `PROMSXP` → `value`; a promise with `PRVALUE`
-set → `evaluatedPromise`; a `lazyLoadDBfetch` stub → `value`; otherwise (unforced
-promise) → `promise`. The previous straight-line implementation is kept
-commented out directly above the switch. `lazyLoadDBfetch` is treated as `value`
-because it is a lazy-load stub that materializes to a value.
+Classification of `s`: not a `PROMSXP` → `value`; a promise with `PRVALUE` set →
+`evaluatedPromise`; a `lazyLoadDBfetch` stub → `value` (a lazy-load stub that
+materialises to a value); otherwise (unforced promise) → `promise`.
+`always_inline`: this is the shared core, inlined into the `noinline` wrappers
+below, which are the outlined call targets in the dispatch loop.
 
 ### 4.2 Compile-time FB strategy (`ForceBehaviorKind`)
 
@@ -831,11 +901,11 @@ because it is a lazy-load stub that materializes to a value.
 **Cached loads bake the strategy into the opcode** (chosen by the compiler,
 patched in `emitRecordTypeForVar`):
 
-- `ldvar_cached_` → `recordForceBehaviorAlways` (unconditional).
+- `ldvar_cached_` → `recordForceBehaviorNoCheck` (unconditional).
 - `ldvar_cached_noRecordFB_` → skips FB entirely (`FBValue`/`Infer`).
-- `ldvar_cached_fbRecordOnce_` → `recordForceBehaviorRecordOnce` (fired-gated).
+- `ldvar_cached_fbRecordOnce_` → `recordForceBehaviorRecordOnceNoCheck` (fired-gated).
 
-`recordForceBehaviorAlways` reads the slot index directly from `pc+1` with **no
+`recordForceBehaviorNoCheck` reads the slot index directly from `pc+1` with **no
 opcode peek and no unpacking**. Its soundness rests on an invariant proven this
 session: base `ldvar_cached_` is emitted *only* for `fbKind == Always`, which
 `classifyUse` returns *only* for `RecordAlways` uses, which always emit a plain
@@ -870,19 +940,25 @@ protective read (`ldvarForUpdate…; setShared; pop` — value thrown away) and
 `ldddvar_` (dd-vars `..1`/`...` are never type-profiled, so no record is ever
 emitted after them). Both are correct-to-skip; the bail is not a lost recording.
 
-### 4.4 `ldvar_for_update_cache_noRecordFB_` (this session)
+### 4.4 The `fbgeneric_bail` cases (known, not optimized away on this branch)
 
-A dedicated cached for-update opcode for the *discarded protective read* of a
-subassign target. That read exists only for its `setShared`/NAMED side effect and
-its value is immediately popped, so it is never followed by a record and its FB
-dispatch always bailed. The new opcode's handler is identical to
-`ldvar_for_update_cache_` minus the FB call, removing the wasted (bailing)
-dispatch on subassign-heavy loops (e.g. nbody's inner loop: ~15k wasted
-dispatches per run eliminated). Wired through all opcode sites
-(`insns.h`, `BC.h`/`BC_inc.h` factory, `BC.cpp` ×4 switches, `CodeVerifier.cpp`,
-`rir2pir.cpp` — translated identically to a for-update `LdVar`, `interp.cpp`).
-Non-cached protective reads still use the plain opcode and bail harmlessly (no
-dedicated variant added).
+The generic dispatcher's `default:` arm ("no value-type record follows this
+load") is reached by two real patterns, both correct-to-skip:
+
+- **The discarded subassign protective read.** `x[i] <- v` (when
+  `maybeChanges(target, rhs)`) compiles the target's *first* read as
+  `ldvarForUpdate[Cached]; setShared; pop` — a read that exists only for its
+  NAMED/shared side effect and whose value is immediately popped. No record
+  follows, so the FB dispatcher peeks, sees `set_shared_`, and bails. This is the
+  dominant source: measured **15,003 bails** in `nbody_naive_inner` at 200 inner
+  iterations (one per subassign execution).
+- **`ldddvar_`** (`..1`, `...`): dd-vars are never type-profiled — `compileGetvar`
+  takes the `DDVAL` branch and emits no record at all — so this load always bails.
+
+Both are wasted dispatches rather than lost feedback: in each case there is
+genuinely no slot to attribute force-behavior to, so bailing is correct. They are
+a (small) missed opportunity to avoid the call entirely, not a soundness or
+precision problem.
 
 ---
 
@@ -902,9 +978,9 @@ dedicated variant added).
   stack allocation. Fixed-size is a static frame slot (predictable, no `alloca`
   call) at the cost of up to 512 bytes of frame even when fewer are used.
   Measurements showed the fixed-size form *modestly* faster on spectralnorm /
-  mandelbrot — **but within codegen-artifact noise** (§7), so this is not a
-  confident result. Currently the working tree uses fixed-size; committed history
-  uses `alloca`. **Unresolved.**
+  mandelbrot — **but within codegen-artifact noise** (§8), so this is not a
+  confident result. `alloca` was kept. **Unresolved**; revisit only with a
+  measurement method that clears the noise floor (§8).
 - **`record_type_dep_` / `record_type_once_dep_` as separate opcodes.** Merged
   this session into `record_type_leaf_notify_[once_]`. They had become
   byte-identical handlers once `notifyRelatedNodes` was made generic over
@@ -961,6 +1037,18 @@ dedicated variant added).
     need a different formulation.
   A reviewer will push here; the honest answer is "the principle is general, this
   instantiation exploits Ř's tree-structured single-pass compiler."
+- **Are the *auxiliary flags* inferable for all 14 elided operators?**
+  Losslessness for inner-node elision (§1, mechanism 3) requires the result to be
+  exactly reconstructible from the operands over the **whole** `ObservedValues` —
+  not just the type set, but `notScalar`, `attribs`, `notFastVecelt` too. This
+  obligation already forced `[` out of the inner-node set (§2B.3). The arithmetic
+  ops look sound (result length = `max(operand lengths)` ⇒ `notScalar`
+  derivable), and the comparisons yield a constant `LGLSXP`, but the remaining
+  fields have **not** been checked operator-by-operator — in particular `attribs`
+  and `notFastVecelt` propagation through arithmetic (attribute preservation in R
+  arithmetic has its own rules, e.g. names/dim inheritance from the longer
+  operand). This audit should be completed before claiming end-to-end
+  losslessness, and it is the most likely place to find another `[`-style case.
 - **`alloca` vs. fixed-size `fired`** — no confident perf verdict (see §5, §7).
 - **`pc`-by-reference capture in the FB lambdas.** The FB helper lambdas capture
   the interpreter frame by reference (`[&]`), including `pc`. Whether taking
@@ -979,7 +1067,7 @@ dedicated variant added).
   loads currently ignore the compile-time FB strategy (they always attempt FB via
   the peek). This is inherited from the pre-recordless single-dispatcher design;
   harmless but asymmetric with the cached path.
-- **`recordForceBehaviorAlways` assumes profiling is on.** It blind-reads `pc+1`
+- **`recordForceBehaviorNoCheck` assumes profiling is on.** It blind-reads `pc+1`
   as a raw slot index with no opcode peek; that is sound only because base
   `ldvar_cached_` is always followed by a record instruction — which holds only
   when `Compiler::profile` is true (default; disabled by `RIR_PROFILING=off`).
@@ -1003,29 +1091,40 @@ been adapted to the new feedback-recording strategy — that is not started, and
 out of scope for this document. Everything below describes the producer side:
 what the compiler emits and what the interpreter does at runtime.
 
-**Stable / committed:**
-- The three recording classes (RecordAlways/RecordOnce/NoRecord); `typeDeps_`
-  is produced and stored for the future JIT-side consumer.
-- Record-once with the per-invocation `fired` array (committed form: `alloca`).
-- The expression-tree suppress/notify scheme; `notifyRelatedNodes`.
-- The FB dimension and the `ldvar_cached_` FB opcode variants.
-- `RIR_RECORD_STATS` instrumentation (compile-time toggle, **off** for perf/prod;
-  `RecordSkipStats` prints leaf/inner/untracked/force-behavior tables at exit).
+**In the branch (verified present in the source on 2026-07-27).** Everything this
+document describes was checked against the tree; the markers below were confirmed
+by direct inspection, not recalled:
 
-**Working tree, this session, likely to change / not all committed:**
-- Opcode merge/rename: `record_type_leaf_notify_[once_]` (from dep+leafWithParent)
-  and the inner re-split `record_type_inner_` / `record_type_inner_notify_`.
-- `RECORDLESS_EXPTREE_ENABLED` removed (always-on).
-- `record()` dead `shouldNotRecord` check removed; `recordSimple` inlined;
-  `notifyRelatedNodes` takes `idx` directly.
-- Fixed-size `bool[512]` `fired` replacing `alloca` (**candidate, unverified**).
-- `recordFbAtSlot` monotonic switch-on-current-state (§4.1).
-- Generic `recordForceBehavior` recognizing the `leaf_notify_` family (bug fix).
-- `ldvar_super_` → `recordForceBehaviorAlways`.
-- New opcode `ldvar_for_update_cache_noRecordFB_` for the discarded protective
-  read.
-- Force-behavior stats table (`fbgeneric` / `always` / `record_once` /
-  `no_record` rows + `fbgeneric_bail` reported separately).
+- The three recording classes (RecordAlways/RecordOnce/NoRecord) and the full
+  `classifyUse` decision order (§2A.1.1); `typeDeps_` produced and stored.
+- Record-once with the per-invocation `fired` array — **`alloca` form**.
+- Once-bit clearing: `clear_record_type_once_bit_`,
+  `clear_record_type_once_bits_range_`, `LoopScopeGuards.h`, and the
+  `CodeStream::patchImmediate` / `patchOpcode` primitives.
+- The opcode family `record_type_leaf_notify_[once_]` /
+  `record_type_inner_` / `record_type_inner_notify_`; the old
+  `record_type_dep_` / `record_type_once_dep_` are **gone**.
+- `notifyRelatedNodes(slot, isObject, idx)` (takes `idx` directly);
+  `recordInner()`; `record()` is a plain `doRecord` with **no**
+  `shouldNotRecord` check; `recordSimple` and `notifyParent` are **gone**.
+- `RECORDLESS_EXPTREE_ENABLED` **removed** — the expression-tree scheme is
+  unconditionally compiled in (only `RECORDLESS_EXPTREE_DEBUG` remains).
+- FB: `ldvar_cached_` / `ldvar_cached_noRecordFB_` /
+  `ldvar_cached_fbRecordOnce_`; helpers named **`recordForceBehaviorNoCheck`**
+  and **`recordForceBehaviorRecordOnceNoCheck`** (both carry a `SLOWASSERT` on
+  the following opcode); `ldvar_super_` calls `recordForceBehaviorNoCheck`; the
+  generic `recordForceBehavior` recognizes the `leaf_notify_` family.
+- `RIR_RECORD_STATS` instrumentation incl. the force-behavior table
+  (`fbgeneric` / `always` / `record_once` / `no_record` + `fbgeneric_bail`
+  reported separately). Compile-time toggle, **off** by default.
+
+**Recent change, not yet benchmarked.** `[` (`Bracket`) was demoted from an
+elidable inner node to a tracked leaf (`recordTypeTracked(false)`) — see §2B.3
+for the justification and the measured counterexample. Verified: builds clean,
+benchmarks produce correct results, `x[i]`'s result slot is now
+`isLeaf: 1, should not record: 0` while `x + y` still yields a suppressed inner
+node. The stats impact across the suite has **not** been re-measured; since this
+converts inner-node elisions into leaf records, the §8 figures predate it.
 
 To collect stats: flip `//#define RIR_RECORD_STATS` on in
 `rir/src/interpreter/record_stats.h`, rebuild, run; **flip it back off for any
@@ -1041,7 +1140,7 @@ rigorously this session and must be front-and-center in any writeup.
 
 - `evalRirCode` is one ~50 KB function (a computed-goto/threaded dispatch loop).
   A *one-line* source change (e.g. switching `ldvar_super_` from the generic FB
-  dispatcher to `recordForceBehaviorAlways` — literally one `callq` target)
+  dispatcher to `recordForceBehaviorNoCheck` — literally one `callq` target)
   caused GCC to re-run whole-function register allocation, reshuffling registers
   (`%rsi`↔`%rcx`↔`%rdi`) throughout the dispatch loop and shifting every
   downstream instruction by 16 bytes. Root cause traced concretely: the two FB

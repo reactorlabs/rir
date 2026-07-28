@@ -1581,22 +1581,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         if (!voidContext) {
             if (Compiler::profile) {
-                // `[` (Bracket) is type-preserving: x[...] has the same
-                // SEXPTYPE as x for non-object x, so its result type is
-                // inferable from the lhs leaf — record it as an inner node
-                // (elidable). If x is ever an object (S3/S4 `[` dispatch can
-                // return anything), the lhs leaf's notifyRelatedNodes
-                // re-enables this record. `[[` (DoubleBracket) extracts an
-                // *element* whose type varies (e.g. list(3,"hello")[[i]]) and
-                // is not inferable, so it must keep recording.
-                if (fun == symbol::Bracket)
-                    cs << ctx.recordTypeTracked(true);
-                else
-                    // `[[` extracts an element whose type is not inferable from
-                    // the lhs, so it is not an elidable inner node — but it is
-                    // an opaque always-record leaf (def candidate / inner-node
-                    // operand), not untracked.
-                    cs << ctx.recordTypeTracked(/*isParent=*/false);
+                // Neither `[` nor `[[` is an elidable inner node: both are
+                // opaque always-record leaves (def candidates / inner-node
+                // operands), but tracked rather than untracked.
+                //
+                // `[` was previously treated as an elidable inner node on the
+                // rationale that "x[...] has the same SEXPTYPE as x for
+                // non-object x, so the result is inferable from the lhs leaf".
+                // The SEXPTYPE part is true, but eliding the node discards the
+                // whole ObservedValues, and `notScalar` is not inherited:
+                //     x <- c(1,2,3); x[1L]
+                //     lhs slot    -> double ()   (notScalar)
+                //     result slot -> double (s)  (scalar)
+                // Nor can it be recovered from the operands' feedback, since it
+                // depends on the *length of the index value* (x[1] is scalar,
+                // x[1:2] is not — i is INTSXP in both). Contrast the arithmetic
+                // ops, where result length is max(operand lengths), so
+                // scalar-ness IS derivable from the operands.
+                //
+                // `[[` extracts an element whose type varies outright
+                // (e.g. list(3,"hello")[[i]]), so it was never inferable.
+                cs << ctx.recordTypeTracked(/*isParent=*/false);
             }
             cs << BC::visible();
         } else {
