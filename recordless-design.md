@@ -74,7 +74,10 @@ guarantees that. Concretely:
    the use, use post-dominates the source, binding unchanged in between, §3), so
    the two sites execute the same number of times on the same value. The source
    slot therefore already holds exactly what the use would have accumulated; the
-   copy reproduces it.
+   copy reproduces it. This additionally requires the variable to be **in our
+   control** — created by the function itself (or a stable capture) — so that no
+   invisible mutation (reflection, or `<<-` from a nested closure) can invalidate
+   the reasoning; see §2A.1.2, which is a soundness precondition, not a heuristic.
 3. **Expression-tree inner-node elision** — for an interior node of an
    expression whose result type is inferable from its operands' (leaves')
    recorded types, suppress recording unless something makes it non-inferable
@@ -259,6 +262,86 @@ prose description:
   even eligible; an arbitrary free variable from an enclosing scope falls through
   to RecordAlways.
 
+### 2A.1.2 Eligibility: the "in our control" requirement
+
+The `optimizable` predicate above is not a heuristic — it is a **soundness
+requirement**, and it is the piece that makes the whole scheme defensible.
+
+**We may only optimize a variable whose every mutation we can see.** The
+def/use analysis reasons from the `stvar` sequence it compiles. If a binding can
+change by any route the compiler cannot observe, its dominance conclusions are
+invalid, and a NoRecord use would inherit a type the variable no longer has.
+Two such routes exist in R:
+
+- **Reflection.** For a variable the function did not create, arbitrary code
+  (`assign`, `eval`, `<<-` from elsewhere, a modified environment) may have
+  changed it between two uses. The compiler cannot know whether reflection
+  occurred, so it must assume it did.
+- **Super-assignment from a nested function.** A `<<-` inside an inner closure
+  mutates an outer binding without any `stvar` appearing in the outer body's
+  instruction stream.
+
+Hence the rule, as implemented:
+
+> **We optimize parameters and locals — variables the function itself creates —
+> except those that are super-assigned in a nested function. A nested function may
+> additionally optimize variables from its enclosing scope, so long as they are
+> not mutated after the inner function was created.**
+
+Mechanically (`Compiler::finalize` and `computeCapturesForInner`, verified
+2026-07-27):
+
+- `functionLocalOrParam_` = own formals ∪ body-assigned names, **minus**
+  `innerSuperAssigned_` (collected by a pre-scan, `collectInnerSuperAssigned`,
+  which walks nested `function` bodies at any depth looking for `<<-`).
+- For a nested compilation, the enclosing function hands down two capture sets:
+  - **`controlled`** — "in our realm": carried-through outer captures, own
+    formals, and own body-locals (minus inner-super-assigned). The inner function
+    may rely on name lookup falling through to a controlled environment rather
+    than to the global env. This is what enables **RecordOnce** on such captures.
+  - **`immutable`** — a strict subset whose *value* cannot change during the
+    inner function's lifetime: formals never body-assigned, and body-locals
+    assigned exactly once, not for-loop variables, not `<<-`-escaped, with a
+    dominating def at the point the closure is created. Reserved for future
+    cross-invocation optimizations; not yet exploited.
+- Both sets are shadowed correctly on the way down: a name that the inner
+  function re-declares as its own formal (or, for `immutable`, body-assigns)
+  is dropped from the inherited set.
+
+**This is a deliberate tightening over an earlier, unsound version.** Previously
+*any* variable could be optimized. The canonical example:
+
+```r
+function() { i; f(); i }      # `i` is a global — not created by this function
+```
+
+The earlier analysis made the second `i` a **NoRecord** use subsumed by the
+first. That is wrong: `f()` may reflect on the environment and rebind `i`, so the
+second use can see a different type. Under the current rules `i` is neither a
+formal, nor an outer-*controlled* capture, nor `isLocalOrParam`, so `optimizable`
+is false and both uses record. Note the cost of the fix is real — see the
+nbody_naive figures in §8, where it is measurable.
+
+The `<<-`-from-a-nested-function half of the rule has its own regression test
+shape. This is the case that broke when `isLocalOrParam()` was once dropped from
+`classifyUse`:
+
+```r
+f <- function() {
+    x <- g()
+    h <- function() { x <<- a() }   # mutates x invisibly to f's stvar sequence
+    h()
+    x                               # must NOT be no-record
+}
+```
+
+`x` is a local of `f`, and `f`'s instruction stream contains exactly one `stvar`
+for it — so a naive reaching-def analysis concludes the final `x` is subsumed by
+`x <- g()`. But `h()` rebinds it with no `stvar` visible in `f`. The
+`collectInnerSuperAssigned` pre-scan is what excludes `x`: it walks nested
+`function` bodies at any depth for `<<-` targets and removes them from
+`functionLocalOrParam_`, so `optimizable` is false and the read records.
+
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
 `record_type_once_` carries a packed 32-bit immediate:
@@ -402,6 +485,54 @@ cap; if a use cannot get a bit, the compiler falls back to emitting a plain
 `record_type_` (always-record) for it rather than a once variant. This fallback
 is also what makes the FB `RecordOnce` → `ldvar_cached_fbRecordOnce_` patch
 conditional on `emittedRecordTypeOnce` (§4.3).
+
+#### 2A.2.3 Promises: where their once-flags would live, and why the scheme is off
+
+Record-once inside a **promise** cannot reuse the machinery above, and the reason
+is a lifetime argument that follows directly from §2A.2.1.
+
+The frame-local `fired` array is cheap and reentrancy-safe precisely *because* it
+lives exactly as long as one `evalRirCode` activation. But **a promise may outlive
+the frame that created it**: it is built in one activation and forced later,
+possibly after its creator has returned. So a promise's once-flags cannot live in
+the creating frame — by the time the promise runs, that storage is gone.
+
+**The only place with the right lifetime is the environment in which the promise
+was created.** That environment is kept alive by the promise itself, so flags
+stored there survive exactly as long as they may be needed. The designed scheme
+was therefore:
+
+- extend `ENVSXP` with a `uint64_t recordTypeOnceBitmap` (hence
+  `RECORD_TYPE_ONCE_PROMISE_MAX_IIDX = 64` — one word, unlike the 512-entry frame
+  array), zeroed on function entry;
+- gate promise-context once-records on it via
+  `RECORD_TYPE_ONCE_PROMISE_GATE(env->u.envsxp.recordTypeOnceBitmap, raw)` /
+  `RECORD_TYPE_ONCE_PROMISE_BITMAP_TEST`;
+- with a dedicated opcode `record_type_once_promise_`, a load variant
+  `ldvar_cached_envRecordFB_`, a per-function counter
+  `Function::recordTypeOncePromiseCount`, and the FB strategy
+  `ForceBehaviorKind::EnvBit`.
+
+**Current status: disabled, on both counts.**
+
+1. **Deliberate scoping.** Promises are left unoptimized for now, to avoid
+   juggling too many interacting mechanisms at once. Reads in a promise context
+   fall through to the normal always-record path (the promise-specific branch in
+   `emitRecordTypeForVar` is commented out, and `ldvar_cached_envRecordFB_` /
+   `record_type_once_promise_` are not emitted).
+2. **The `ENVSXP` field is not present in this configuration.** Verified
+   2026-07-27: `struct envsxp_struct` in the `custom-r` submodule (clean at
+   `6483fffd7e`) still has only `frame`, `enclos`, `hashtab`. Every reference to
+   `envsxp_struct::recordTypeOnceBitmap` in this repo is a **comment**, so the
+   scheme could not run as configured even if re-enabled in the compiler.
+
+What survives in the tree are the vestiges — the `RECORD_TYPE_ONCE_PROMISE_*`
+macros in `bc/BC_inc.h`, `Function::recordTypeOncePromiseCount`,
+`ForceBehaviorKind::EnvBit` (which currently falls through to `Always`), and
+commented-out `DEF_INSTR`/handler/emission sites. They document the intended
+design; none of them is live. Note also that re-enabling it means re-landing an R
+submodule change, which is a heavier lift than a compiler-only change and carries
+its own measurement confound (a wider `SEXPREC` for *every* environment).
 
 ### 2A.3 No-record: def-site subsumption, and its data path
 
@@ -1016,6 +1147,119 @@ force-behavior is trivially `value`. That is why No-Record uses are assigned
 `ForceBehaviorKind::FBValue`/`Infer` and their FB recording is also elided: there
 is genuinely nothing to observe.
 
+### 3.0 Why post-dominance is required for *precision*, not only soundness
+
+It is tempting to read the post-dominance condition as merely guarding against
+"the source slot might not have been written." It does more than that: **without
+it, copying the source's feedback actively makes the feedback worse.** This is the
+argument that separates the two mechanisms, and it is worth stating in full
+because it is what makes "record-once" necessary rather than a mere optimization.
+
+Take a use that is *dominated* by its def but does **not** post-dominate it — the
+def is unconditional, the use sits inside a branch:
+
+```r
+f <- function(s) {
+    x <- getValueOfType(s)        # [S1]  the def — always executes
+    if (s == "int") {
+        x            + 1L         # [S2]  the use — executes only sometimes
+    }
+}
+```
+
+Compare recording at both sites against copying `S1`'s feedback into `S2`, over
+four call histories:
+
+| calls | record at both (`S1`, `S2` separately) | copy `S1` → `S2` |
+|---|---|---|
+| `f("string")` | `S1={string}`; `S2` never ran → no speculation | `S2={string}` → no speculation |
+| `f("string"); f("int")` | `S1={string,int}`, **`S2={int}`** → specialise on `int` ✅ | `S2={string,int}` → **no speculation** ❌ |
+| `f("int")` | `S1={int}`, `S2={int}` → specialise ✅ | `S2={int}` → specialise ✅ |
+| `f("float")` | `S1={float}`; `S2` never ran → no speculation | `S2={float}` → **speculates on a type `S2` never sees** ❌ |
+
+The middle row is the crux. `S2` only ever observes `int`, because it only runs
+when `s == "int"`. Its own slot is therefore *more precise* than the def's, which
+accumulates every type `x` ever held. Copying the def's slot **over-approximates**
+— it hands the JIT a two-type set where a one-type set was available, losing the
+specialisation. The last row is worse still: the copy invents feedback for a site
+that never executed, inviting speculation that can only deoptimise.
+
+So the general picture:
+
+- **Post-dominance holds** ⇒ def and use execute together on the same value ⇒
+  their slots are *identical* ⇒ eliding the use and copying is **lossless**. This
+  is the No-Record case (§2A.3).
+- **Post-dominance fails** ⇒ the use's observations are a **subset** of the def's
+  ⇒ copying is a precision loss, and the use must observe for itself. This is
+  exactly why such sites fall through to RecordAlways or RecordOnce (§2A.1.1
+  rules 3–5) instead of being elided.
+
+**And why not copy at run time instead?** Because the def's slot is *already
+merged*: each execution's observation is folded into the same `ObservedValues` the
+moment it happens, so by the time the use runs there is no per-execution value
+left to copy — only the accumulated union. A runtime copy would therefore
+reproduce the same over-approximation as the compile-time one. Making it work
+would require keeping the def's per-execution information *separate* from its
+accumulated slot, which is strictly more machinery than simply re-observing at the
+use. Hence: straight-line non-post-dominating uses record unconditionally, and
+uses inside loops use the per-site once-flag (§2A.2) — one observation per
+activation, of the use's *own* value.
+
+**Caveat — the approximation ignores errors.** `postDominates` accounts for
+`return`/`break`/`next` (via the closed-return and loop-exit counters) but **not**
+for R conditions: any call between def and use may `stop()` and unwind, so a path
+exists that reaches the def and never reaches the use. Strictly, that path breaks
+post-dominance. The effect is confined to precision rather than soundness — an
+erroring run contributes an observation to the def that the use never saw, i.e.
+the same over-approximation as above — but it means the post-dominance test is
+"quasi post-dominance", and worth remembering when reasoning about the guarantee.
+
+### 3.1 The guarded-fast-path problem (`v[[i]]`): a real postdominance failure
+
+The dominance condition is broken by a construct that looks innocuous at source
+level. **`v[[i]]` (and `v[i]`) does not compile to straight-line code** — it
+compiles to a *guarded two-branch* form: a fast path taken when `v` is not an
+object, in which the index is evaluated **eagerly**, and a slow path in which the
+index is wrapped in a **promise** for the generic dispatch. Disassembly of
+`function(x, i) x[i]` (verified 2026-07-27):
+
+```
+ 0  ldvar_cached_ x{0}      ; the target
+ 9  [ … ] Type#0
+14  dup_
+15  is_ NonObject           ; the guard
+20  [ _ ] Test#0
+25  brfalse_ 1
+30  br_ 2
+1:  35  mk_promise_ 0       ; SLOW path — index becomes a promise
+    40  br_ 3
+2:  45  ldvar_cached_ i{1}  ; FAST path — index loaded eagerly …
+    54  [ … ] Type#2        ; … and recorded HERE only
+3:  59  extract1_1_
+```
+
+The consequence for subsumption: the record of `i` at offset 54 executes **only
+on the fast path**. So in
+
+```r
+v[[i]]; i          # can the second `i` copy from the first?
+```
+
+the answer is **no** — the first `i`'s slot is not guaranteed to have been
+populated when the second use runs, because control may have taken the promise
+branch. It fails post-dominance, and treating it as a source would mean copying
+from a slot that was never written.
+
+**This was overlooked initially and the correction is expensive.** Because
+guarded fast paths appear throughout real bytecode, tightening this rule removes
+the second-use optimization at a great many sites — the author reports the
+regression "shows up almost everywhere." It is the single largest known cost of
+making the analysis sound.
+
+**Open direction:** a **run-time patch** for this case, to recover the lost
+subsumptions without giving up soundness (rather than a purely static fix). In
+progress; see §6.
+
 ---
 
 ## 4. The force-behavior (FB) dimension
@@ -1138,23 +1382,51 @@ precision problem.
 
 ## 5. Alternatives considered and rejected
 
-- **`std::bitset` as the `fired` storage.** Rejected: cannot zero only a partial
-  (used) prefix cheaply, and the bounds-checked `.test()`/`.set()` add overhead.
-  A `reinterpret_cast<std::bitset<512>&>` *view* over the `bool[512]` was briefly
-  used for documentation clarity on TEST/SET/CLEAR, but with unchecked
-  `operator[]` (not `.test()`/`.set()`), and ultimately the plain array + macros
-  were kept.
-- **Bit-packed `fired` (1 bit/flag).** Rejected in favor of `bool` per flag:
-  direct byte indexing avoids shift/mask on the hot gate; 512 bytes of frame is
-  cheap.
-- **`alloca` vs. fixed-size `bool[512]`.** Both implemented. `alloca` sizes to
-  exactly `recordTypeOnceCount` (no wasted frame, no fixed cap) but is a dynamic
-  stack allocation. Fixed-size is a static frame slot (predictable, no `alloca`
-  call) at the cost of up to 512 bytes of frame even when fewer are used.
-  Measurements showed the fixed-size form *modestly* faster on spectralnorm /
-  mandelbrot — **but within codegen-artifact noise** (§8), so this is not a
-  confident result. `alloca` was kept. **Unresolved**; revisit only with a
-  measurement method that clears the noise floor (§8).
+### 5.1 Where to keep the once-flags — the full design space
+
+This is the most-explored corner of the design. The options, in the order they
+were considered, with why each was kept or dropped:
+
+- **Patch the bytecode itself (no flags at all).** The most direct encoding of
+  "record once" would be to rewrite the `record_type_once_` opcode into a no-op
+  after it fires, so the check disappears entirely. **Rejected:** bytecode is
+  shared across all invocations of a function, so self-modification would force a
+  **per-invocation copy of the whole bytecode** — far more expensive than the
+  check it removes. *This rejection is the reason the separate `fired` flags exist
+  at all.*
+- **`alloca`'d array, sized per Code object** — **what this branch does**
+  (§2A.2). Sized to exactly `recordTypeOnceCount`, no fixed cap, zeroed by
+  `memset`. Verdict: works, but **does not scale** — the frame cost grows with the
+  number of once-slots, and it is a dynamic stack allocation on every activation.
+  It can be byte-packed (as now) or bit-packed.
+- **Fixed-size `bool[512]` frame array.** A static frame slot: predictable, no
+  `alloca` call, zeroing only the used prefix. Costs up to 512 bytes of frame even
+  when few slots are used. Measured *modestly* faster on spectralnorm / mandelbrot
+  — **but inside the codegen-artifact noise floor** (§8), so not a confident
+  result. **Unresolved**; revisit only with a measurement method that clears that
+  floor.
+- **One global vector.** A single process-wide vector plus an RAII guard to
+  save/restore per activation. Drawbacks: an **offset must be computed on every
+  access**, and it needs the same packing decision as the frame array. If
+  bit-packed, each access additionally needs word-index arithmetic plus shift/mask
+  to reach the exact bit — meaningful work on the hot gate.
+- **Bit-packing (1 bit/flag), in any of the above.** Rejected in favour of one
+  `bool` per flag: direct byte indexing avoids the shift/mask entirely, and the
+  memory saved is irrelevant at these sizes.
+- **`std::bitset` as the storage.** Rejected: it cannot cheaply zero only the
+  *used* prefix, and the bounds-checked `.test()`/`.set()` add overhead. A
+  `reinterpret_cast<std::bitset<512>&>` *view* over the `bool[512]` was briefly
+  used purely for readability on TEST/SET/CLEAR — with unchecked `operator[]`,
+  never `.test()`/`.set()` — and ultimately the plain array plus macros were kept.
+
+**Preferred endpoint for the non-promise case (not yet implemented here):** keep a
+**single `uint64_t`**, zeroed at function entry. 64 bits appears to be ample for
+the once-slots that actually matter — the parameters read inside a loop — and it
+collapses the whole storage question to one register-sized word with no
+allocation, no offset computation, and a trivial zeroing step. This supersedes the
+`alloca`-vs-fixed-array question above rather than resolving it.
+### 5.2 Other alternatives considered
+
 - **`record_type_dep_` / `record_type_once_dep_` as separate opcodes.** Merged
   this session into `record_type_leaf_notify_[once_]`. They had become
   byte-identical handlers once `notifyRelatedNodes` was made generic over
@@ -1175,9 +1447,11 @@ precision problem.
   was provably dead for its callers and cost a load+branch on the hottest record
   opcode.
 - **Env-bitmap force-behavior (`ForceBehaviorKind::EnvBit` +
-  `record_type_once_promise_` + `ldvar_cached_envRecordFB_`).** Disabled/removed
-  from the emitted set. Promise-context free variables record FB via the normal
-  path instead.
+  `record_type_once_promise_` + `ldvar_cached_envRecordFB_`).** Not rejected on
+  merit — it is the *promise* half of the once-flag design, currently disabled and
+  awaiting an `ENVSXP` change. See **§2A.2.3** for the lifetime argument that makes
+  the environment the only viable storage, and for what remains in the tree.
+  Promise-context free variables record FB via the normal path meanwhile.
 - **`RECORDLESS_EXPTREE_ENABLED` compile-time guard.** Removed this session; the
   expression-tree optimization is now unconditionally compiled in. (A separate
   `RECORDLESS_EXPTREE_DEBUG` print toggle remains.) The dead non-recordless
@@ -1211,6 +1485,29 @@ precision problem.
     need a different formulation.
   A reviewer will push here; the honest answer is "the principle is general, this
   instantiation exploits Ř's tree-structured single-pass compiler."
+- **Cross-invocation record-once for `immutable` captures.** Today record-once is
+  strictly *per activation* (§2A.2.1) and only fires inside loops (§2A.1.1). But a
+  capture in the `immutable` set is by construction stable for the whole lifetime
+  of the inner closure — so its type could be observed **once across all
+  executions**, not once per call, and even outside a loop. That needs a flag with
+  a lifetime longer than the frame, i.e. the same environment-resident storage the
+  promise scheme needs (§2A.2.3) — which is why the two are blocked on the same
+  `ENVSXP` change. Currently `immutable` is computed and propagated but never
+  consulted; this is the intended payoff. Start with parameters (the narrow, clearly
+  safe case) and widen to any controlled-immutable variable, then to inner
+  functions.
+- **Run-time patch for the guarded-fast-path case (§3.1) — in progress.** The
+  `v[[i]]`/`v[i]` two-branch compilation means an index load is recorded on only
+  one path, which statically kills second-use subsumption and costs performance
+  broadly. The intended remedy is a *run-time* mechanism that recovers those
+  subsumptions while staying sound, rather than a static relaxation. This is the
+  largest open performance item.
+- **Promises are deliberately left unoptimized** — a scoping decision, plus the
+  fact that the storage it needs (a `uint64` on `ENVSXP`) is not present in the
+  current `custom-r` submodule. Full rationale, the designed scheme, and the exact
+  vestiges left in the tree are in **§2A.2.3**. Re-enabling requires an R submodule
+  change, so it is a heavier lift than a compiler-only feature. Revisit once the
+  guarded-fast-path work (§3.1) settles.
 - **Are the *auxiliary flags* inferable for all 14 elided operators?**
   Losslessness for inner-node elision (§1, mechanism 3) requires the result to be
   exactly reconstructible from the operands over the **whole** `ObservedValues` —
@@ -1402,6 +1699,27 @@ these benchmarks, not of the change: in a deliberately `[`-heavy loop
 visible — inner nodes are exactly 5,000 (the `+` alone) with the 5,000 `v[i]`
 results now counted as RecordAlways leaves, where previously both would have been
 inner nodes.
+
+**Speedups reported by the author (wall-clock; read with §8's noise caveat).**
+These come from the author's own running notes rather than from a controlled
+re-measurement, and they are wall-clock rather than instruction counts, so treat
+the absolute values as indicative:
+
+- **nbody_naive:** after the eligibility tightening of §2A.1.2, the speedup fell
+  to **~12%**. The cause is diagnostic rather than incidental: the benchmark
+  begins by assigning a batch of **global** vectors and then reads them
+  repeatedly, and globals are exactly what the control requirement excludes (we
+  cannot know whether reflection rebound them). A **rewritten variant that keeps
+  those variables in scope** — so they become locals the function creates —
+  recovers **~20%**. This is the cleanest available illustration that the
+  optimization's reach is bounded by *scoping discipline in the benchmark*, not
+  only by the analysis.
+- **The `v[[i]]` guarded-fast-path tightening (§3.1)** cost a further broad
+  regression, visible across many benchmarks rather than isolated to one, because
+  guarded fast paths are pervasive in the emitted bytecode.
+
+Both figures postdate the soundness work and predate the planned run-time patch
+for §3.1, so they should be re-taken once that lands.
 
 **Bottom line for the paper:** lead with the *recording-elision counts* (sound,
 reproducible) and the *observation-cost* argument; treat wall-clock deltas on
