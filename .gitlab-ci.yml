@@ -112,7 +112,7 @@ benchmark_llvm:
   variables:
     GIT_STRATEGY: none
   tags:
-    - benchmarks2
+    - benchmarks
   script:
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - cp /tmp/memory.data $CI_PROJECT_DIR/
@@ -132,7 +132,7 @@ benchmark_gnur:
     refs:
       - schedules
   tags:
-    - benchmarks2
+    - benchmarks
   script:
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
     - cp /tmp/memory.data $CI_PROJECT_DIR/
@@ -151,7 +151,7 @@ benchmark_fastr:
     refs:
       - schedules
   tags:
-    - benchmarks2
+    - benchmarks
   script:
     - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
     - cp /tmp/memory.data $CI_PROJECT_DIR/
