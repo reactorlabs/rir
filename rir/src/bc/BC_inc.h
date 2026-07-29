@@ -561,6 +561,9 @@ class BC {
         }
     }
 
+  public:
+    // Mnemonic for an opcode. Public so debug/disassembly output can name an
+    // instruction without going through printOpcode (which appends padding).
     static char const* name(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush)                                      \
@@ -572,6 +575,7 @@ class BC {
         }
     }
 
+  private:
     static unsigned pushCount(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush)                                      \

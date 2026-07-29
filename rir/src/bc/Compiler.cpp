@@ -78,6 +78,12 @@ class CompilerContext {
     const DefUseAnalysis& defUseAnalysis() const {
         return code.top()->defUseAnalysis;
     }
+    // Expression-tree levels of the Code object being compiled. Scoped to that
+    // Code object (see CodeContext::slotsStack), so a promise body can never
+    // register into the level its caller left open.
+    std::stack<std::vector<uint32_t>>& slotsStack() {
+        return code.top()->slotsStack;
+    }
 
     FunctionWriter& fun;
     Preserve& preserve;
@@ -113,7 +119,13 @@ class CompilerContext {
     // // Used to gate the post-subassign record_type_ emission.
     // std::unordered_set<SEXP> readVars_;
 
-    std::stack<std::vector<uint32_t>> slotsStack;
+    // Expression-tree child->parent edges accumulated over the whole function.
+    // Function-wide on purpose, unlike CodeContext::slotsStack: slot indices
+    // are allocated from the single per-function typeFeedbackBuilder, so they
+    // are unique across every Code object and cannot collide here, and the
+    // consumer (setTypeFeedbackParents) needs the union of all edges because
+    // there is one TypeFeedback per function. Scoping slotsStack per Code
+    // object is what guarantees no edge in here ever crosses a Code boundary.
     std::map<uint32_t, uint32_t> parents;
     std::vector<Code*> allCodes_;
 #ifdef RIR_RECORD_STATS
@@ -240,6 +252,12 @@ class CompilerContext {
     }
 
     Code* pop() {
+        // compileExpr's LANGSXP case is the sole owner of the push/pop balance,
+        // and it is balanced within a single call, so every level opened while
+        // compiling this Code object has been closed again. A non-empty stack
+        // here means some node's children escaped their Code object.
+        assert(code.top()->slotsStack.empty() &&
+               "expression-tree levels leaked across a Code boundary");
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
         res->recordTypeOnceCount =
             (uint16_t)code.top()->recordTypeOnceBitmapSize;
@@ -265,25 +283,29 @@ class CompilerContext {
         // Always pop the inner vector for this LANGSXP. If it still has
         // unhandled child slots (non-profiled call — no recordType(true) was
         // emitted), propagate them to the enclosing level so they are not
-        // orphaned and don't corrupt the stack.
-        auto slots = std::move(slotsStack.top());
-        slotsStack.pop();
-        if (!slots.empty() && !slotsStack.empty()) {
+        // orphaned and don't corrupt the stack. At the outermost level of a
+        // Code object there is no enclosing level and they are dropped — which
+        // is the correct behaviour at a Code boundary: they belong to no node
+        // above.
+        auto& stack = slotsStack();
+        auto slots = std::move(stack.top());
+        stack.pop();
+        if (!slots.empty() && !stack.empty()) {
             for (auto s : slots)
-                slotsStack.top().push_back(s);
+                stack.top().push_back(s);
         }
     }
 
-    void pushNewNodeForSlots() { slotsStack.push(std::vector<uint32_t>()); }
+    void pushNewNodeForSlots() { slotsStack().push(std::vector<uint32_t>()); }
 
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
 #ifdef RECORDLESS_EXPTREE_DEBUG
-        std::cerr << "\n slotsStack size: " << slotsStack.size() << "\n";
+        std::cerr << "\n slotsStack size: " << slotsStack().size() << "\n";
         std::cerr << "\n registerSlot " << slotIdx << "\n";
 #endif
 
-        auto& currentSlots = slotsStack.top();
+        auto& currentSlots = slotsStack().top();
         if (!isParent) {
             currentSlots.push_back(slotIdx);
         } else {
@@ -391,20 +413,59 @@ class CompilerContext {
     // Degrades to recordTypeUntracked() outside the analysis's domain, so that
     // such records both always record (matching the baseline, which has no
     // suppression anywhere) and are attributed to the "untracked" stats row:
-    //   * !mainBodyCtx_ — compiling default formal arguments. Variable loads
-    //     there are already untracked (emitRecordTypeForVar bails before
-    //     classifyUse), so a tracked inner node would have untracked operands
-    //     that hold no parent pointer and therefore could never un-suppress it.
+    //   * isInPromise() — recordless does not optimize inside promises, so a
+    //     promise body records plainly throughout. emitRecordTypeForVar bails
+    //     for the same reason, which is what also suppresses
+    //     NoRecord/RecordOnce classification there. Note this guard is only
+    //     about *not optimizing* promises: it is no longer what keeps a
+    //     promise's leaves out of the enclosing expression's tree, since
+    //     slotsStack now lives on the CodeContext. Relaxing the guard
+    //     re-enables promise-local trees without reintroducing cross-Code
+    //     parenting.
+    //   * !mainBodyCtx_ — compiling default formal arguments (themselves
+    //     promises, but reached before any main-body context exists).
     //   * leaf optimization off — likewise, all leaves are untracked.
-    // Without this, a default-arg expression such as `a + f(1)` would suppress
-    // the `+` on the strength of the tracked call result while `a` (untracked,
-    // possibly an object) had no way to revoke the elision.
+    // In each case the operand leaves are untracked and hold no parent pointer,
+    // so a tracked inner node above them could never be un-suppressed: e.g.
+    // `a + f(1)` would otherwise suppress the `+` on the strength of the
+    // tracked call result while `a` (untracked, possibly an object) had no way
+    // to revoke the elision.
     BC recordTypeTracked(bool isParent) {
-        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
+        if (isInPromise() || !mainBodyCtx_ ||
+            !Compiler::isRecordlessLeafEnabled())
             return recordTypeUntracked();
         auto slotIdx = typeFeedbackBuilder.addType();
-        if (!slotsStack.empty())
+        if (!slotsStack().empty())
             registerSlot(slotIdx, isParent);
+        return BC::recordType(slotIdx);
+    }
+
+    // An opaque value result: a call return, `[`, `[[`, a `for` result, or a
+    // replacement-function result. Its type is NOT a function of its operands,
+    // so it is a recording *leaf*, never an elidable inner node — same as
+    // recordTypeTracked(false) in that respect.
+    //
+    // The difference is that it **consumes** the operands pending at this
+    // level. What flows to the enclosing expression is this result, not the
+    // operands, and the operands say nothing about this result's type. Leaving
+    // them pending would let popNodeForSlots propagate them upward and have the
+    // *enclosing* inner node adopt them — e.g. in `v[i] + 1`, `v` and `i` would
+    // become children of the `+` even though its only operand is `v[i]`. They
+    // would then be specialized to record_type_leaf_notify_ and pay the
+    // notification check on every execution, and an object-valued `v` would
+    // un-suppress the `+` redundantly (the `[` result records the object and
+    // notifies anyway). Consuming them leaves them parent-less, so they stay
+    // plain record_type_.
+    BC recordTypeOpaqueResult() {
+        if (isInPromise() || !mainBodyCtx_ ||
+            !Compiler::isRecordlessLeafEnabled())
+            return recordTypeUntracked();
+        auto slotIdx = typeFeedbackBuilder.addType();
+        if (!slotsStack().empty()) {
+            auto& currentSlots = slotsStack().top();
+            currentSlots.clear(); // operands consumed by this operation
+            currentSlots.push_back(slotIdx); // this result flows onward
+        }
         return BC::recordType(slotIdx);
     }
 
@@ -433,7 +494,7 @@ class CompilerContext {
     // Mirrors the registerSlot(false) that recordType() does for the non-leaf-
     // opt path.
     void registerLeafSlot(uint32_t slotIdx) {
-        if (!slotsStack.empty())
+        if (!slotsStack().empty())
             registerSlot(slotIdx, /*isParent=*/false);
     }
 
@@ -706,7 +767,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
             // `for` result is an opaque value that may be assigned (a def
             // candidate) and may feed an enclosing inner node, so it is a
             // tracked always-record leaf, not untracked.
-            cs << ctx.recordTypeTracked(/*isParent=*/false);
+            cs << ctx.recordTypeOpaqueResult();
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -1396,7 +1457,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     // Replacement-function result is an opaque value that may
                     // be assigned (a def candidate) and may feed an enclosing
                     // inner node, so it is a tracked always-record leaf.
-                    cs << ctx.recordTypeTracked(/*isParent=*/false);
+                    cs << ctx.recordTypeOpaqueResult();
                 }
             }
 
@@ -1615,7 +1676,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 //
                 // `[[` extracts an element whose type varies outright
                 // (e.g. list(3,"hello")[[i]]), so it was never inferable.
-                cs << ctx.recordTypeTracked(/*isParent=*/false);
+                cs << ctx.recordTypeOpaqueResult();
             }
             cs << BC::visible();
         } else {
@@ -2404,7 +2465,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         // Call result is an opaque value (type not inferable from operands)
         // that may be assigned (a def candidate) and may feed an enclosing
         // inner node, so it is a tracked always-record leaf, not untracked.
-        cs << ctx.recordTypeTracked(/*isParent=*/false);
+        cs << ctx.recordTypeOpaqueResult();
 }
 
 // Classify the use of `name` and emit the appropriate recording instruction.
@@ -2413,14 +2474,15 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 // emitted, don't patch.
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                                  SEXP name, unsigned ldvarCachedPos) {
-    // if (ctx.isInPromise()) {
-    //     cs << ctx.recordTypeUntracked();
-    //     return;
-    // }
-
-    // No main body context yet (compiling default formal arguments): skip
-    // promise-specific optimizations and fall through to the normal path.
-    if (!ctx.mainBodyCtx_) {
+    // Recordless does not optimize inside promises: every record emitted in a
+    // promise body is a plain untracked record_type_. Returning here (rather
+    // than relying on the degradation in recordTypeTracked) is what suppresses
+    // the *classification* as well — otherwise classifyUse could still make
+    // this use NoRecord (no opcode at all) or RecordOnce, both of which are
+    // optimizations. Covers default formal arguments too, which are compiled as
+    // promises; the !mainBodyCtx_ test additionally catches them before any
+    // main-body context exists.
+    if (ctx.isInPromise() || !ctx.mainBodyCtx_) {
         cs << ctx.recordTypeUntracked();
         return;
     }

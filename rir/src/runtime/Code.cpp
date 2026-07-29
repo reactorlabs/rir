@@ -278,7 +278,13 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     out << " ] Test#";
                     out << bc.immediate.i << "\n";
                 } else {
-                    bool isOnce = bc.bc == Opcode::record_type_once_;
+                    // Every _once_ variant packs (iidx << 16 | slotIdx) into
+                    // the immediate, so the slot index must be unpacked for all
+                    // of them — missing one here would index types() with the
+                    // packed value (an out-of-bounds read).
+                    bool isOnce =
+                        bc.bc == Opcode::record_type_once_ ||
+                        bc.bc == Opcode::record_type_leaf_notify_once_;
                     bool isOncePromise =
                         false; // record_type_once_promise_ disabled
                     uint32_t slot =
@@ -291,6 +297,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                                                    ? " ] TypeOncePromise#"
                                                    : " ] Type#";
                     out << tag << slot;
+                    // Which record_type_* specialization the post-pass chose.
+                    out << " (" << BC::name(bc.bc) << ")";
                     if (isOnce || isOncePromise)
                         out << " (bit: #"
                             << RECORD_TYPE_ONCE_IIDX(bc.immediate.i) << ")";

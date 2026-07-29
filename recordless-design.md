@@ -1047,6 +1047,34 @@ slot):
   non-type-preserving calls, where no `recordTypeTracked(true)` was emitted for
   the result: the operands would otherwise be orphaned (and the stack would go
   out of balance).
+- **`recordTypeOpaqueResult()` — the third role.** An opaque value result (call
+  return, `[`, `[[`, `for`, replacement-fn) is a recording *leaf*, so it must not
+  adopt its operands as children (that would make it an inner node and hence
+  suppressible). But it must still **consume** them: it clears the pending list
+  and pushes only itself.
+
+  Without that, the operands stay pending, `popNodeForSlots` lifts them to the
+  enclosing level, and the *enclosing* inner node adopts them. In `v[i] + 1`,
+  `v` and `i` would become children of the `+` even though its only operand is
+  `v[i]` — so they would be specialized to `record_type_leaf_notify_` and pay the
+  notification check on every execution, and an object-valued `v` would
+  **un-suppress the `+` needlessly** (the `[` result observes the object and
+  notifies anyway). Consuming leaves them parent-less, hence plain
+  `record_type_`:
+
+  ```
+  v      → Type#0 (record_type_)                        ← no parent
+  i      → Type#2 (record_type_)                        ← no parent
+  v[i]   → Type#3 (record_type_leaf_notify_)  -> Type#4 ← the real operand
+  add_   → Type#4 (record_type_inner_)  suppressed
+  ```
+
+  The second effect is the more valuable one. Measured 2026-07-27, the stray
+  inner-node *recordings* that spurious notifications were causing disappeared
+  entirely: `nbody_naive_inner`, `binarytrees_naive` and `spectralnorm` each went
+  from exactly 1 recorded inner node to **0**, i.e. 100% inner-node elision.
+  Recording counts otherwise barely move, since this changes *which* opcode a
+  leaf uses, not *whether* it records.
 - `registerLeafSlot(slot)` is the `isParent=false` shorthand, used for
   RecordAlways/RecordOnce leaves *and* for NoRecord elided uses (so the elided
   use still gets a parent, §2A.3).
@@ -1672,11 +1700,11 @@ tree (i.e. **after** the `[` demotion and the default-arg degradation):
 
 | benchmark (inner iters) | should | recorded | skipped | skip% |
 |---|---|---|---|---|
-| mandelbrot ×300 (areWeFast) | 79,025,387 | 18,961,792 | 60,063,595 | **76.0%** |
-| nbody_naive_inner ×3000 | 6,790,298 | 3,232,083 | 3,558,215 | **52.4%** |
-| fasta_naive_2 ×20000 | 9,093,124 | 4,818,981 | 4,274,143 | **47.0%** |
-| spectralnorm ×3 | 1,466 | 923 | 543 | **37.0%** |
-| binarytrees_naive ×3 | 164,292 | 126,712 | 37,580 | **22.9%** |
+| mandelbrot ×300 (areWeFast) | 79,025,387 | 18,962,092 | 60,063,295 | **76.0%** |
+| nbody_naive_inner ×3000 | 6,790,298 | 3,232,082 | 3,558,216 | **52.4%** |
+| fasta_naive_2 ×20000 | 9,093,124 | 4,820,319 | 4,272,805 | **47.0%** |
+| spectralnorm ×3 | 1,466 | 922 | 544 | **37.1%** |
+| binarytrees_naive ×3 | 164,292 | 147,343 | 16,949 | **10.3%** |
 
 Shape of the wins, by benchmark character:
 
@@ -1688,6 +1716,28 @@ Shape of the wins, by benchmark character:
   statically value/inferable), `record_once` ~76% gated.
 - **binarytrees_naive / storage** — much lower leaf skip% (~0–4%): object- and
   allocation-heavy code where most leaves are genuine RecordAlways.
+
+**Measured cost of excluding promises (§2A.2.3).** Making every record inside a
+promise body plain/untracked is the single most expensive scope restriction so
+far, and its cost is *very* unevenly distributed — it lands entirely on code that
+puts real expressions inside lazy arguments:
+
+| benchmark | skip% before | skip% after | inner-node elisions lost |
+|---|---|---|---|
+| binarytrees_naive ×3 | 22.9% | **10.3%** | 20,632 |
+| fasta_naive_2 ×20000 | 47.0% | 47.0% | 1,338 |
+| mandelbrot ×300 | 76.0% | 76.0% | 300 |
+| nbody_naive_inner ×3000 | 52.4% | 52.4% | 0 |
+| spectralnorm ×3 | 37.0% | 37.0% | 0 |
+
+`binarytrees_naive` loses **more than half its skip rate** (22.9% → 10.3%): it is
+recursive with lazy arguments, so a large share of its expression nodes live in
+promise bodies and were previously elidable inner nodes. Everywhere else the
+change is pure re-attribution — records move from the `leaves` row into
+`untracked` with no elision lost, and `TOTAL should` is unchanged in every case.
+This quantifies what re-enabling the promise scheme would be worth, and says the
+payoff is concentrated in recursive/lazy-argument-heavy code rather than spread
+evenly.
 
 **Effect of the two most recent changes: negligible on these programs.** Every
 `TOTAL should` above is *identical* to the pre-change measurement, and each

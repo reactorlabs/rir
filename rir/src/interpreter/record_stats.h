@@ -51,11 +51,13 @@ struct RecordSkipStats {
     uint64_t innerNotifySkip = 0; // record_type_inner_notify_  — suppressed
     // Untracked records — every execution of a plain record_type_ opcode that
     // came from recordTypeUntracked() (sites excluded from the optimization:
-    // loop bounds, super-assign target, default args, statement results, [[
+    // loop bounds, super-assign target read-for-update, default args
     // ...). Always record, never skipped. RecordAlways leaves that the
     // post-pass also left as plain record_type_ are NOT counted here — they go
     // to leafAlwaysRec, recovered at runtime via
-    // TypeFeedback::isStatsUntracked.
+    // TypeFeedback::isStatsUntracked. Note `[`/`[[` are NOT untracked: they are
+    // recordTypeOpaqueResult() leaves (see leafAlwaysRec above), since they can
+    // be defs, NoRecord sources, or notify a parent.
     uint64_t untrackedRec = 0;
     // Force-behavior (FB) recording — a separate feedback dimension
     // (ObservedValues::stateBeforeLastForce) piggybacked on the same slots but
