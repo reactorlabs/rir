@@ -517,6 +517,7 @@ class CompilerContext {
         typeFeedbackBuilder.setTypeDep(slot, (uint32_t)sourceSlot);
         // Register the elided use as a leaf in the expression tree so it gets a
         // parent pointer: the source's propagation enables that parent.
+
         registerLeafSlot(slot);
         return slot;
     }
