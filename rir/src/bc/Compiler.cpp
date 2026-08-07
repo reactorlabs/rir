@@ -948,8 +948,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (voidContext)
             cs << BC::pop();
-        else if (Compiler::profile)
-            cs << ctx.recordTypeTracked(true);
+        else if (Compiler::profile) {
+            // `:` is excluded from the inner-node optimization: its result type
+            // and length come from the operand values, not their types, so it
+            // is an opaque result leaf like `[` and call results.
+            if (fun == symbol::Colon)
+                cs << ctx.recordTypeOpaqueResult();
+            else
+                cs << ctx.recordTypeTracked(true);
+        }
 
         return true;
     }

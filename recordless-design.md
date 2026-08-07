@@ -745,17 +745,19 @@ would invalidate the inference) is what the object-gate + one-shot latch buy.
 ### 2B.3 What actually becomes an inner node
 
 There is exactly **one** `recordTypeTracked(true)` call site in the compiler
-(verified 2026-07-27, `Compiler.cpp:876`) — that call is the *only* way a slot
-becomes an inner node, and it covers a fixed list of **14 binary operators**:
+(verified 2026-08-07, `Compiler.cpp:952`) — that call is the *only* way a slot
+becomes an inner node, and it covers a fixed list of **13 binary operators**:
 
-> `Add Sub Mul Div Idiv Mod Pow` (arithmetic), `Eq Ne Lt Le Gt Ge` (comparison),
-> `Colon`.
+> `Add Sub Mul Div Idiv Mod Pow` (arithmetic), `Eq Ne Lt Le Gt Ge` (comparison).
 
-Everything else — general calls, `[`, `[[`, replacement functions, `for`
-elements — is a **leaf**, not an inner node.
+Everything else — general calls, `[`, `[[`, `:`, replacement functions, `for`
+elements — is a **leaf**, not an inner node. `:` is the one case that looks like
+it belongs: it shares the binary-operator bytecode shape (two operands then a
+dedicated opcode) and lives in the same `compileSpecialCall` block, but is
+explicitly routed to `recordTypeOpaqueResult()` instead — see below.
 
 **The inference rule is per-operator, and not "result type = operand type."**
-Three distinct shapes among the 14:
+Two distinct shapes among the 13:
 
 - **Arithmetic** (`+ - * / %/% %% ^`): result SEXPTYPE follows the usual
   promotion rules over the operands, and result length is
@@ -764,9 +766,6 @@ Three distinct shapes among the 14:
 - **Comparison** (`== != < <= > >=`): result is **always `LGLSXP`**, independent
   of operand types; length again `max(operand lengths)`. Inferable, but by a
   constant rule, not by propagation.
-- **`Colon`** (`m:n`): produces a *sequence* — so a vector result from scalar
-  operands (`notScalar` flips relative to the operands). Inferable in principle
-  from the semantics of `:`, but not by copying operand flags.
 
 **Why `[` is *not* an inner node (it was, until it was demoted).** From
 2026-06-03 (`b659827e`, "optimnize for extract1") until recently, `[` (`Bracket`)
@@ -799,6 +798,10 @@ bytecode: `x[i]`'s result slot is now `isLeaf: 1, should not record: 0` and its
 operands carry no parent pointer, while `x + y` still yields a suppressed inner
 node.
 
+`:` is excluded for the same reason: its result type and length come from the
+operand *values*, not their types, so the feedback cannot be reconstructed. It
+is emitted as `recordTypeOpaqueResult()`.
+
 The general lesson, worth carrying into any future inner-node candidate: **the
 inference obligation is over the whole `ObservedValues`, not just the SEXPTYPE.**
 An operator qualifies only if *every* recorded field — type set, `notScalar`,
@@ -808,8 +811,8 @@ An operator qualifies only if *every* recorded field — type set, `notScalar`,
 
 `[[` (`DoubleBracket`) extracts an *element* whose type genuinely varies (e.g.
 `list(3, "hello")[[i]]`), so it was never a candidate. The colon *operand casts*
-(`colonCastLhs/Rhs`) are internal and untracked — distinct from the `Colon`
-result node in the list above.
+(`colonCastLhs/Rhs`) emitted by `compileSimpleFor` are internal and untracked —
+distinct from the `Colon` result node.
 
 ### 2B.4 Problems specific to inner nodes
 
