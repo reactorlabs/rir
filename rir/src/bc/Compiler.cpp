@@ -321,24 +321,33 @@ class CompilerContext {
     }
 
     void setTypeFeedbackParents(TypeFeedback& tf) {
-        // Set up parent pointers in TypeFeedback.
-        for (auto& kv : parents) {
-            tf.types(kv.first).parent = &tf.types(kv.second);
-        }
+        // An edge is only usable if the parent's index fits the biased 16-bit
+        // parentPlus1. An unrepresentable edge must be DROPPED, not truncated:
+        // the parent would otherwise be classified as an inner node (starts
+        // clean, records only once a child marks it dirty) with no child able
+        // to reach it, so it would never record at all. Dropping the edge
+        // leaves it a leaf, which always records — conservative and sound.
+        // Needs >65534 type slots in one function, so effectively unreachable.
+        std::map<uint32_t, uint32_t> usable;
+        for (const auto& kv : parents)
+            if (ObservedValues::canReference(kv.second))
+                usable.emplace(kv.first, kv.second);
+
+        for (const auto& kv : usable)
+            tf.types(kv.first).setParent(kv.second);
 
         // parentSlots: slots that have children (not leaves).
         // childSlots:  slots that have a parent (not roots).
+        // Leaf-vs-inner is not stored on the slot — it is carried by the
+        // opcode the loop below patches in. An inner node starts clean and
+        // records nothing until a child signals a changed value; the first
+        // execution always signals, since a child's initial signature is 0 and
+        // 0 never compares equal.
         std::set<uint32_t> parentSlots;
         std::set<uint32_t> childSlots;
-        for (const auto& kv : parents) {
+        for (const auto& kv : usable) {
             childSlots.insert(kv.first);
             parentSlots.insert(kv.second);
-        }
-
-        for (size_t i = 0; i < tf.types_size(); i++) {
-            auto& slot = tf.types(i);
-            slot.isLeaf = parentSlots.find(i) == parentSlots.end();
-            slot.shouldNotRecord = !slot.isLeaf;
         }
 
         // Source slots: those a NoRecord (elided) use depends on AND whose

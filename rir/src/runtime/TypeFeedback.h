@@ -219,18 +219,53 @@ struct ObservedValues {
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-    // byte 1: expression-tree flags (5 bits spare)
-    uint8_t isLeaf : 1;
-    uint8_t shouldNotRecord : 1;
-    uint8_t hasPropagatedNotification : 1;
+    // byte 1: expression-tree state. The struct is #pragma pack(1), so
+    // anything that does not fit here grows every slot by a whole byte.
+    //
+    // Runtime gate for inner nodes: set by a child whose per-execution
+    // signature changed, cleared by this node when it records. See
+    // updateSignature / markRelatedDirty. There is no stored "isLeaf" /
+    // "shouldNotRecord": nothing reads them at runtime (PirType::merge, the
+    // JIT-side consumer, never looks at them) and the opcode already says
+    // whether a slot is a leaf or an elidable inner node.
+    uint8_t dirty : 1;
+    // Signature of the value seen on the PREVIOUS execution:
+    // 0            = none yet, or a value that must always re-record
+    //                (object / has attributes / S4 / unencodable type)
+    // otherwise    = ((TYPEOF + 1) << 1) | isScalar
+    // The encoding needs 6 bits (largest SEXPTYPE here is EXTERNALSXP = 26,
+    // saturating at type 30); the 7th is free headroom, enough to also admit
+    // dim-only values by folding a hasDim bit in.
+    uint8_t lastSig : 7;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
-    // bytes 5-7: implicit padding to 8-byte align the pointer below
-    ObservedValues* parent;
-    // total: 1+1+3+3(pad)+8 = 16 bytes
+    // Expression-tree parent, as an index into the owning TypeFeedback's
+    // types_ rather than a pointer: every edge is within one array, and 2
+    // bytes instead of 8 is the difference between a 13- and a 7-byte slot.
+    // BIASED BY ONE so that an all-zero slot means "no parent" — the array is
+    // memcpy'd from a vector and there is a memset in the constructor, so a
+    // 0xFFFF sentinel would be one forgotten initializer away from silently
+    // designating slot 0 as everyone's parent.
+    uint16_t parentPlus1;
+    // total (packed): 1+1+3+2 = 7 bytes
+
+    bool hasParent() const { return parentPlus1 != 0; }
+    uint32_t parentSlot() const {
+        assert(hasParent());
+        return (uint32_t)parentPlus1 - 1;
+    }
+    // Callers must check canReference() first; an unrepresentable edge has to
+    // be dropped at compile time (see setTypeFeedbackParents), not truncated.
+    void setParent(uint32_t idx) {
+        assert(canReference(idx));
+        parentPlus1 = (uint16_t)(idx + 1);
+    }
+    static bool canReference(uint32_t idx) { return idx + 1 <= UINT16_MAX; }
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
+        // All-zero is the correct initial state throughout: no types seen, no
+        // signature, not dirty, and (thanks to the bias) no parent.
         memset(this, 0, sizeof(ObservedValues));
     }
 
@@ -272,25 +307,69 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 
+    // Per-execution signature of `e`, compared against the previous
+    // execution's. Returns true when it differs, i.e. when a parent that
+    // consumes this value may produce a different result than last time and so
+    // must re-record.
+    //
+    // Unlike the accumulated flags above, this describes THIS execution only.
+    // That is the whole point: the accumulated state is monotone and stops
+    // changing while the live value keeps varying underneath it, so watching it
+    // would miss e.g. the first `(int, int)` pair after both operands have
+    // already been seen as int and double separately.
+    //
+    // Soundness rests on the result's ObservedValues being a function of its
+    // operands' signatures — never on what that function is. Operators for
+    // which it is not (`:` and `[`, whose result length comes from operand
+    // *values*) are not inner nodes at all.
+    //
+    // Objects, values with attributes, and S4 are collapsed to signature 0,
+    // which never compares equal, so they re-record unconditionally. That keeps
+    // the signature to the type plus one scalar bit: with no attributes in play
+    // the result's attribs/notFastVecelt/object are all 0, and its notScalar is
+    // a function of the operands' (R_binary's n = max(n1, n2)). Carrying the
+    // real length instead would be needed only to model copyMostAttrib's
+    // length gate, which the attribute case sidesteps entirely.
+    __attribute__((always_inline)) bool updateSignature(SEXP e) {
+        uint8_t sig = 0;
+        auto type = TYPEOF(e);
+        if (type != S4SXP && type <= 30 && !Rf_isObject(e) &&
+            ATTRIB(e) == R_NilValue)
+            sig = (uint8_t)(((type + 1) << 1) | (XLENGTH(e) == 1 ? 1 : 0));
+        bool changed = sig == 0 || sig != lastSig;
+        lastSig = sig;
+        return changed;
+    }
+
     // Used by record_type_ / record_type_once_: plain leaves (no parent, no
-    // dependents). Leaves are never suppressed (the compiler sets
-    // shouldNotRecord = !isLeaf, and the post-pass routes every suppressible
-    // inner node to inner_/inner_notify_), so there is no skip check and no
-    // notify — just doRecord.
+    // dependents). Leaves are never suppressed (the post-pass routes every
+    // suppressible inner node to inner_/inner_notify_), so there is no skip
+    // check, no signature to maintain, and nothing to notify — just doRecord.
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
   public:
-    // Inner-node record: skip if suppressed, else doRecord. Any un-suppression
-    // of related nodes (own parent and/or NoRecord dependents' parents) is done
-    // by the caller (a TypeFeedback record_type_inner_notify method) via
-    // notifyRelatedNodes — a standalone inner node (record_type_inner_) skips
-    // that entirely, as it has no parent and no dependents to notify.
-    __attribute__((__always_inline__)) void recordInner(SEXP e) {
-        if (shouldNotRecord)
-            return;
+    // Inner-node record: skip unless a child marked us dirty this execution,
+    // else doRecord and re-arm. Not dirty means every operand had the same
+    // signature as last execution, so the result is the one we already
+    // absorbed — and since the accumulated state only ever grows, having
+    // absorbed it once is permanent.
+    //
+    // Returns whether it actually recorded, so the caller knows whether to
+    // propagate onward: a suppressed node's own value did not change either, so
+    // it has nothing to tell its parent.
+    __attribute__((__always_inline__)) bool recordInner(SEXP e) {
+        if (!dirty)
+            return false;
+        dirty = false;
         doRecord(e);
+        return true;
     }
 };
+
+// The struct is #pragma pack(1) and the feedback array is both sized and
+// serialized by sizeof(ObservedValues), so any field that does not fit in the
+// existing bits costs a byte per slot and changes the on-disk layout.
+static_assert(sizeof(ObservedValues) == 7, "ObservedValues must stay 7 bytes");
 
 enum class Opcode : uint8_t;
 
@@ -503,53 +582,60 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         types(idx).recordInner(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
-    // Inner node that must un-suppress a related node when it sees an object:
-    // a non-root inner node un-suppresses its own parent; a root inner node
-    // that is a NoRecord source un-suppresses its dependents' parents. (A
-    // non-root inner node is never a source — it always has a parent, so it is
-    // never a variable's def.) notifyRelatedNodes handles own-parent AND any
-    // dependents together, once — the branch that does not apply is a no-op —
-    // so one opcode covers both.
+    // Inner node that must mark a related node dirty when its own value
+    // changes: a non-root inner node marks its own parent; a root inner node
+    // that is a NoRecord source marks its dependents' parents. (A non-root
+    // inner node is never a source — it always has a parent, so it is never a
+    // variable's def.) markRelatedDirty handles own-parent AND any dependents
+    // together — the branch that does not apply is a no-op — so one opcode
+    // covers both.
     __attribute__((noinline)) void record_type_inner_notify(uint32_t idx,
                                                             const SEXP e) {
         ObservedValues& slot = types(idx);
-        slot.recordInner(e); // skipIfSuppressed + doRecord
-        notifyRelatedNodes(slot, slot.object,
-                           idx); // own parent and/or dependents' parents
+        // Only propagate when we actually recorded: if we were skipped, our
+        // operands were unchanged, so our own value is unchanged too and there
+        // is nothing for our parent to re-record.
+        if (slot.recordInner(e) && slot.updateSignature(e))
+            markRelatedDirty(slot, idx);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
-    // A simple leaf that must un-suppress related nodes when it sees an object:
-    // either a *source* (a variable with forward NoRecord uses — propagate to
-    // its dependents' parents), a leaf *with a parent* (un-suppress its own
-    // parent), or both. notifyRelatedNodes handles own-parent AND dependents
-    // together, once — so a single opcode family covers all cases; the usually-
-    // empty branch is a no-op. (This is why there is no separate _dep_ opcode:
-    // a source with no parent is just this handler with an empty parent slot.)
+    // A simple leaf that must mark related nodes dirty when its per-execution
+    // signature changes: either a *source* (a variable with forward NoRecord
+    // uses — propagate to its dependents' parents), a leaf *with a parent*
+    // (mark its own parent), or both. markRelatedDirty handles own-parent AND
+    // dependents together — so a single opcode family covers all cases; the
+    // usually-empty branch is a no-op. (This is why there is no separate _dep_
+    // opcode: a source with no parent is just this handler with an empty
+    // parent slot.)
     // A simple leaf that is neither stays plain record_type_ /
     // record_type_once_ and pays nothing.
     __attribute__((noinline)) void record_type_leaf_notify(uint32_t idx,
                                                            const SEXP e) {
         ObservedValues& slot = types(idx);
-        slot.doRecord(e); // doRecord only (notify handled below)
-        notifyRelatedNodes(slot, slot.object,
-                           idx); // own parent + any dependents
+        slot.doRecord(e); // leaves always record
+        if (slot.updateSignature(e))
+            markRelatedDirty(slot, idx); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
 
-    // Un-suppress the slot's own parent (if any) and the parents of all its
-    // NoRecord dependents — done together, once. record_type_ and
-    // record_type_once_ (plain simple leaves) don't call this, so they never
-    // pay the parent-check / dependent-list lookup.
+    // Mark everything that consumes this slot's value as needing to re-record:
+    // its own parent (if any) and the parents of all its NoRecord dependents
+    // (which emit no opcode of their own, so they cannot signal for
+    // themselves). Called only when the signature actually changed.
+    //
+    // Unlike the object-gated un-suppression this replaces, it is neither
+    // one-shot nor permanent: it fires on every signature change and the
+    // consumer clears it after recording. An object operand keeps signature 0,
+    // which always compares unequal, so its parent records on every execution
+    // for as long as the object keeps showing up — and stops once it does not,
+    // which the permanent latch could never do.
     __attribute__((__always_inline__)) void
-    notifyRelatedNodes(ObservedValues& slot, bool isObject, uint32_t idx) {
-        if (!isObject || slot.hasPropagatedNotification)
-            return; // only an object un-suppresses, and only once
-        slot.hasPropagatedNotification = true;
-        if (slot.parent) // this node's own parent (leaf-with-parent case)
-            slot.parent->shouldNotRecord = false;
+    markRelatedDirty(ObservedValues& slot, uint32_t idx) {
+        if (slot.hasParent()) // this node's own parent (leaf-with-parent case)
+            types_[slot.parentSlot()].dirty = true;
         for (uint32_t d : noRecordSourceToDeps_[idx]) { // dependents' parents
-            if (ObservedValues* p = types_[d].parent)
-                p->shouldNotRecord = false;
+            if (types_[d].hasParent())
+                types_[types_[d].parentSlot()].dirty = true;
         }
     }
 

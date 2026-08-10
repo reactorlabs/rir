@@ -2544,7 +2544,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_inner_) {
             Immediate idx = readImmediate();
             advanceImmediate();
-            REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
+            REC_STAT(if (!typeFeedback->types(idx).dirty)
                          g_recStats.innerSkip++;
                      else g_recStats.innerRec++);
             typeFeedback->record_type_inner(idx, ostack_top());
@@ -2554,7 +2554,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_inner_notify_) {
             Immediate idx = readImmediate();
             advanceImmediate();
-            REC_STAT(if (typeFeedback->types(idx).shouldNotRecord)
+            REC_STAT(if (!typeFeedback->types(idx).dirty)
                          g_recStats.innerNotifySkip++;
                      else g_recStats.innerNotifyRec++);
             typeFeedback->record_type_inner_notify(idx, ostack_top());

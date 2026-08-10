@@ -227,13 +227,15 @@ void ObservedValues::print(std::ostream& out) const {
     }
 
     out << " @ " << this;
-    if (parent) {
-        out << " -> " << parent;
+    if (hasParent()) {
+        out << " -> Type#" << parentSlot();
     }
     // Cast the uint8_t bitfields to int: streaming a uint8_t (= unsigned char)
     // prints a character glyph (0x00/0x01 control chars), not the digits 0/1.
-    out << ", isLeaf: " << (int)isLeaf
-        << ", should not record: " << (int)shouldNotRecord;
+    // leaf-vs-inner is not stored — the opcode name printed alongside this
+    // already says which it is. `dirty` is whether an inner node will record
+    // on its next execution.
+    out << ", dirty: " << (int)dirty;
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }
