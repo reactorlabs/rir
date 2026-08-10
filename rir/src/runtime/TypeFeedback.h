@@ -230,12 +230,10 @@ struct ObservedValues {
     // whether a slot is a leaf or an elidable inner node.
     uint8_t dirty : 1;
     // Signature of the value seen on the PREVIOUS execution:
-    // 0            = none yet, or a value that must always re-record
-    //                (object / has attributes / S4 / unencodable type)
-    // otherwise    = ((TYPEOF + 1) << 1) | isScalar
-    // The encoding needs 6 bits (largest SEXPTYPE here is EXTERNALSXP = 26,
-    // saturating at type 30); the 7th is free headroom, enough to also admit
-    // dim-only values by folding a hasDim bit in.
+    // 0         = none yet, or a value that must always re-record (object /
+    //             attributes beyond a lone `dim` / S4 / length 0 / big type)
+    // otherwise = 1 + TYPEOF*4 + isScalar*2 + hasDim
+    // Saturates the field exactly: type 30 gives 1 + 120 + 2 + 1 = 124 <= 127.
     uint8_t lastSig : 7;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
@@ -333,9 +331,26 @@ struct ObservedValues {
     __attribute__((always_inline)) bool updateSignature(SEXP e) {
         uint8_t sig = 0;
         auto type = TYPEOF(e);
-        if (type != S4SXP && type <= 30 && !Rf_isObject(e) &&
-            ATTRIB(e) == R_NilValue)
-            sig = (uint8_t)(((type + 1) << 1) | (XLENGTH(e) == 1 ? 1 : 0));
+        // S4 first: XLENGTH is not meaningful on it (doRecord guards the same
+        // way). fastVeceltOk admits exactly the values whose only possible
+        // attribute is `dim` — the widest class for which the result's
+        // ObservedValues is still a function of the operands' signatures.
+        // copyMostAttrib skips names/dim/dimnames, so a dim-only operand has
+        // nothing for its length-gated path to copy, leaving only R's explicit
+        // dim propagation, which is decidable from hasDim + isScalar.
+        if (type != S4SXP && type <= 30 && fastVeceltOk(e)) {
+            auto len = XLENGTH(e);
+            // Length 0 must stay a sentinel: R's dim selection branches on
+            // `ny != 0` / `nx == 0`, and one isScalar bit cannot separate
+            // length 0 from length many (matrix + integer(0) drops dim, while
+            // matrix + 1:4 keeps it).
+            if (len != 0) {
+                // Given fastVeceltOk, a non-empty ATTRIB can only be `dim`, so
+                // this doubles as hasDim without an extra test.
+                sig = (uint8_t)(1 + type * 4 + (len == 1 ? 2 : 0) +
+                                (ATTRIB(e) != R_NilValue ? 1 : 0));
+            }
+        }
         bool changed = sig == 0 || sig != lastSig;
         lastSig = sig;
         return changed;
