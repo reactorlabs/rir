@@ -230,20 +230,20 @@ struct ObservedValues {
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
     // byte 5: signature of the value seen on the PREVIOUS execution.
-    // 0         = none yet, or a value that must always re-record (object /
-    //             attributes beyond a lone `dim` / S4 / length 0)
-    // otherwise = 1 + TYPEOF*4 + isScalar*2 + hasDim
+    // See signatureOf() below for the layout; SigAlwaysDirty (0) means "no
+    // signature", i.e. a value that must re-record on every execution.
     //
     // A whole byte rather than 7 bits packed alongside `dirty`, which costs
     // one byte per slot and buys three things:
     //  * no read-modify-write. Sharing a byte with `dirty` meant every update
     //    had to load, mask, or and store just to preserve a neighbouring bit.
     //  * no range guard. TYPEOF reads a 5-bit field (TYPE_BITS), so it is
-    //    always 0..31, and 4*(31+1) = 128 fits a byte — every representable
-    //    type encodes injectively. At 7 bits the encoding saturated at type
-    //    30, so the admission test needed an extra `type <= 30` comparison to
-    //    stop a wrapped signature aliasing a different type's, which would
-    //    make two distinct types compare equal and wrongly suppress a parent.
+    //    always 0..31, and the widest encoding fits a byte — every
+    //    representable type encodes injectively. At 7 bits the encoding
+    //    saturated, so the admission test needed an extra `type <= 30`
+    //    comparison to stop a wrapped signature aliasing a different type's,
+    //    which would make two distinct types compare equal and so wrongly
+    //    suppress a parent.
     //  * sizeof becomes 8, so `types_[idx]` is a scaled load rather than a
     //    multiply by 7 — and that indexing happens on every record, plus
     //    again per parent/dependent in markRelatedDirty.
@@ -257,6 +257,32 @@ struct ObservedValues {
     // away from silently designating slot 0 as everyone's parent.
     uint16_t parentPlus1;
     // total (packed): 1+1+3+1+2 = 8 bytes
+
+    // ---- lastSig encoding ------------------------------------------------
+    // Low bits first:
+    //   bit 0     hasDim
+    //   bit 1     isScalar
+    //   bits 2..  TYPEOF + 1   (biased, so a real signature is never 0)
+    static constexpr uint8_t SigHasDim = 1 << 0;
+    static constexpr uint8_t SigScalar = 1 << 1;
+    static constexpr unsigned SigTypeShift = 2;
+
+    // "No signature": a value that cannot be summarised — an object, richer
+    // attributes than a lone `dim`, S4, or length 0. Reserved as 0, which the
+    // bias above keeps out of the real range. Compared specially so that it
+    // never matches even itself: two consecutive unsummarisable values must
+    // both re-record, since nothing says they were alike.
+    static constexpr uint8_t SigAlwaysDirty = 0;
+
+    // TYPEOF reads a 5-bit field, so type <= 31 and the widest encoding is
+    // ((31 + 1) << 2) | 3 = 131 — inside the byte, hence no range guard.
+    // always_inline, not merely constexpr: this sits in the record hot path
+    // and must fold into its caller, never become a call.
+    __attribute__((always_inline)) static constexpr uint8_t
+    signatureOf(int type, bool isScalar, bool hasDim) {
+        return (uint8_t)(((type + 1) << SigTypeShift) |
+                         (isScalar ? SigScalar : 0) | (hasDim ? SigHasDim : 0));
+    }
 
     bool hasParent() const { return parentPlus1 != 0; }
     uint32_t parentSlot() const {
@@ -396,16 +422,12 @@ struct ObservedValues {
         // in that set because R's dim selection branches on `ny != 0` /
         // `nx == 0`, and one isScalar bit cannot separate length 0 from length
         // many (matrix + integer(0) drops dim, matrix + 1:4 keeps it).
-        // No range guard on `type`: TYPEOF reads a 5-bit field, so it is
-        // always 0..31, and the largest encoding 4*(31+1) = 128 fits the byte.
-        uint8_t sig = 0;
-        if (!isS4 && fastOk && len != 0) {
-            // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
-            // doubles as hasDim.
-            sig = (uint8_t)(1 + type * 4 + (len == 1 ? 2 : 0) +
-                            (hasAttr ? 1 : 0));
-        }
-        const bool changed = sig == 0 || sig != lastSig;
+        // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
+        // doubles as hasDim.
+        const uint8_t sig = (!isS4 && fastOk && len != 0)
+                                ? signatureOf(type, len == 1, hasAttr)
+                                : SigAlwaysDirty;
+        const bool changed = sig == SigAlwaysDirty || sig != lastSig;
         lastSig = sig;
         return changed;
     }
