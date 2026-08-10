@@ -390,6 +390,51 @@ struct ObservedValues {
             !isObj &&
             (!hasAttr || (TAG(attr) == R_DimSymbol && CDR(attr) == R_NilValue));
 
+        // fastOk admits exactly the values whose only possible attribute is
+        // `dim` — the widest class for which the result stays a function of
+        // the operands' signatures. copyMostAttrib skips names/dim/dimnames,
+        // so a dim-only operand has nothing for its length-gated path to copy,
+        // leaving only R's explicit dim propagation, decidable from
+        // hasDim + isScalar. Everything else (objects, richer attributes, S4,
+        // length 0) collapses to the sentinel, which never compares equal and
+        // so re-records unconditionally. Length 0 must be in that set because
+        // R's dim selection branches on `ny != 0` / `nx == 0`, and one
+        // isScalar bit cannot separate length 0 from length many
+        // (matrix + integer(0) drops dim, matrix + 1:4 keeps it).
+        //
+        // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
+        // doubles as hasDim.
+        const uint8_t sig = (!isS4 && fastOk && len != 0)
+                                ? signatureOf(type, len == 1, hasAttr)
+                                : SigAlwaysDirty;
+
+        // Hoisted above the updates: an unchanged non-sentinel signature makes
+        // every one of them provably redundant, so the whole record collapses
+        // to the loads above plus this compare. In steady state that leaves
+        // the slot untouched — no read-modify-write on the flag byte, no seen
+        // scan, no store — which matters as much for not dirtying the cache
+        // line as for the instructions saved.
+        //
+        // Why each update is a no-op when sig == lastSig != SigAlwaysDirty:
+        //   seen           same sig => same type, already added by the first
+        //                  execution at this signature (and if numTypes had
+        //                  saturated, the scan would not add it either)
+        //   notScalar      same type => same isS4; same isScalar bit =>
+        //                  same (len != 1)
+        //   object         non-sentinel => fastOk => isObj false
+        //   attribs        object unchanged, and the hasDim bit pins hasAttr
+        //   notFastVecelt  non-sentinel => fastOk => contributes false
+        // The induction bottoms out because the first execution at a given
+        // signature always takes the full path below.
+        //
+        // The sentinel is excluded deliberately: it says the value could not
+        // be summarised, so nothing can be concluded from two consecutive
+        // occurrences of it.
+        if (sig != SigAlwaysDirty && sig == lastSig) {
+            REC_HOOK(recording::recordSCChanged(0));
+            return false;
+        }
+
         // Same updates as doRecord, from the locals above. See the comment
         // there for why `attribs` also folds in `object`.
         notScalar = notScalar || (!isS4 && len != 1);
@@ -407,29 +452,14 @@ struct ObservedValues {
                 seen[numTypes++] = (uint8_t)type;
         }
 
-        // Before the signature, so this hook still observes exactly the fields
-        // it did when the signature lived in a separate function.
+        // Before lastSig is written, so this hook still observes exactly the
+        // fields it did when the signature lived in a separate function.
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
 
-        // fastOk admits exactly the values whose only possible attribute is
-        // `dim` — the widest class for which the result stays a function of
-        // the operands' signatures. copyMostAttrib skips names/dim/dimnames,
-        // so a dim-only operand has nothing for its length-gated path to copy,
-        // leaving only R's explicit dim propagation, decidable from
-        // hasDim + isScalar. Everything else (objects, richer attributes, S4,
-        // length 0, unencodable types) collapses to signature 0, which never
-        // compares equal and so re-records unconditionally. Length 0 must be
-        // in that set because R's dim selection branches on `ny != 0` /
-        // `nx == 0`, and one isScalar bit cannot separate length 0 from length
-        // many (matrix + integer(0) drops dim, matrix + 1:4 keeps it).
-        // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
-        // doubles as hasDim.
-        const uint8_t sig = (!isS4 && fastOk && len != 0)
-                                ? signatureOf(type, len == 1, hasAttr)
-                                : SigAlwaysDirty;
-        const bool changed = sig == SigAlwaysDirty || sig != lastSig;
         lastSig = sig;
-        return changed;
+        // Reaching here means the early-out did not fire, i.e. the signature
+        // is the sentinel or differs from last time — either way, changed.
+        return true;
     }
 
     // Used by record_type_ / record_type_once_: plain leaves (no parent, no
