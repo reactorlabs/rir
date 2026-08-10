@@ -2547,7 +2547,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             REC_STAT(if (!typeFeedback->types(idx).dirty)
                          g_recStats.innerSkip++;
                      else g_recStats.innerRec++);
-            typeFeedback->record_type_inner(idx, ostack_top());
+            // Test dirty here rather than inside the (noinline) handler: an
+            // inner node is suppressed on the overwhelming majority of its
+            // executions, so calling out just to load a byte, test a bit and
+            // return is pure overhead. Only the recording itself stays out of
+            // line, keeping this dispatch loop small.
+            if (typeFeedback->types(idx).dirty)
+                typeFeedback->record_type_inner(idx, ostack_top());
             NEXT();
         }
 
@@ -2557,7 +2563,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             REC_STAT(if (!typeFeedback->types(idx).dirty)
                          g_recStats.innerNotifySkip++;
                      else g_recStats.innerNotifyRec++);
-            typeFeedback->record_type_inner_notify(idx, ostack_top());
+            // Same as record_type_inner_: skip the call when suppressed.
+            if (typeFeedback->types(idx).dirty)
+                typeFeedback->record_type_inner_notify(idx, ostack_top());
             NEXT();
         }
 
