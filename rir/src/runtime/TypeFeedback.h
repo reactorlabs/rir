@@ -273,7 +273,13 @@ struct ObservedValues {
 
   private:
     // Shared core: update all observed-value flags from e.
-
+    //
+    // Used by the paths that need no signature: plain leaves (record_type_ /
+    // record_type_once_, which have no parent and no NoRecord dependents) and
+    // standalone inner nodes (record_type_inner_). They pay nothing for the
+    // signature machinery. The paths that DO need it call doRecordAndSign
+    // instead, which is a separate function rather than a flag on this one so
+    // that neither path carries the other's work.
     __attribute__((always_inline)) void doRecord(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
@@ -305,53 +311,88 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 
-    // Per-execution signature of `e`, compared against the previous
-    // execution's. Returns true when it differs, i.e. when a parent that
-    // consumes this value may produce a different result than last time and so
-    // must re-record.
+    // doRecord + the per-execution signature, from a SINGLE inspection of e.
+    // Returns true when the signature differs from the previous execution's,
+    // i.e. when a parent consuming this value may now produce a different
+    // result and must re-record.
     //
-    // Unlike the accumulated flags above, this describes THIS execution only.
-    // That is the whole point: the accumulated state is monotone and stops
-    // changing while the live value keeps varying underneath it, so watching it
-    // would miss e.g. the first `(int, int)` pair after both operands have
-    // already been seen as int and double separately.
+    // This deliberately duplicates doRecord's flag updates rather than calling
+    // it. Doing both from one pass is the entire point: e is read once, into
+    // locals, before any store. Two reasons that matters and cannot be left to
+    // the compiler:
+    //  * XLENGTH is not a field access. It expands to XLENGTH_EX, an
+    //    out-of-line call reaching ALTREP_LENGTH, and is not marked pure, so
+    //    two of them cannot be folded — the pre-merge code really did emit two
+    //    ALTREP_LENGTH calls per record here.
+    //  * the flag stores are uint8_t, i.e. char-typed, so they may alias e as
+    //    far as the compiler knows; any field of e read after a store has to
+    //    be re-loaded.
+    //
+    // Unlike the accumulated flags, the signature describes THIS execution
+    // only. That is what makes it work: the accumulated state is monotone and
+    // stops changing while the live value keeps varying underneath it, so
+    // watching it would miss e.g. the first `(int, int)` pair after both
+    // operands have already been seen as int and double separately.
     //
     // Soundness rests on the result's ObservedValues being a function of its
     // operands' signatures — never on what that function is. Operators for
     // which it is not (`:` and `[`, whose result length comes from operand
     // *values*) are not inner nodes at all.
-    //
-    // Objects, values with attributes, and S4 are collapsed to signature 0,
-    // which never compares equal, so they re-record unconditionally. That keeps
-    // the signature to the type plus one scalar bit: with no attributes in play
-    // the result's attribs/notFastVecelt/object are all 0, and its notScalar is
-    // a function of the operands' (R_binary's n = max(n1, n2)). Carrying the
-    // real length instead would be needed only to model copyMostAttrib's
-    // length gate, which the attribute case sidesteps entirely.
-    __attribute__((always_inline)) bool updateSignature(SEXP e) {
-        uint8_t sig = 0;
-        auto type = TYPEOF(e);
-        // S4 first: XLENGTH is not meaningful on it (doRecord guards the same
-        // way). fastVeceltOk admits exactly the values whose only possible
-        // attribute is `dim` — the widest class for which the result's
-        // ObservedValues is still a function of the operands' signatures.
-        // copyMostAttrib skips names/dim/dimnames, so a dim-only operand has
-        // nothing for its length-gated path to copy, leaving only R's explicit
-        // dim propagation, which is decidable from hasDim + isScalar.
-        if (type != S4SXP && type <= 30 && fastVeceltOk(e)) {
-            auto len = XLENGTH(e);
-            // Length 0 must stay a sentinel: R's dim selection branches on
-            // `ny != 0` / `nx == 0`, and one isScalar bit cannot separate
-            // length 0 from length many (matrix + integer(0) drops dim, while
-            // matrix + 1:4 keeps it).
-            if (len != 0) {
-                // Given fastVeceltOk, a non-empty ATTRIB can only be `dim`, so
-                // this doubles as hasDim without an extra test.
-                sig = (uint8_t)(1 + type * 4 + (len == 1 ? 2 : 0) +
-                                (ATTRIB(e) != R_NilValue ? 1 : 0));
+    __attribute__((always_inline)) bool doRecordAndSign(SEXP e) {
+        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
+
+        const int type = TYPEOF(e);
+        const SEXP attr = ATTRIB(e);
+        const bool isObj = Rf_isObject(e);
+        const bool isS4 = type == S4SXP;
+        const bool hasAttr = attr != R_NilValue;
+        // XLENGTH is meaningless on S4, and must not be called on it.
+        const R_xlen_t len = isS4 ? 1 : XLENGTH(e);
+        // fastVeceltOk(e), spelled out so it reuses the loads above.
+        const bool fastOk =
+            !isObj &&
+            (!hasAttr || (TAG(attr) == R_DimSymbol && CDR(attr) == R_NilValue));
+
+        // Same updates as doRecord, from the locals above. See the comment
+        // there for why `attribs` also folds in `object`.
+        notScalar = notScalar || (!isS4 && len != 1);
+        object = object || isObj;
+        attribs = attribs || object || hasAttr;
+        notFastVecelt = notFastVecelt || !fastOk;
+
+        if (numTypes < MaxTypes) {
+            int i = 0;
+            for (; i < numTypes; ++i) {
+                if (seen[i] == (uint8_t)type)
+                    break;
             }
+            if (i == numTypes)
+                seen[numTypes++] = (uint8_t)type;
         }
-        bool changed = sig == 0 || sig != lastSig;
+
+        // Before the signature, so this hook still observes exactly the fields
+        // it did when the signature lived in a separate function.
+        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
+
+        // fastOk admits exactly the values whose only possible attribute is
+        // `dim` — the widest class for which the result stays a function of
+        // the operands' signatures. copyMostAttrib skips names/dim/dimnames,
+        // so a dim-only operand has nothing for its length-gated path to copy,
+        // leaving only R's explicit dim propagation, decidable from
+        // hasDim + isScalar. Everything else (objects, richer attributes, S4,
+        // length 0, unencodable types) collapses to signature 0, which never
+        // compares equal and so re-records unconditionally. Length 0 must be
+        // in that set because R's dim selection branches on `ny != 0` /
+        // `nx == 0`, and one isScalar bit cannot separate length 0 from length
+        // many (matrix + integer(0) drops dim, matrix + 1:4 keeps it).
+        uint8_t sig = 0;
+        if (!isS4 && type <= 30 && fastOk && len != 0) {
+            // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
+            // doubles as hasDim.
+            sig = (uint8_t)(1 + type * 4 + (len == 1 ? 2 : 0) +
+                            (hasAttr ? 1 : 0));
+        }
+        const bool changed = sig == 0 || sig != lastSig;
         lastSig = sig;
         return changed;
     }
@@ -364,20 +405,29 @@ struct ObservedValues {
 
   public:
     // Inner-node record: skip unless a child marked us dirty this execution,
-    // else doRecord and re-arm. Not dirty means every operand had the same
+    // else record and re-arm. Not dirty means every operand had the same
     // signature as last execution, so the result is the one we already
     // absorbed — and since the accumulated state only ever grows, having
     // absorbed it once is permanent.
     //
-    // Returns whether it actually recorded, so the caller knows whether to
-    // propagate onward: a suppressed node's own value did not change either, so
-    // it has nothing to tell its parent.
-    __attribute__((__always_inline__)) bool recordInner(SEXP e) {
+    // For a standalone inner node (record_type_inner_): a root with no
+    // NoRecord dependents, so nothing to notify and no signature to keep.
+    __attribute__((__always_inline__)) void recordInner(SEXP e) {
+        if (!dirty)
+            return;
+        dirty = false;
+        doRecord(e);
+    }
+
+    // Same, for an inner node that must propagate (record_type_inner_notify_).
+    // Returns true only if it both recorded AND its signature changed: a
+    // suppressed node's own value did not change either, so it has nothing to
+    // tell its parent.
+    __attribute__((__always_inline__)) bool recordInnerAndSign(SEXP e) {
         if (!dirty)
             return false;
         dirty = false;
-        doRecord(e);
-        return true;
+        return doRecordAndSign(e);
     }
 };
 
@@ -607,10 +657,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     __attribute__((noinline)) void record_type_inner_notify(uint32_t idx,
                                                             const SEXP e) {
         ObservedValues& slot = types(idx);
-        // Only propagate when we actually recorded: if we were skipped, our
-        // operands were unchanged, so our own value is unchanged too and there
-        // is nothing for our parent to re-record.
-        if (slot.recordInner(e) && slot.updateSignature(e))
+        // Only propagate when we actually recorded and our own value changed:
+        // if we were skipped, our operands were unchanged, so our value is
+        // unchanged too and there is nothing for our parent to re-record.
+        if (slot.recordInnerAndSign(e))
             markRelatedDirty(slot, idx);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
@@ -627,8 +677,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     __attribute__((noinline)) void record_type_leaf_notify(uint32_t idx,
                                                            const SEXP e) {
         ObservedValues& slot = types(idx);
-        slot.doRecord(e); // leaves always record
-        if (slot.updateSignature(e))
+        // Leaves always record; the signature comes from the same pass.
+        if (slot.doRecordAndSign(e))
             markRelatedDirty(slot, idx); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
