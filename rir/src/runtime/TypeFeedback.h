@@ -219,33 +219,44 @@ struct ObservedValues {
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-    // byte 1: expression-tree state. The struct is #pragma pack(1), so
-    // anything that does not fit here grows every slot by a whole byte.
-    //
-    // Runtime gate for inner nodes: set by a child whose per-execution
-    // signature changed, cleared by this node when it records. See
-    // updateSignature / markRelatedDirty. There is no stored "isLeaf" /
+    // byte 1: runtime gate for inner nodes. Set by a child whose
+    // per-execution signature changed, cleared by this node when it records.
+    // See doRecordAndSign / markRelatedDirty. There is no stored "isLeaf" /
     // "shouldNotRecord": nothing reads them at runtime (PirType::merge, the
     // JIT-side consumer, never looks at them) and the opcode already says
     // whether a slot is a leaf or an elidable inner node.
+    // 7 bits spare.
     uint8_t dirty : 1;
-    // Signature of the value seen on the PREVIOUS execution:
-    // 0         = none yet, or a value that must always re-record (object /
-    //             attributes beyond a lone `dim` / S4 / length 0 / big type)
-    // otherwise = 1 + TYPEOF*4 + isScalar*2 + hasDim
-    // Saturates the field exactly: type 30 gives 1 + 120 + 2 + 1 = 124 <= 127.
-    uint8_t lastSig : 7;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
+    // byte 5: signature of the value seen on the PREVIOUS execution.
+    // 0         = none yet, or a value that must always re-record (object /
+    //             attributes beyond a lone `dim` / S4 / length 0)
+    // otherwise = 1 + TYPEOF*4 + isScalar*2 + hasDim
+    //
+    // A whole byte rather than 7 bits packed alongside `dirty`, which costs
+    // one byte per slot and buys three things:
+    //  * no read-modify-write. Sharing a byte with `dirty` meant every update
+    //    had to load, mask, or and store just to preserve a neighbouring bit.
+    //  * no range guard. TYPEOF reads a 5-bit field (TYPE_BITS), so it is
+    //    always 0..31, and 4*(31+1) = 128 fits a byte — every representable
+    //    type encodes injectively. At 7 bits the encoding saturated at type
+    //    30, so the admission test needed an extra `type <= 30` comparison to
+    //    stop a wrapped signature aliasing a different type's, which would
+    //    make two distinct types compare equal and wrongly suppress a parent.
+    //  * sizeof becomes 8, so `types_[idx]` is a scaled load rather than a
+    //    multiply by 7 — and that indexing happens on every record, plus
+    //    again per parent/dependent in markRelatedDirty.
+    uint8_t lastSig;
     // Expression-tree parent, as an index into the owning TypeFeedback's
     // types_ rather than a pointer: every edge is within one array, and 2
-    // bytes instead of 8 is the difference between a 13- and a 7-byte slot.
-    // BIASED BY ONE so that an all-zero slot means "no parent" — the array is
-    // memcpy'd from a vector and there is a memset in the constructor, so a
-    // 0xFFFF sentinel would be one forgotten initializer away from silently
-    // designating slot 0 as everyone's parent.
+    // bytes instead of 8 is most of the difference between a 13- and an
+    // 8-byte slot. BIASED BY ONE so that an all-zero slot means "no parent" —
+    // the array is memcpy'd from a vector and there is a memset in the
+    // constructor, so a 0xFFFF sentinel would be one forgotten initializer
+    // away from silently designating slot 0 as everyone's parent.
     uint16_t parentPlus1;
-    // total (packed): 1+1+3+2 = 7 bytes
+    // total (packed): 1+1+3+1+2 = 8 bytes
 
     bool hasParent() const { return parentPlus1 != 0; }
     uint32_t parentSlot() const {
@@ -385,8 +396,10 @@ struct ObservedValues {
         // in that set because R's dim selection branches on `ny != 0` /
         // `nx == 0`, and one isScalar bit cannot separate length 0 from length
         // many (matrix + integer(0) drops dim, matrix + 1:4 keeps it).
+        // No range guard on `type`: TYPEOF reads a 5-bit field, so it is
+        // always 0..31, and the largest encoding 4*(31+1) = 128 fits the byte.
         uint8_t sig = 0;
-        if (!isS4 && type <= 30 && fastOk && len != 0) {
+        if (!isS4 && fastOk && len != 0) {
             // Given fastOk, a non-empty ATTRIB can only be `dim`, so hasAttr
             // doubles as hasDim.
             sig = (uint8_t)(1 + type * 4 + (len == 1 ? 2 : 0) +
@@ -434,7 +447,9 @@ struct ObservedValues {
 // The struct is #pragma pack(1) and the feedback array is both sized and
 // serialized by sizeof(ObservedValues), so any field that does not fit in the
 // existing bits costs a byte per slot and changes the on-disk layout.
-static_assert(sizeof(ObservedValues) == 7, "ObservedValues must stay 7 bytes");
+// Power of two on purpose: types_[idx] is then a scaled index rather than a
+// multiply, and it is indexed on every record.
+static_assert(sizeof(ObservedValues) == 8, "ObservedValues must stay 8 bytes");
 
 enum class Opcode : uint8_t;
 
