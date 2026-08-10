@@ -42,7 +42,7 @@ def delete(project, repo, what)
   curl("--request DELETE https://gitlab.com/api/v4/projects/#{project}/registry/repositories/#{repo}/#{what}")
 end
 
-MAX_AGE_DAYS=0.6
+MAX_AGE_DAYS=4
 
 REPOS.each do |project, repos|
   repos[:repos].each do |repo|

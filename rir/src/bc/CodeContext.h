@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <stack>
 #include <unordered_map>
+#include <vector>
 
 namespace rir {
 
@@ -69,6 +70,21 @@ class CodeContext {
 
     DefUseAnalysis defUseAnalysis;
     uint32_t recordTypeOnceBitmapSize = 0;
+
+    // Expression-tree construction state: the type-feedback slots recorded so
+    // far at each open LANGSXP nesting level, innermost on top. Pushed/popped
+    // exclusively by compileExpr's LANGSXP case, so it is empty again when this
+    // Code object is done (asserted in CompilerContext::pop()).
+    //
+    // Deliberately per Code object rather than per function: an expression tree
+    // never spans a Code boundary. A promise body is a separate Code object
+    // whose evaluation is decoupled in time from the expression that created
+    // it, so its operands are not operands of that expression. Holding this on
+    // the (function-wide) CompilerContext used to let a promise's leaves land
+    // in whatever level the *enclosing* function had open and be adopted by an
+    // unrelated node — e.g. in `f(x) + g(x)` the promise loads of `x` became
+    // children of the `+`. See recordless-design.md §2C.5.
+    std::stack<std::vector<uint32_t>> slotsStack;
 };
 
 class PromiseContext : public CodeContext {

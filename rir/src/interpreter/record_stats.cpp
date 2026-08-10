@@ -44,7 +44,7 @@ RecordSkipStats::~RecordSkipStats() {
     uint64_t leafRec = leafAlwaysRec + leafOnceRec;
     uint64_t leafSkip = leafOnceSkip + noRecordSkip;
     uint64_t leafShould = leafRec + leafSkip;
-    // inner nodes (isolated + notifying)
+    // inner nodes (standalone + notifying)
     uint64_t allInnerRec = innerRec + innerNotifyRec;
     uint64_t allInnerSkip = innerSkip + innerNotifySkip;
     uint64_t allInnerShould = allInnerRec + allInnerSkip;
@@ -94,7 +94,7 @@ RecordSkipStats::~RecordSkipStats() {
     uint64_t onceShould = leafOnceRec + leafOnceSkip;
     fprintf(stderr, "\nleaves (total): %s\n", col(leafShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "class", Ws, "should",
-            W, "recorded", W, "skip", "skip%");
+            W, "recorded", W, "skipped", "skip%");
     fprintf(stderr, "  -------------------+-%.*s-+-%.*s-+-%.*s-+-------\n", Ws,
             dash, W, dash, W, dash);
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "RecordAlways", Ws,
@@ -109,8 +109,9 @@ RecordSkipStats::~RecordSkipStats() {
             col(noRecordSkip).c_str(),
             pctStr(noRecordSkip, noRecordSkip).c_str());
 
-    // Table 3: inner nodes by opcode. "skip" = suppressed via shouldNotRecord
-    // (the expression-tree elision). Share is of all inner-node executions.
+    // Table 3: inner nodes by opcode. "skipped" = suppressed via
+    // shouldNotRecord (the expression-tree elision). Share is of all
+    // inner-node executions.
     auto innerShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, allInnerShould) + ")";
     };
@@ -118,16 +119,61 @@ RecordSkipStats::~RecordSkipStats() {
     uint64_t innerNotifyShould = innerNotifyRec + innerNotifySkip;
     fprintf(stderr, "\ninner nodes (total): %s\n", col(allInnerShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "class", Ws, "should",
-            W, "recorded", W, "suppressed", "skip%");
+            W, "recorded", W, "skipped", "skip%");
     fprintf(stderr, "  -------------------+-%.*s-+-%.*s-+-%.*s-+-------\n", Ws,
             dash, W, dash, W, dash);
-    fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "inner (isolated)", Ws,
-            innerShouldCol(innerShould).c_str(), W, col(innerRec).c_str(), W,
-            col(innerSkip).c_str(), pctStr(innerSkip, innerShould).c_str());
+    fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "inner (standalone)",
+            Ws, innerShouldCol(innerShould).c_str(), W, col(innerRec).c_str(),
+            W, col(innerSkip).c_str(), pctStr(innerSkip, innerShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "inner_notify", Ws,
             innerShouldCol(innerNotifyShould).c_str(), W,
             col(innerNotifyRec).c_str(), W, col(innerNotifySkip).c_str(),
             pctStr(innerNotifySkip, innerNotifyShould).c_str());
+
+    // Table 4: force-behavior (FB) recording — a separate feedback dimension
+    // piggybacked on the same slots. The baseline has a single dispatcher for
+    // every load; recordless keeps that generic dispatcher for non-cached
+    // loads (fbgeneric) but splits the ldvar_cached_ family into one opcode
+    // per compile-time FB-kind decision (always / record_once / no_record).
+    uint64_t fbGenericShould = fbGenericRec + fbGenericSkip;
+    uint64_t fbAlwaysShould = fbAlwaysRec; // unconditional, never skipped
+    uint64_t fbRecordOnceShould = fbRecordOnceRec + fbRecordOnceSkip;
+    uint64_t fbNoRecordShould = fbNoRecordSkip; // never recorded
+    uint64_t fbShouldTotal = fbGenericShould + fbAlwaysShould +
+                             fbRecordOnceShould + fbNoRecordShould;
+    uint64_t fbRecTotal = fbGenericRec + fbAlwaysRec + fbRecordOnceRec;
+    uint64_t fbSkipTotal = fbGenericSkip + fbRecordOnceSkip + fbNoRecordSkip;
+    fprintf(stderr, "\nforce behavior (recordForceBehavior variants)\n");
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "case", W, "should", W,
+            "recorded", W, "skipped", "skip%");
+    fprintf(stderr, "  ----------------------+-%.*s-+-%.*s-+-%.*s-+-------\n",
+            W, dash, W, dash, W, dash);
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "fbgeneric", W,
+            col(fbGenericShould).c_str(), W, col(fbGenericRec).c_str(), W,
+            col(fbGenericSkip).c_str(),
+            pctStr(fbGenericSkip, fbGenericShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "always", W,
+            col(fbAlwaysShould).c_str(), W, col(fbAlwaysRec).c_str(), W,
+            col(0).c_str(), pctStr(0, fbAlwaysShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "record_once", W,
+            col(fbRecordOnceShould).c_str(), W, col(fbRecordOnceRec).c_str(), W,
+            col(fbRecordOnceSkip).c_str(),
+            pctStr(fbRecordOnceSkip, fbRecordOnceShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "no_record", W,
+            col(fbNoRecordShould).c_str(), W, col(0).c_str(), W,
+            col(fbNoRecordSkip).c_str(),
+            pctStr(fbNoRecordSkip, fbNoRecordShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "TOTAL", W,
+            col(fbShouldTotal).c_str(), W, col(fbRecTotal).c_str(), W,
+            col(fbSkipTotal).c_str(),
+            pctStr(fbSkipTotal, fbShouldTotal).c_str());
+    // fbgeneric_bail: reported separately, not as a table row. Not part of
+    // the "should" baseline above — it counts loads where the fbgeneric
+    // dispatcher's opcode peek matched none of the recognized value-type
+    // record opcodes (NoRecord elision, ldddvar_, ...), so there was no
+    // record to classify as should/recorded/skipped in the first place.
+    fprintf(stderr, "  fbgeneric_bail: %s (no value-type record followed)\n",
+            col(fbGenericBail).c_str());
 }
 
 } // namespace rir

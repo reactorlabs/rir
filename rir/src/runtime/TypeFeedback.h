@@ -283,7 +283,7 @@ struct ObservedValues {
     // Inner-node record: skip if suppressed, else doRecord. Any un-suppression
     // of related nodes (own parent and/or NoRecord dependents' parents) is done
     // by the caller (a TypeFeedback record_type_inner_notify method) via
-    // notifyRelatedNodes — an isolated inner node (record_type_inner_) skips
+    // notifyRelatedNodes — a standalone inner node (record_type_inner_) skips
     // that entirely, as it has no parent and no dependents to notify.
     __attribute__((__always_inline__)) void recordInner(SEXP e) {
         if (shouldNotRecord)
@@ -495,9 +495,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
-    // Isolated inner node: no parent (it is a root) and no NoRecord dependents
-    // (not a source). Nothing to un-suppress, so it skips the notify machinery
-    // entirely — just skipIfSuppressed + doRecord.
+    // Standalone inner node: no parent (it is a root) and no NoRecord
+    // dependents (not a source). Nothing to un-suppress, so it skips the
+    // notify machinery entirely — just skipIfSuppressed + doRecord.
     __attribute__((noinline)) void record_type_inner(uint32_t idx,
                                                      const SEXP e) {
         types(idx).recordInner(e);
