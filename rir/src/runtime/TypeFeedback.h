@@ -274,6 +274,17 @@ struct ObservedValues {
     // both re-record, since nothing says they were alike.
     static constexpr uint8_t SigAlwaysDirty = 0;
 
+    // The `type + 1` bias is what keeps 0 reserved for SigAlwaysDirty. Without
+    // it, TYPEOF 0 (NILSXP) with neither flag set would encode to 0 and be
+    // read back as the sentinel. That would be conservative rather than
+    // unsound — such a value would simply always re-record and never suppress
+    // its parent — and it is probably unreachable anyway, since NILSXP has no
+    // length and the `len != 0` admission test diverts it first. The bias
+    // costs nothing and makes "0 is not a real signature" true by
+    // construction, instead of resting on an argument about NILSXP that a
+    // later change to the admission test could quietly invalidate. With it,
+    // the real range starts at (0 + 1) << 2 == 4.
+    //
     // TYPEOF reads a 5-bit field, so type <= 31 and the widest encoding is
     // ((31 + 1) << 2) | 3 = 131 — inside the byte, hence no range guard.
     // always_inline, not merely constexpr: this sits in the record hot path
@@ -432,6 +443,7 @@ struct ObservedValues {
         // occurrences of it.
         if (sig != SigAlwaysDirty && sig == lastSig) {
             REC_HOOK(recording::recordSCChanged(0));
+            REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
         }
 
