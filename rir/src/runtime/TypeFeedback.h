@@ -443,6 +443,7 @@ struct ObservedValues {
         // occurrences of it.
         if (sig != SigAlwaysDirty && sig == lastSig) {
             REC_HOOK(recording::recordSCChanged(0));
+            REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
         }
 

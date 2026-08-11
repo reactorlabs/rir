@@ -108,10 +108,27 @@ RecordSkipStats::~RecordSkipStats() {
             Ws, leafShouldCol(noRecordSkip).c_str(), W, col(0).c_str(), W,
             col(noRecordSkip).c_str(),
             pctStr(noRecordSkip, noRecordSkip).c_str());
+    // Not a row: this OVERLAPS the recorded counts above (and the inner tables
+    // below). It is the share of records that ran but updated nothing because
+    // the per-execution signature was unchanged — the work the signature
+    // early-out avoids, which is otherwise invisible here since the opcode
+    // still executed.
+    {
+        uint64_t recorded = leafAlwaysRec + leafOnceRec + innerRec +
+                            innerNotifyRec + untrackedRec;
+        fprintf(stderr,
+                "  of all %s records, %s updated nothing (signature "
+                "unchanged) = %s\n",
+                col(recorded).c_str(), col(sigUnchangedNoOp).c_str(),
+                pctStr(sigUnchangedNoOp, recorded).c_str());
+        fprintf(stderr, "    (only the _notify_ paths can early-out; plain "
+                        "record_type_ always does the work)\n");
+    }
 
-    // Table 3: inner nodes by opcode. "skipped" = suppressed via
-    // shouldNotRecord (the expression-tree elision). Share is of all
-    // inner-node executions.
+    // Table 3: inner nodes by opcode. "skipped" = suppressed because the slot's
+    // `dirty` bit was clear, i.e. no operand's per-execution signature changed
+    // and the result is the one already absorbed. Share is of all inner-node
+    // executions.
     auto innerShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, allInnerShould) + ")";
     };

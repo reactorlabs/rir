@@ -697,6 +697,23 @@ class DefUseAnalysis {
             collectArgAssignedVars(CAR(s), out, inPromise || !isInline);
     }
 
+    // True when a scope captured earlier (by currentScopeId()) is still open,
+    // i.e. every path from there to here stays inside it. Used to check that a
+    // record_type_ emitted while compiling an assignment's RHS is on every
+    // path to the store — an `if` branch's record is not, because its scope
+    // has closed by then. Same test as dominates(), exposed for a caller that
+    // holds only the scope id.
+    bool scopeStillOpen(int scopeId) const {
+        if (scopeId == 0)
+            return true;
+        for (const auto& entry : scopeStack_)
+            if (entry.id == scopeId)
+                return true;
+        return false;
+    }
+
+    int scopeIdHere() const { return currentScopeId(); }
+
   private:
     // Recursively scan `ast` for <<- assignments at any depth, including
     // inside further nested functions (conservative: their <<- may bubble up).

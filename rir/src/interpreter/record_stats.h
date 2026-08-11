@@ -19,6 +19,12 @@
 //                          instruction, this load's record was elided
 //                          (SKIPPED).
 //
+// Inner nodes (the expression-tree elision) are a second, independent axis and
+// have their own table: an operator whose result is a function of its operands'
+// recorded feedback records only when a child signals that its per-execution
+// signature changed. Baseline has no such notion — it records every operator
+// result — so the "should" column for those is simply every execution.
+//
 // Compile-time toggle: define RIR_RECORD_STATS to enable (counters + an at-exit
 // summary printed to stderr on every process exit). Leave it undefined for
 // perf/production builds so evalRirCode stays byte-identical and the hot loop
@@ -35,16 +41,31 @@ namespace rir {
 #ifdef RIR_RECORD_STATS
 
 struct RecordSkipStats {
-    // leaves: ldvar reads plus opaque value results (call / [[ / for /
-    // replacement-fn) — both are tree leaves whose type is observed directly.
-    // Counted at the leaf record_type_* handlers + the ldvar classify.
+    // leaves: ldvar reads plus opaque value results (call / `[` / `[[` / `:` /
+    // for / replacement-fn) — both are tree leaves whose type is observed
+    // directly. Counted at the leaf record_type_* handlers + the ldvar
+    // classify. `[` and `:` were once elidable inner nodes and are counted here
+    // now: their result depends on operand *values*, not operand types, so it
+    // cannot be inferred from the operands' feedback.
     uint64_t leafAlwaysRec = 0; // RecordAlways leaf — recorded every execution
     uint64_t leafOnceRec = 0;   // RecordOnce leaf — first-hit recorded
     uint64_t leafOnceSkip = 0;  // RecordOnce leaf — gated (SKIPPED)
     uint64_t noRecordSkip = 0;  // NoRecord leaf — elided, no opcode (SKIPPED)
+    // Subset of the "recorded" counts above: a record opcode that ran but
+    // updated nothing, because the value's per-execution signature matched the
+    // previous one — so every flag update and the seen scan were provably
+    // redundant and doRecordAndSign returned early. These still count as
+    // recorded (the instruction did execute and the slot was read), but no
+    // state changed and the slot's cache line stayed clean. Reported as an
+    // extra line, not a table row, since it overlaps the rows above.
+    uint64_t sigUnchangedNoOp = 0;
     // inner nodes (counted at the inner record_type_* handlers; exptree only).
-    // "skip" here = suppressed via shouldNotRecord (the expression-tree
-    // elision).
+    // "skip" here = suppressed, i.e. the slot's `dirty` bit was clear: every
+    // operand had the same per-execution signature as last time, so the result
+    // is the one already absorbed. (This used to be a permanent
+    // shouldNotRecord latch that only an object operand could clear; it is now
+    // per-execution and re-armable, so a node can go back to being suppressed
+    // once its operands settle.)
     uint64_t innerRec = 0;        // record_type_inner_         — recorded
     uint64_t innerSkip = 0;       // record_type_inner_         — suppressed
     uint64_t innerNotifyRec = 0;  // record_type_inner_notify_  — recorded

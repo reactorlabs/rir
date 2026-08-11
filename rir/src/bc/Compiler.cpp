@@ -439,6 +439,93 @@ class CompilerContext {
     // `a + f(1)` would otherwise suppress the `+` on the strength of the
     // tracked call result while `a` (untracked, possibly an object) had no way
     // to revoke the elision.
+    // ---- "value record" tracking -------------------------------------------
+    // A def may only reference a feedback slot that provably records exactly
+    // the value being stored. The record helpers below stamp the slot they are
+    // about to emit, together with where its instruction starts and which scope
+    // it is emitted in; valueRecordSlotHere() then decides whether that stamp
+    // still describes the value on top of the stack.
+    struct ValueRecord {
+        int slot = DefUseAnalysis::kNoSlot;
+        unsigned insnPos = CodeStream::kNoInsn;
+        int scopeId = 0;
+    };
+    ValueRecord valueRecord_;
+
+    // Called from a helper *before* the record is streamed, so currentPos() is
+    // where it will be written. A stamp that turns out to be inaccurate (a
+    // helper whose result is streamed in the middle of a `cs << a << b << c`
+    // chain, where C++ leaves the argument evaluation order unsequenced) can
+    // only ever make the check below fail, never wrongly succeed — so being
+    // approximate here costs an elision, not correctness.
+    void noteValueRecord(int slot) {
+        valueRecord_ = {slot, cs().currentPos(),
+                        defUseAnalysis().scopeIdHere()};
+    }
+
+    // The one place a value-type record is turned into bytecode: builds the BC
+    // and stamps it, for a slot the caller has already allocated. Every helper
+    // below funnels through this, so the stamp lives in exactly one place and a
+    // new emission site cannot silently forget it.
+    //
+    // Note this is NOT recordTypeUntracked: that one allocates its own slot and
+    // asserts a property about it ("never a def, a source, or an inner-node
+    // operand", recorded in untrackedStatsSlots_). The RecordOnce paths in
+    // emitRecordTypeForVar have already allocated their slot and registered it
+    // as a tree leaf and a use-def, so it is very much tracked.
+    BC recordTypeForSlot(int slot) {
+        noteValueRecord(slot);
+        return BC::recordType(slot);
+    }
+    BC recordTypeOnceForSlot(int slot, uint32_t bit) {
+        noteValueRecord(slot);
+        return BC::recordTypeOnce((uint32_t)slot, bit);
+    }
+
+    // Same, for a value whose type is already described by an existing slot so
+    // that no record instruction is emitted at all — a NoRecord variable read.
+    // `pos` is the instruction that pushed the value (the ldvar), which is what
+    // the "still the last value-changing instruction" test matches against.
+    //
+    // Callers pass the *source* slot, not the dep slot allocated for the read,
+    // so `b <- a` points straight at whatever recorded `a` rather than adding a
+    // hop. Chains of deps do resolve — propagateDeps iterates forward and a dep
+    // always references an earlier, lower-numbered slot — but staying flat
+    // keeps that property from being load-bearing.
+    void noteValueRecordAt(int slot, unsigned pos) {
+        valueRecord_ = {slot, pos, defUseAnalysis().scopeIdHere()};
+    }
+
+    // The slot describing the value currently on top of the stack, or kNoSlot
+    // when that cannot be established. Two conditions, each catching a failure
+    // the other misses:
+    //
+    //  * the record must be the last VALUE-CHANGING instruction emitted (a
+    //    trailing visible_ / ensure_named_ does not count, since the value is
+    //    still the recorded one). Otherwise something
+    //    after it replaced the value — `x <- -f()` records the call, then
+    //    uminus_ produces a different value (and for a logical operand a
+    //    different *type*); likewise `!f()`, `is.null(f())`, a constant RHS.
+    //
+    //  * its scope must still be open. Otherwise the record lies on only one of
+    //    several paths — in `x <- if (c) f() else g()` each branch records its
+    //    own outcome, and the second one is textually adjacent to the store yet
+    //    reached only half the time. A position check alone accepts this, since
+    //    labels emit no bytes.
+    //
+    // Anything unproven gives kNoSlot, so the def carries no slot and later
+    // reads of the variable record for real rather than depending on a slot
+    // that describes something else.
+    int valueRecordSlotHere() {
+        if (valueRecord_.slot == DefUseAnalysis::kNoSlot)
+            return DefUseAnalysis::kNoSlot;
+        if (cs().lastValueInstructionPos() != valueRecord_.insnPos)
+            return DefUseAnalysis::kNoSlot;
+        if (!defUseAnalysis().scopeStillOpen(valueRecord_.scopeId))
+            return DefUseAnalysis::kNoSlot;
+        return valueRecord_.slot;
+    }
+
     BC recordTypeTracked(bool isParent) {
         if (isInPromise() || !mainBodyCtx_ ||
             !Compiler::isRecordlessLeafEnabled())
@@ -446,7 +533,7 @@ class CompilerContext {
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack().empty())
             registerSlot(slotIdx, isParent);
-        return BC::recordType(slotIdx);
+        return recordTypeForSlot((int)slotIdx);
     }
 
     // An opaque value result: a call return, `[`, `[[`, a `for` result, or a
@@ -475,7 +562,7 @@ class CompilerContext {
             currentSlots.clear(); // operands consumed by this operation
             currentSlots.push_back(slotIdx); // this result flows onward
         }
-        return BC::recordType(slotIdx);
+        return recordTypeForSlot((int)slotIdx);
     }
 
     // Untracked: genuinely outside the analysis — the slot is never a def, a
@@ -494,7 +581,7 @@ class CompilerContext {
 #ifdef RIR_RECORD_STATS
         untrackedStatsSlots_.insert(slotIdx);
 #endif
-        return BC::recordType(slotIdx);
+        return recordTypeForSlot((int)slotIdx);
     }
 
     // Register a slot that the leaf optimization allocated directly (emitting
@@ -511,7 +598,7 @@ class CompilerContext {
         int slot = typeFeedbackBuilder.addType();
         defUseAnalysis().trackUseDef(name, slot);
         registerLeafSlot((uint32_t)slot); // RecordAlways leaf → tree child
-        return BC::recordType(slot);
+        return recordTypeForSlot(slot);
     }
 
     unsigned typeSlotCount() const { return typeFeedbackBuilder.typeCount(); }
@@ -1097,8 +1184,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         // 2) Specialcase normal assignment (ie. "i <- expr")
         if (TYPEOF(lhs) == SYMSXP) {
             emitGuardForNamePrimitive(cs, fun);
-            unsigned typesBefore = Compiler::profile ? ctx.typeSlotCount() : 0;
             compileExpr(ctx, rhs);
+            // Decide the def's slot HERE, before anything else is emitted: the
+            // test is that the RHS's record is still the last instruction.
+            int defSlot = Compiler::isRecordlessLeafEnabled()
+                              ? ctx.valueRecordSlotHere()
+                              : DefUseAnalysis::kNoSlot;
             if (!voidContext) {
                 // No ensureNamed needed, stvar already ensures named
                 cs << BC::dup() << BC::invisible();
@@ -1111,15 +1202,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(lhs));
                 else
                     cs << BC::stvar(lhs);
-                if (Compiler::isRecordlessLeafEnabled()) {
-                    // The last type slot allocated while compiling rhs (if
-                    // any) captures the type of the value being stored —
-                    // use it as the def's feedback slot.
-                    int defSlot = (ctx.typeSlotCount() > typesBefore)
-                                      ? (int)ctx.typeSlotCount() - 1
-                                      : DefUseAnalysis::kNoSlot;
+                if (Compiler::isRecordlessLeafEnabled())
                     ctx.defUseAnalysis().trackDef(lhs, defSlot);
-                }
             }
             return true;
         }
@@ -2518,6 +2602,16 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
     bool emittedRecordTypeOnce = false;
     if (uc.kind == UseKind::NoRecord) {
         allocatedSlot = (int)ctx.registerNoRecordDep(uc.defSlot);
+        // No record instruction is emitted, so nothing stamps a value record —
+        // yet the value IS on the stack (the ldvar just above pushed it) and
+        // its type IS already described by a slot: uc.defSlot, by the very
+        // definition of NoRecord. Stamp that, so an enclosing `x <- y` can give
+        // x the same source and keep chains of copies (`b <- a; c <- b; ...`)
+        // fully elided. The position is the ldvar's; it is the last
+        // value-changing instruction, and later patching it to
+        // ldvar_cached_noRecordFB_ rewrites the opcode in place without moving
+        // the instruction.
+        ctx.noteValueRecordAt(uc.defSlot, cs.lastValueInstructionPos());
         // record_type_once_promise_ / ldvar_cached_envRecordFB_ disabled:
         // } else if (ctx.code.top()->isPromiseContext() && ...) { EnvBit ... }
     } else {
@@ -2542,11 +2636,11 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                 if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                     total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
                     unsigned bcPos = cs.currentPos();
-                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    cs << ctx.recordTypeOnceForSlot(slot, 0);
                     ctx.defUseAnalysis().registerRangeVarUse(name, bcPos, slot);
                     emittedRecordTypeOnce = true;
                 } else {
-                    cs << BC::recordType(slot);
+                    cs << ctx.recordTypeForSlot(slot);
                 }
             } else if (ctx.defUseAnalysis().assignedInEnclosingLoop(name) &&
                        ctx.defUseAnalysis().hasClearableScope()) {
@@ -2559,20 +2653,20 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                 if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                     total < (int)RECORD_TYPE_ONCE_MAX_IIDX) {
                     unsigned bcPos = cs.currentPos();
-                    cs << BC::recordTypeOnce((uint32_t)slot, 0);
+                    cs << ctx.recordTypeOnceForSlot(slot, 0);
                     ctx.defUseAnalysis().registerClearableUse(name, bcPos,
                                                               slot);
                     emittedRecordTypeOnce = true;
                 } else {
-                    cs << BC::recordType(slot);
+                    cs << ctx.recordTypeForSlot(slot);
                 }
             } else if (RECORD_TYPE_ONCE_VALID_SLOT_IDX(slot) &&
                        bitmapSize < RECORD_TYPE_ONCE_MAX_IIDX) {
                 // Stable: assign bit immediately.
-                cs << BC::recordTypeOnce((uint32_t)slot, bitmapSize++);
+                cs << ctx.recordTypeOnceForSlot(slot, bitmapSize++);
                 emittedRecordTypeOnce = true;
             } else {
-                cs << BC::recordType(slot);
+                cs << ctx.recordTypeForSlot(slot);
             }
             break;
         }

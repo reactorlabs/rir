@@ -23,6 +23,8 @@ class CodeStream {
     PcOffset pos = 0;
     unsigned size = 1024;
     unsigned nops = 0;
+    // See lastValueInstructionPos().
+    unsigned lastValueInsnPos_ = (unsigned)-1;
 
     FunctionWriter& function;
     Preserve preserve;
@@ -80,12 +82,33 @@ class CodeStream {
                                      : needed + align - (needed % align);
     }
 
+    // Instructions that leave the value on top of the stack as it is — they
+    // only touch visibility or NAMED. They must not count as "something
+    // happened after the record", because e.g. `v[i]` and `(e)` emit a
+    // visible_ after their record_type_ while the recorded value is still the
+    // one on top of the stack.
+    static bool isValueNeutral(Opcode op) {
+        return op == Opcode::visible_ || op == Opcode::invisible_ ||
+               op == Opcode::ensure_named_ || op == Opcode::nop_;
+    }
+
     CodeStream& operator<<(const BC& b) {
         if (b.bc == Opcode::nop_)
             nops++;
+        if (!isValueNeutral(b.bc))
+            lastValueInsnPos_ = pos;
         b.write(*this);
         return *this;
     }
+
+    // Position at which the most recently emitted *value-changing* instruction
+    // starts, or kNoInsn if there has been none. Lets a caller ask "is the
+    // record I emitted at position P still describing the value on top of the
+    // stack?", which is how the compiler decides whether an assignment's def
+    // may reference that record's feedback slot. Note labels emit no bytes and
+    // so do not update this either.
+    static constexpr unsigned kNoInsn = (unsigned)-1;
+    unsigned lastValueInstructionPos() const { return lastValueInsnPos_; }
 
     CodeStream& operator<<(BC::Label label) {
 
