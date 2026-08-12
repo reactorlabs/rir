@@ -2552,8 +2552,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // executions, so calling out just to load a byte, test a bit and
             // return is pure overhead. Only the recording itself stays out of
             // line, keeping this dispatch loop small.
+            //
+            // The handler redoes types(idx) rather than taking the slot from
+            // here — passing it was measured slower, see the note on
+            // record_type_inner_when_dirty.
             if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner(idx, ostack_top());
+                typeFeedback->record_type_inner_when_dirty(idx, ostack_top());
             NEXT();
         }
 
@@ -2565,7 +2569,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                      else g_recStats.innerNotifyRec++);
             // Same as record_type_inner_: skip the call when suppressed.
             if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner_notify(idx, ostack_top());
+                typeFeedback->record_type_inner_notify_when_dirty(idx,
+                                                                  ostack_top());
             NEXT();
         }
 

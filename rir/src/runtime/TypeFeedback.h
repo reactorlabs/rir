@@ -295,9 +295,14 @@ struct ObservedValues {
                          (isScalar ? SigScalar : 0) | (hasDim ? SigHasDim : 0));
     }
 
-    bool hasParent() const { return parentPlus1 != 0; }
-    uint32_t parentSlot() const {
-        assert(hasParent());
+    // always_inline + SLOWASSERT: markRelatedDirty calls these once per
+    // dependent on a hot path, and a plain assert would be live here — this
+    // release build compiles without -DNDEBUG.
+    __attribute__((always_inline)) bool hasParent() const {
+        return parentPlus1 != 0;
+    }
+    __attribute__((always_inline)) uint32_t parentSlot() const {
+        SLOWASSERT(hasParent());
         return (uint32_t)parentPlus1 - 1;
     }
     // Callers must check canReference() first; an unrepresentable edge has to
@@ -481,28 +486,30 @@ struct ObservedValues {
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
   public:
-    // Inner-node record: skip unless a child marked us dirty this execution,
-    // else record and re-arm. Not dirty means every operand had the same
-    // signature as last execution, so the result is the one we already
-    // absorbed — and since the accumulated state only ever grows, having
-    // absorbed it once is permanent.
+    // Inner-node record for a node the caller has ALREADY established is dirty.
+    // The interpreter tests `dirty` inline before calling, so that the common
+    // suppressed case never reaches these (noinline) handlers at all;
+    // re-testing it here would be dead weight on the path that does call in.
+    // The name says so — do not call unless dirty is set.
+    //
+    // Being dirty means some operand's per-execution signature changed, so the
+    // result may differ from the one already absorbed. Records and re-arms.
     //
     // For a standalone inner node (record_type_inner_): a root with no
     // NoRecord dependents, so nothing to notify and no signature to keep.
-    __attribute__((__always_inline__)) void recordInner(SEXP e) {
-        if (!dirty)
-            return;
+    __attribute__((__always_inline__)) void recordInnerWhenDirty(SEXP e) {
+        SLOWASSERT(dirty && "recordInnerWhenDirty called on a clean slot");
         dirty = false;
         doRecord(e);
     }
 
     // Same, for an inner node that must propagate (record_type_inner_notify_).
-    // Returns true only if it both recorded AND its signature changed: a
-    // suppressed node's own value did not change either, so it has nothing to
-    // tell its parent.
-    __attribute__((__always_inline__)) bool recordInnerAndSign(SEXP e) {
-        if (!dirty)
-            return false;
+    // Also caller-guarded on dirty. Returns whether its own signature changed,
+    // i.e. whether there is anything to tell its parent.
+    __attribute__((__always_inline__)) bool
+    recordInnerAndSignWhenDirty(SEXP e) {
+        SLOWASSERT(dirty &&
+                   "recordInnerAndSignWhenDirty called on a clean slot");
         dirty = false;
         return doRecordAndSign(e);
     }
@@ -719,11 +726,20 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     }
 
     // Standalone inner node: no parent (it is a root) and no NoRecord
-    // dependents (not a source). Nothing to un-suppress, so it skips the
-    // notify machinery entirely — just skipIfSuppressed + doRecord.
-    __attribute__((noinline)) void record_type_inner(uint32_t idx,
-                                                     const SEXP e) {
-        types(idx).recordInner(e);
+    // dependents (not a source). Nothing to notify, so it skips the notify
+    // machinery entirely — just doRecord.
+    //
+    // `_when_dirty`: the interpreter tests `dirty` inline before calling, so
+    // reaching here already means the node must record. Do not call otherwise.
+    // Takes only `idx`, not the slot the caller already resolved for its dirty
+    // test: handing the reference over was measured 0.23% SLOWER on mandelbrot.
+    // It widens the call to three arguments and pins the reference in a
+    // callee-saved register across the call, which costs more than redoing
+    // types(idx) — a single scaled lea from a loop-invariant base and an index
+    // that was just decoded.
+    __attribute__((noinline)) void record_type_inner_when_dirty(uint32_t idx,
+                                                                const SEXP e) {
+        types(idx).recordInnerWhenDirty(e);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
     // Inner node that must mark a related node dirty when its own value
@@ -733,13 +749,15 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // variable's def.) markRelatedDirty handles own-parent AND any dependents
     // together — the branch that does not apply is a no-op — so one opcode
     // covers both.
-    __attribute__((noinline)) void record_type_inner_notify(uint32_t idx,
-                                                            const SEXP e) {
+    //
+    // `_when_dirty` as above: caller-guarded, so this always records.
+    // Takes only `idx`, as above — see record_type_inner_when_dirty.
+    __attribute__((noinline)) void
+    record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e) {
         ObservedValues& slot = types(idx);
-        // Only propagate when we actually recorded and our own value changed:
-        // if we were skipped, our operands were unchanged, so our value is
-        // unchanged too and there is nothing for our parent to re-record.
-        if (slot.recordInnerAndSign(e))
+        // Propagate only when our own value changed — recording does not imply
+        // that, since different operands can yield the same result.
+        if (slot.recordInnerAndSignWhenDirty(e))
             markRelatedDirty(slot, idx);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
