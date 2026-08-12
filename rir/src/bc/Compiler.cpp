@@ -445,12 +445,9 @@ class CompilerContext {
     // about to emit, together with where its instruction starts and which scope
     // it is emitted in; valueRecordSlotHere() then decides whether that stamp
     // still describes the value on top of the stack.
-    struct ValueRecord {
-        int slot = DefUseAnalysis::kNoSlot;
-        unsigned insnPos = CodeStream::kNoInsn;
-        int scopeId = 0;
-    };
-    ValueRecord valueRecord_;
+    // Lives on the CodeContext, so a promise's stamp is invisible to the
+    // enclosing function — see CodeContext::valueRecord.
+    CodeContext::ValueRecord& valueRecord() { return code.top()->valueRecord; }
 
     // Called from a helper *before* the record is streamed, so currentPos() is
     // where it will be written. A stamp that turns out to be inaccurate (a
@@ -459,8 +456,8 @@ class CompilerContext {
     // only ever make the check below fail, never wrongly succeed — so being
     // approximate here costs an elision, not correctness.
     void noteValueRecord(int slot) {
-        valueRecord_ = {slot, cs().currentPos(),
-                        defUseAnalysis().scopeIdHere()};
+        valueRecord() = {slot, cs().currentPos(),
+                         defUseAnalysis().scopeIdHere()};
     }
 
     // The one place a value-type record is turned into bytecode: builds the BC
@@ -493,7 +490,7 @@ class CompilerContext {
     // always references an earlier, lower-numbered slot — but staying flat
     // keeps that property from being load-bearing.
     void noteValueRecordAt(int slot, unsigned pos) {
-        valueRecord_ = {slot, pos, defUseAnalysis().scopeIdHere()};
+        valueRecord() = {slot, pos, defUseAnalysis().scopeIdHere()};
     }
 
     // The slot describing the value currently on top of the stack, or kNoSlot
@@ -516,14 +513,22 @@ class CompilerContext {
     // Anything unproven gives kNoSlot, so the def carries no slot and later
     // reads of the variable record for real rather than depending on a slot
     // that describes something else.
+    //
+    // There is deliberately no third check for "was this stamped in the same
+    // Code object": the stamp lives on the CodeContext, so a promise's stamp is
+    // simply not reachable from here. That matters because both quantities
+    // compared above are per-Code-object — `insnPos` indexes this CodeStream
+    // and `scopeId` comes from this DefUseAnalysis — so a stamp from another
+    // Code object could match by coincidence rather than by meaning.
     int valueRecordSlotHere() {
-        if (valueRecord_.slot == DefUseAnalysis::kNoSlot)
+        const auto& vr = valueRecord();
+        if (vr.slot == DefUseAnalysis::kNoSlot)
             return DefUseAnalysis::kNoSlot;
-        if (cs().lastValueInstructionPos() != valueRecord_.insnPos)
+        if (cs().lastValueInstructionPos() != vr.insnPos)
             return DefUseAnalysis::kNoSlot;
-        if (!defUseAnalysis().scopeStillOpen(valueRecord_.scopeId))
+        if (!defUseAnalysis().scopeStillOpen(vr.scopeId))
             return DefUseAnalysis::kNoSlot;
-        return valueRecord_.slot;
+        return vr.slot;
     }
 
     BC recordTypeTracked(bool isParent) {

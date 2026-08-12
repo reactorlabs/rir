@@ -1143,6 +1143,27 @@ slot):
   this lived on the function-wide `CompilerContext`, a promise's leaves landed
   in whatever level the *enclosing* function had open — in `f(x) + g(x)` the
   promise loads of `x` became children of the `+`.
+
+  **`valueRecord` (§2A.4's def-slot stamp) lives there for the same reason**, and
+  the reason is worth stating because it is not the obvious one. Both quantities
+  the stamp compares are *per Code object*: `insnPos` is an offset into that
+  `CodeContext`'s `CodeStream`, and `scopeId` comes from that `CodeContext`'s
+  `DefUseAnalysis`. Both counters restart — `pos` at 0, `nextScopeId_` at 1 — so
+  a stamp carried across a Code boundary would be compared against a different
+  counter space and could match by *coincidence* rather than by meaning. A
+  top-level record stamps `scopeId == 0`, which `scopeStillOpen` accepts
+  unconditionally, so the scope half would offer no protection at all there.
+
+  Note this is **not** covered by promises being excluded from the optimization.
+  That exclusion stops a stamp made in a promise from being *consumed* in that
+  promise (`emitRecordTypeForVar` returns early, so `classifyUse` never runs),
+  but the degradation path is `recordTypeUntracked()`, which still stamps — and
+  the consumer at the assignment is guarded only by the global
+  `isRecordlessLeafEnabled()`. What made the leak unreachable in practice was
+  unrelated and contingent: every `mk_promise_` happens to be followed by a
+  `call_` whose result re-stamps. Putting the state on the `CodeContext` makes
+  it unreachable by construction instead, which is why there is deliberately no
+  "same Code object?" check in `valueRecordSlotHere`.
 - `compileExpr`'s `LANGSXP` case brackets every call/expression with
   `pushNewNodeForSlots()` … `compileCall(...)` … `popNodeForSlots()`. One stack
   level per nested expression; `compileExpr` is the *single owner* of the
@@ -1763,11 +1784,13 @@ by direct inspection, not recalled:
 5. **`ObservedValues` shrunk 13 → 8 bytes** (§2C.1): `isLeaf`,
    `shouldNotRecord` and `hasPropagatedNotification` removed, `parent` pointer
    replaced by a biased 2-byte index, `dirty` and `lastSig` added.
-6. **`slotsStack` moved from `CompilerContext` to `CodeContext`** (§2C.5), so a
-   promise body can no longer register its leaves into whatever expression level
-   its caller left open. Behaviour-neutral today because promises are excluded
-   from the optimization anyway, but it removes the trap for when they are
-   re-enabled.
+6. **`slotsStack` and `valueRecord` moved from `CompilerContext` to
+   `CodeContext`** (§2C.5), so a promise body can no longer register its leaves
+   into whatever expression level its caller left open, nor leave a def-slot
+   stamp whose position and scope id belong to a different counter space. Both
+   are behaviour-neutral today — promises are excluded from the optimization,
+   and the stamp leak was blocked only by the contingent fact that a `call_`
+   always follows a `mk_promise_` — but they remove the trap by construction.
 7. **Honest def-slot attribution** (§2A.4) — the positional
    `typeSlotCount() - 1` heuristic replaced by a stamp that must be proven to
    describe the stored value on every path. Fixes four measured
@@ -1777,6 +1800,14 @@ by direct inspection, not recalled:
    pre-existing hole: with chains, a copy under a suppressed inner node was two
    hops from the source and `markRelatedDirty`'s one-level walk never reached
    it, leaving that node recording *nothing* where baseline records real types.
+9. **Stats reporting brought in line** with all of the above: the inner-node
+   "skipped" column now documents the `dirty` gate rather than the removed
+   `shouldNotRecord` latch (and that it is re-armable); `[` and `:` are listed
+   among the opaque-result leaves they became; and a new counter,
+   `sigUnchangedNoOp`, reports how many records ran but *updated nothing*
+   because the signature was unchanged. That last one exists because the
+   signature early-out is otherwise invisible in the tables — the opcode still
+   executes, so the work it avoids was being counted as "recorded".
 
 All build clean and every checked benchmark produces correct results.
 
@@ -2006,15 +2037,24 @@ setup.
 - `rir/src/interpreter/interp.cpp` — `evalRirCode`; the `fired` array; the
   `recordFbAtSlot` / `recordForceBehavior*` lambdas; all `record_type_*` and
   `ldvar*` handlers.
-- `rir/src/runtime/TypeFeedback.h` — `ObservedValues` (flags, `doRecord`,
-  `record`/`recordInner`, notify), `TypeFeedback` (`record_type_*` methods,
-  `markRelatedDirty`, `typeDeps_`, `noRecordSourceToDeps_`,
-  `buildNoRecordReverseMap`, `ForceBehaviorKind`).
+- `rir/src/runtime/TypeFeedback.h` — `ObservedValues` (flags; `doRecord` vs.
+  `doRecordAndSign`, the latter carrying the signature and the early-out;
+  `record` / `recordInner` / `recordInnerAndSign`; `signatureOf` and
+  `SigAlwaysDirty`; `parentPlus1` and its accessors), `TypeFeedback`
+  (`record_type_*` methods, `markRelatedDirty`, `typeDeps_`,
+  `noRecordSourceToDeps_`, `buildNoRecordReverseMap`, `ForceBehaviorKind`).
 - `rir/src/bc/Compiler.cpp` — `compileGetvar`, `emitRecordTypeForVar`,
   `setTypeFeedbackParents` (the post-pass that specializes opcodes and sets
-  parents), once-bit assignment & clearing.
+  parents), once-bit assignment & clearing; the def-slot stamp
+  (`recordTypeForSlot` / `recordTypeOnceForSlot` — the single place a record is
+  built and stamped — plus `noteValueRecord[At]` and `valueRecordSlotHere`).
+- `rir/src/bc/CodeContext.h` — the per-Code-object compile state that must not
+  leak across a Code boundary: `slotsStack` and `valueRecord` (§2C.5).
+- `rir/src/bc/CodeStream.h` — `lastValueInstructionPos()` and `isValueNeutral()`,
+  which is how the def-slot check asks "did anything change the value since that
+  record?".
 - `rir/src/bc/DefUseAnalysis.h` — `classifyUse` (RecordAlways/RecordOnce/NoRecord
-  + `ForceBehaviorKind`), dominance/postdominance conditions.
+  + `ForceBehaviorKind`), dominance/postdominance conditions, `scopeStillOpen`.
 - `rir/src/bc/insns.h` — opcode definitions (the value-type record family must
   stay contiguous for the stats range-check).
 - `rir/src/bc/BC_inc.h` — once-immediate pack/unpack + gate macros.

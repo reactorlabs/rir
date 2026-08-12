@@ -71,6 +71,26 @@ class CodeContext {
     DefUseAnalysis defUseAnalysis;
     uint32_t recordTypeOnceBitmapSize = 0;
 
+    // The record describing the value currently on top of this Code object's
+    // stack, if any: the slot, where its instruction starts, and the innermost
+    // control-flow scope it was emitted in. Stamped by the record helpers,
+    // consulted by an assignment to decide whether its def may reference that
+    // slot (CompilerContext::valueRecordSlotHere).
+    //
+    // Per Code object for the same reason as slotsStack below: `insnPos` is an
+    // offset into *this* CodeStream and `scopeId` comes from *this*
+    // DefUseAnalysis, and both counters restart at each Code object. A stamp
+    // made while compiling a promise would otherwise still be live when the
+    // enclosing function's next assignment asks, and could match by
+    // coincidence — a top-level record even stamps scopeId 0, which
+    // scopeStillOpen() accepts unconditionally.
+    struct ValueRecord {
+        int slot = DefUseAnalysis::kNoSlot;
+        unsigned insnPos = CodeStream::kNoInsn;
+        int scopeId = 0;
+    };
+    ValueRecord valueRecord;
+
     // Expression-tree construction state: the type-feedback slots recorded so
     // far at each open LANGSXP nesting level, innermost on top. Pushed/popped
     // exclusively by compileExpr's LANGSXP case, so it is empty again when this
