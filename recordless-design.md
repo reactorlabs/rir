@@ -12,7 +12,7 @@ boundary, the doc says so rather than describing intended consumer behaviour.
 
 **Provenance.** Reconstructed from a long working session, then **re-verified
 directly against the source tree on 2026-07-27** (`classifyUse`,
-`setTypeFeedbackParents`, `LoopScopeGuards.h`, `notifyRelatedNodes`, the opcode
+`setTypeFeedbackParents`, `LoopScopeGuards.h`, `markRelatedDirty`, the opcode
 tables, and the baseline diff were all read rather than recalled; statements
 sourced that way are marked "verified"). Two pieces of framing — the
 "observation vs. persistence" distinction and the "is this general or
@@ -140,11 +140,12 @@ if (Compiler::profile)               cs << ctx.recordType();     // one opcode, 
   uint8_t numTypes:2, stateBeforeLastForce:2, notScalar:1, attribs:1, object:1, notFastVecelt:1;
   std::array<uint8_t,3> seen;              // → static_assert(sizeof==4)
   ```
-  It has **none** of the expression-tree fields. The current 16-byte layout adds
-  `isLeaf`, `shouldNotRecord`, `hasPropagatedNotification`, and the 8-byte
-  `parent` pointer — **+12 bytes/slot**. This is the "node-size confound"
-  (§7): any cross-branch timing partly reflects the larger feedback node, not the
-  algorithm.
+  It has **none** of the expression-tree fields. The current **8-byte** layout
+  adds `dirty`, `lastSig`, and the 2-byte biased parent index —
+  **+4 bytes/slot**. This is the "node-size confound" (§7): any cross-branch
+  timing partly reflects the larger feedback node, not the algorithm. It used to
+  be +12 (a 16-byte slot with an 8-byte parent *pointer*); §2C.1 records how it
+  came down.
 
 **Force-behavior is PRE-EXISTING baseline machinery — not a recordless
 invention.** The `stateBeforeLastForce` lattice and the `recordForceBehavior`
@@ -557,8 +558,8 @@ The data path, end to end (verified 2026-07-27):
    `noRecordSourceToDeps_` (source → list of dependent slots), so the runtime can
    walk a source's dependents.
 3. **Runtime.** The dependent slot is never written (no opcode). The *notify*
-   half is live: when the source observes an object, `notifyRelatedNodes` walks
-   `noRecordSourceToDeps_[source]` and un-suppresses each dependent's parent.
+   half is live: when the source's signature changes, `markRelatedDirty` walks
+   `noRecordSourceToDeps_[source]` and marks each dependent's parent dirty.
 4. **Consumer side (out of scope here).** `TypeFeedback::propagateDeps()` exists
    as the intended recovery step (`types_[i] = types_[typeDeps_[i]]` for every
    slot with a dep). Wiring it into the JIT is future work and is not covered by
@@ -598,18 +599,47 @@ There are exactly four call sites (verified 2026-07-27):
 | `Compiler.cpp:1029` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
 | `Compiler.cpp:1199` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
 
-**Plain assignment donates its rhs's slot.** At site 1029 the def's feedback slot
-is *the last type slot allocated while compiling the rhs*:
+**Plain assignment donates its rhs's slot — but only when it can prove which
+slot that is.** The requirement on the donated slot is stronger than "it
+describes the value": it must observe the stored value on **every execution of
+the assignment**, because later NoRecord reads of `x` will claim "my type is
+whatever that slot accumulated".
 
-```cpp
-int defSlot = (ctx.typeSlotCount() > typesBefore) ? (int)ctx.typeSlotCount() - 1
-                                                 : DefUseAnalysis::kNoSlot;
-ctx.defUseAnalysis().trackDef(lhs, defSlot);
-```
+This used to be inferred positionally — *the last type slot allocated while
+compiling the rhs* — which is wrong whenever the rhs's outermost operation emits
+no record of its own. Measured failures: `x <- -a` and `x <- !f()` and
+`x <- is.null(f())` all donated the *operand's* slot (so `x <- -a` with a logical
+`a` claimed `logical` where the truth is `integer`), and `x <- if (c) f() else g()`
+donated **one branch's** slot, losing the other's types. All under-approximations,
+the unsound direction.
 
-That slot is exactly the one that observed the value being stored, so it is a
-sound source for later reads of `x` — this is the `a <- expr; …; a` subsumption of
-§2A.1.1 rule 2. If the rhs produced no record at all, the def is slot-less.
+It is now established from what was actually emitted (`valueRecordSlotHere`).
+The record helpers stamp `(slot, instruction position, scope id)`; the assignment
+queries the stamp immediately after `compileExpr(rhs)`, before anything else is
+emitted, and accepts it only if:
+
+1. the stamped instruction is still the last **value-changing** one — nothing
+   replaced the value since. (Value-*neutral* instructions such as `visible_`
+   and `ensure_named_` are excluded, or `x <- v[i]` and `x <- (f())` would be
+   rejected for the trailing `visible_`.)
+2. the stamped scope is still open — the record is on every path here, not on
+   one branch.
+
+Neither condition subsumes the other: the position test catches `-a` but accepts
+the `if`, whose last emitted instruction genuinely *is* a record; the scope test
+catches the `if` but accepts `-a`. Anything unproven yields `kNoSlot`, so later
+reads record for real — an elision lost, never a wrong type.
+
+A stamp that is merely *inaccurate* is safe by construction: C++ leaves argument
+evaluation unsequenced in `cs << a << b << c`, so a helper buried mid-chain may
+capture a stale position — which makes condition 1 fail. It can cost an elision,
+never grant a wrong slot.
+
+**NoRecord reads stamp the source, keeping the dep graph flat.** A NoRecord read
+emits no record at all, so it stamps `uc.defSlot` — the *ultimate source* — with
+the `ldvar`'s position. That is what makes `a <- f(); b <- a; c <- b; d <- c`
+resolve as `#1→#0, #2→#0, #3→#0, #4→#0` instead of a chain, which
+`markRelatedDirty`'s one-level walk requires (§2C.2).
 
 **Subassignment is a type barrier.** At site 1199 (`x[i] <- v`, `x[[i]] <- v`,
 and the multi-dim forms), the emitted sequence is
@@ -716,31 +746,81 @@ from its children's.
 
 ### 2B.1 Suppress-by-default (the inferability insight)
 
-The compiler's post-pass marks every non-leaf slot suppressed:
-`shouldNotRecord = !isLeaf`. A suppressed inner node's handler
-(`recordInner`) does nothing:
+An inner node starts clean and records only when a child tells it to. Its
+handler does nothing otherwise:
 
 ```cpp
-void recordInner(SEXP e) { if (shouldNotRecord) return; doRecord(e); }
+void recordInner(SEXP e) { if (!dirty) return; dirty = false; doRecord(e); }
 ```
 
-So in the common case an inner node costs only a suppressed check, never a full
-observation.
+So in the common case an inner node costs only a bit test, never a full
+observation. Note there is no separate `shouldNotRecord` flag: "is this an
+elidable inner node" is carried by the opcode, and `dirty` is the whole runtime
+state.
 
-### 2B.2 Reversal: un-suppress when inference breaks
+### 2B.2 Reversal: record when the operands change
 
-Inference from operand types is unsound in exactly one situation: an **object**
-flows through, because S3/S4 dispatch on `[`, `+`, etc. can return *anything*,
-untethered from operand types. So suppression must be **reversible**: when a
-child leaf observes an object, it un-suppresses its parent inner node, which then
-starts recording. This is the `notifyRelatedNodes` mechanism (code + design in
-§2C.2). Key properties: it is **object-gated** (only an object triggers it),
-**monotonic** (`shouldNotRecord` only goes true→false), and **latched** (done
-once per activation).
+**This section describes the mechanism as of 2026-08-11; it replaced an
+object-gated design, and §2B.2.1 explains why.**
 
-The reversal is the subtle part of inner-node optimization: getting it cheap
-(don't pay on every non-object load) *and* sound (never miss an object that
-would invalidate the inference) is what the object-gate + one-shot latch buy.
+An inner node must re-record whenever its result could differ from the one it
+already absorbed. Each child therefore computes a **per-execution signature** of
+the value it just observed, compares it against the previous execution's, and on
+a change marks its parent `dirty`. The parent records once and re-arms.
+
+```
+sig(v) = 1 + TYPEOF*4 + isScalar*2 + hasDim      (see signatureOf)
+sig(v) = 0  ("always dirty") for objects, attributes beyond a lone `dim`,
+            S4, and length 0 — values that cannot be summarised
+```
+
+Soundness is one induction: *not dirty* means every operand had the same
+signature as last execution, so — given the operator's result is a function of
+its operands' signatures — the result is the one already recorded, and since the
+accumulated state only grows, having absorbed it once is permanent. The base
+case holds because a slot's initial signature is 0, which never compares equal,
+so the first execution always records.
+
+The critical property is that the signature describes **this execution**, not
+the accumulated state. The accumulated state is monotone and stops changing
+while the live value keeps varying underneath it: after operands have separately
+been seen as `int` and `double`, an accumulated-state watcher sees nothing when
+the first `(int, int)` pair arrives, and misses the `integer` result.
+
+### 2B.2.1 What this replaced, and why
+
+The previous design un-suppressed a parent when a child observed an **object**,
+via `notifyRelatedNodes` — object-gated, monotonic, and latched once per
+activation. It was cheaper (one test on a value `doRecord` had already computed)
+but not lossless, for two independent reasons:
+
+1. **The type set is unreconstructible when both operands are polymorphic.**
+   `h(1L,1.5); h(1.5,1L)` and the same plus `h(1L,1L)` leave *byte-identical*
+   operand feedback — `[integer,double]`, `[double,integer]`, both scalar — but
+   ground truths of `{double}` and `{double,integer}`. No function of the
+   operand feedback can be right for both. This is an impossibility, not a
+   missing rule.
+2. **`attribs` is unreconstructible**, because `copyMostAttrib` gates on the
+   operand's actual length while the feedback carries only `notScalar`
+   (§2B.3).
+
+Worse, inner-node reconstruction was never implemented — `propagateDeps` only
+does the leaf copy — so suppressed inner slots simply stayed empty
+(`numTypes == 0`, which `PirType::merge` asserts against). And when the old gate
+*did* fire it recorded a biased sample: only post-object executions, missing
+every one before the latch.
+
+The signature mechanism needs no reconstruction at all: the inner node holds its
+own recorded observations. Two further consequences of dropping the latch:
+
+- it is **re-armable**. The old latch was monotone in the wrong direction — one
+  object anywhere meant the parent recorded on *every* subsequent execution for
+  the life of the function. The signature version re-suppresses as soon as the
+  operands settle, so a loop that sees an object early and plain doubles for a
+  million iterations is far cheaper.
+- an object operand keeps signature 0, which never compares equal even to
+  itself, so it re-records for as long as objects keep arriving — the old
+  behaviour, without the permanence.
 
 ### 2B.3 What actually becomes an inner node
 
@@ -794,7 +874,7 @@ useful bit to lose.
 
 `[` has therefore been **demoted to `recordTypeTracked(false)`** — a tracked
 always-record leaf, the same treatment as `[[`. Confirmed in the emitted
-bytecode: `x[i]`'s result slot is now `isLeaf: 1, should not record: 0` and its
+bytecode: `x[i]`'s result slot is now a plain always-recording leaf and its
 operands carry no parent pointer, while `x + y` still yields a suppressed inner
 node.
 
@@ -822,15 +902,15 @@ distinct from the `Colon` result node.
   inner node. Note the obligation covers the **whole `ObservedValues`**, not just
   the SEXPTYPE — `[` was demoted for exactly this reason (§2B.3), having been an
   inner node for ~7 weeks on a SEXPTYPE-only argument.
-- **Sound + cheap reversal** (§2B.2). Cheapness relies on the object-gate/latch;
+- **Sound + cheap reversal** (§2B.2). Cheapness relies on the signature compare;
   soundness relies on *some* child always observing the object before the inner
   node's (elided) feedback is consumed.
 - **Graceful degradation / leaning on leaves.** An inner node can only be elided
   if at least one child registered under it: the post-pass sets
-  `isLeaf = (slot ∉ parentSlots)` and `shouldNotRecord = !isLeaf`, and
+  leaf-vs-inner (`slot ∉ parentSlots`) into the opcode, and
   `registerSlot(parent, /*isParent=*/true)` only enters `parents` for the slots
   pending at that level. So an expression whose operands registered nothing stays
-  `isLeaf` and falls back to always-record — it degrades rather than eliding
+  leaf status and falls back to always-record — it degrades rather than eliding
   unsoundly.
 
   Keep this distinct from the *soundness* requirement, which is the stronger one:
@@ -859,16 +939,40 @@ Both strategies are carried by extra fields on the single feedback node
 (`runtime/TypeFeedback.h`):
 
 ```cpp
-uint8_t isLeaf : 1;                    // set by the compiler post-pass
-uint8_t shouldNotRecord : 1;           // inner nodes start suppressed (= !isLeaf)
-uint8_t hasPropagatedNotification : 1; // notify latch
-ObservedValues* parent;                // 8-byte, reconstructed at compile time
+uint8_t  dirty : 1;    // inner node: a child's signature changed, re-record
+uint8_t  lastSig;      // signature of the value seen on the PREVIOUS execution
+uint16_t parentPlus1;  // parent slot index, biased by one (0 = no parent)
 ```
 
-Total size with these fields: **16 bytes** (1+1+3 `seen`+3 pad+8 pointer) vs. the
-baseline **4 bytes** — the +12-byte "node-size confound" (§1.1, §7). `parent`
-links a node to its enclosing inner node; it is reconstructed at compile time,
-not serialized.
+Total size: **8 bytes** (1 flags + 1 `dirty` + 3 `seen` + 1 `lastSig` + 2
+parent) vs. the baseline **4 bytes**. `parentPlus1` links a node to its
+enclosing inner node; it is reconstructed at compile time, not serialized.
+
+Three fields that earlier versions carried are **gone**:
+
+- `isLeaf` / `shouldNotRecord` — nothing read them at runtime (`PirType::merge`,
+  the JIT-side consumer, never looks at them) and the opcode already says
+  whether a slot is a leaf or an elidable inner node. `shouldNotRecord` was in
+  any case only ever set as `!isLeaf`.
+- `hasPropagatedNotification` — the notify latch, meaningless once notification
+  became per-execution rather than one-shot (§2B.2.1).
+
+Two deliberate layout choices:
+
+- **`parent` is an index, not a pointer.** Every edge is within one `types_`
+  array, so 2 bytes replace 8 — most of the way from 13 bytes to 8. It is
+  **biased by one** so that an all-zero slot means "no parent": the array is
+  `memcpy`'d from a vector and the constructor `memset`s, so a `0xFFFF` sentinel
+  would be one forgotten initializer away from silently making slot 0 everyone's
+  parent. An edge whose parent index will not fit is *dropped* at compile time,
+  not truncated — a truncated edge would leave an inner node that no child can
+  reach, so it would never record at all.
+- **`lastSig` gets a whole byte** rather than sharing one with `dirty`. That
+  costs a byte and buys three things: no read-modify-write to preserve a
+  neighbouring bit; no range guard on `TYPEOF` (a 5-bit field, so `≤ 31`, and
+  the widest encoding fits a byte — at 7 bits the encoding saturated and needed
+  a `type <= 30` check to stop a wrapped signature aliasing another type's); and
+  `sizeof` becomes a power of two.
 
 ### 2C.2 One notification function for both edges
 
@@ -876,34 +980,41 @@ The single mechanism that serves *both* "leaf/inner notifies its parent" and
 "source notifies its dependents' parents":
 
 ```cpp
-// TypeFeedback::notifyRelatedNodes — un-suppress this slot's own parent (if any)
-// AND the parents of all its NoRecord dependents, together, once. idx is passed
-// in directly (previously derived via pointer arithmetic on the slot).
-void notifyRelatedNodes(ObservedValues& slot, bool isObject, uint32_t idx) {
-    if (!isObject || slot.hasPropagatedNotification) return; // object-gate + one-shot latch
-    slot.hasPropagatedNotification = true;
-    if (slot.parent)                              // leaf-with-parent / non-root inner
-        slot.parent->shouldNotRecord = false;
-    for (uint32_t d : noRecordSourceToDeps_[idx]) // source → dependents' parents
-        if (ObservedValues* p = types_[d].parent)
-            p->shouldNotRecord = false;
+// TypeFeedback::markRelatedDirty — mark this slot's own parent (if any) AND the
+// parents of all its NoRecord dependents. Called only when the signature
+// actually changed.
+void markRelatedDirty(ObservedValues& slot, uint32_t idx) {
+    if (slot.hasParent())                          // leaf-with-parent / non-root inner
+        types_[slot.parentSlot()].dirty = true;
+    for (uint32_t d : noRecordSourceToDeps_[idx])  // source → dependents' parents
+        if (types_[d].hasParent())
+            types_[types_[d].parentSlot()].dirty = true;
 }
 ```
 
 Design points:
 
-- **Optimistic bail.** The common case is a non-object value: `!isObject` returns
-  immediately, touching nothing.
-- **One-shot latch (`hasPropagatedNotification`).** Un-suppression is monotonic,
-  so the latch makes the cross-slot writes happen once per activation rather than
-  on every object observation — the real win, since the parent lives on a
-  *different* cache line. Cleared by `ObservedValues::reset()` (`*this = {}`), so
-  re-profiling after deopt notifies correctly.
+- **Fires on change, not on objects, and is not latched.** The predicate is "the
+  per-execution signature differed", and the consumer clears `dirty` after
+  recording. See §2B.2.1 for why the object gate and the one-shot latch went
+  away.
 - **Generic over both edges.** One function handles the parent edge (leaf 2B
   reversal / non-root inner) and the dependents edge (leaf 2A NoRecord source),
   with the inapplicable branch a cheap no-op. This is *the* place the two
   strategies literally share code, and it is why the opcode taxonomy collapses to
   "notifies or not" rather than a 2×2 of parent×source.
+- **The walk is one level deep, and that is load-bearing.**
+  `noRecordSourceToDeps_` holds only *direct* edges, so a source reaches its
+  dependents' parents but not a dependent's dependents'. This is only correct
+  because the dep graph is kept **flat**: a NoRecord read stamps the *ultimate
+  source* slot rather than the dep slot just allocated, so `b <- a; c <- b`
+  yields `#2→#0, #3→#0` rather than a `#3→#2→#0` chain (§2A.4). With chains, a
+  copy sitting under a suppressed inner node was two hops from the source and
+  never reached — the inner node stayed suppressed permanently and recorded
+  nothing at all, a real divergence from baseline. Flattening removes the need
+  for a transitive walk rather than adding one.
+- **Only leaves that need it pay.** A parentless non-source leaf keeps the plain
+  `record_type_` opcode and never calls this, nor maintains a signature.
 
 ### 2C.3 One unified opcode family
 
@@ -920,7 +1031,7 @@ After the post-pass (`setTypeFeedbackParents`), the value-type record opcodes ar
 | `record_type_inner_notify_` | inner | inner node that **notifies**: non-root (parent) **or** root source (dependents) |
 
 Note the two families are parallel: each has a plain form and a `*_notify_` form,
-and the "notify" form of both routes through the same `notifyRelatedNodes`.
+and the "notify" form of both routes through the same `markRelatedDirty`.
 `record_test_`/`record_call_` (branch/callee feedback) sit outside this range.
 
 The `ObservedValues` recording primitives:
@@ -928,12 +1039,12 @@ The `ObservedValues` recording primitives:
 - `doRecord(e)` — shared core: updates `numTypes/seen[]`, `notScalar`, `object`,
   `attribs`, `notFastVecelt`.
 - `record(e)` → just `doRecord(e)`. Used by plain `record_type_`/`_once_`.
-  (Leaves are never suppressed, so `record()` has **no** `shouldNotRecord` check;
+  (Leaves are never suppressed, so `record()` has **no** `dirty` check;
   it was dead for its callers and was removed this session.)
 - `recordSimple(e)` — historically a thin alias for `doRecord`; **inlined away**
   this session (`record_type_leaf_notify` calls `doRecord` directly, being a
   friend of `ObservedValues`).
-- `recordInner(e)` — `if (shouldNotRecord) return; doRecord(e);`. Used by *both*
+- `recordInner(e)` — `if (!dirty) return; dirty = false; doRecord(e);`. Used by *both*
   inner-node opcodes.
 
 **Untracked records** (a leaf concern that touches the shared opcode). Not every
@@ -951,11 +1062,11 @@ suppression anywhere. Without this, an expression like `a + f(1)` in a default a
 would suppress the `+` on the strength of the tracked call result while `a`, being
 untracked, held no parent pointer to revoke it.
 
-Not registering guarantees `isLeaf && isRoot` — nothing maps to or from the slot
+Not registering guarantees leaf && root — nothing maps to or from the slot
 in `parents`. It does **not** structurally guarantee `!isSource`: the post-pass
-derives `sourceSlots` from `typeDeps_` targets, and `trackDef` records a raw slot
-index (`typeSlotCount() - 1`) without regard to tracking (§2A.4), so an untracked
-slot could in principle be named as a def's feedback slot and then be specialized
+derives `sourceSlots` from `typeDeps_` targets, and `trackDef` records whatever
+slot the value-record stamp names, without regard to tracking (§2A.4), so an
+untracked slot could in principle be named as a def's feedback slot and then be specialized
 to `record_type_leaf_notify_`. In practice it never is, but *contingently*, for a
 different reason at each site: the colon casts and the default-arg fallback are
 never reached by `trackDef` at all (the latter returns before `classifyUse`), and
@@ -972,7 +1083,7 @@ set, consulted only under `RIR_RECORD_STATS`).
   root inner node (`f(x)+1`) is the source, later reads of `a` are NoRecord
   leaves depending on it. When the source (an inner node) records an object it
   must un-suppress the *dependent leaves' parents* — a "two-step" propagation
-  that `notifyRelatedNodes`'s dependents loop performs.
+  that `markRelatedDirty`'s dependents loop performs.
 - **An inner node's elision is sound only if the node that *produces* its operand
   can un-suppress it.** This is why opaque value results (call return, `[`, `[[`,
   `for` element, replacement-fn) use `recordTypeTracked(isParent=false)` rather
@@ -995,8 +1106,8 @@ set, consulted only under `RIR_RECORD_STATS`).
 
   `x[[i]]` is an object while `x` and `i` are not, so the `[[` result is the
   *only* node that can tell `+` its inference has broken. Because it is tracked it
-  holds `parent -> Type#4`, so its `notifyRelatedNodes` cleared `+`'s
-  `shouldNotRecord` and `+` correctly recorded the S3-dispatched result. Had the
+  holds `parent -> Type#4`, so its `markRelatedDirty` set `+`'s
+  `dirty` and `+` correctly recorded the S3-dispatched result. Had the
   `[[` result been untracked, `+`'s children would be only `x` and `i` — both
   non-objects — so **nothing would ever have un-suppressed `+`**: it would have
   kept empty feedback while dispatching to `+.myclass` and returning an object.
@@ -1008,9 +1119,9 @@ set, consulted only under `RIR_RECORD_STATS`).
   the "leaves" row, untracked ones in the "untracked" row.)
 
   Note this benefit is specifically about the **parent edge**. Acting as a *def's
-  feedback slot* does **not** require tracking: `trackDef` records
-  `typeSlotCount() - 1`, the raw slot index, regardless of whether the slot was
-  ever registered in the tree (§2A.4).
+  feedback slot* does **not** require tracking: `trackDef` records whatever slot
+  the value-record stamp names, regardless of whether that slot was ever
+  registered in the tree (§2A.4).
 - **The `tracked` vs `untracked` distinction is the bridge.**
   `recordTypeTracked(isParent)` registers a slot in the expression-tree structure
   (parent/leaf role) so the post-pass can specialize it and an enclosing inner
@@ -1025,6 +1136,13 @@ materialized as a data structure; it is discovered with a **stack of pending
 child-slot lists** (`slotsStack`) plus a flat `parents` map (child slot → parent
 slot):
 
+- `slotsStack` lives on the **`CodeContext`**, i.e. one per Code object, not per
+  function. An expression tree never spans a Code boundary: a promise body is a
+  separate Code object whose evaluation is decoupled in time from the expression
+  that created it, so its operands are not operands of that expression. When
+  this lived on the function-wide `CompilerContext`, a promise's leaves landed
+  in whatever level the *enclosing* function had open — in `f(x) + g(x)` the
+  promise loads of `x` became children of the `+`.
 - `compileExpr`'s `LANGSXP` case brackets every call/expression with
   `pushNewNodeForSlots()` … `compileCall(...)` … `popNodeForSlots()`. One stack
   level per nested expression; `compileExpr` is the *single owner* of the
@@ -1085,15 +1203,14 @@ slot):
   `recordTypeOnceBitmapSize`); `bc/CompilerCFG.{h,cpp}` supplies the CFG/scope
   structure the dominance approximation reads (§3).
 - A post-pass, `TypeFeedback::setTypeFeedbackParents` (called from
-  `Compiler::finalize`), then: sets each slot's `parent`, sets `isLeaf`
-  (a slot with no children) and `shouldNotRecord = !isLeaf`, computes the
+  `Compiler::finalize`), then: sets each slot's `parentPlus1`, computes the
   `sourceSlots` set (a def is a notifying source only if its NoRecord dependent
   is a registered child — the over-marking fix of §2A.6), and **specializes each
   placeholder `record_type_`/`record_type_once_` opcode** into the right family
   member (`leaf_notify_[once_]` / `inner_` / `inner_notify_`) by `(isLeaf, isRoot,
   isSource)`.
 - `buildNoRecordReverseMap` builds `noRecordSourceToDeps_` (source slot → its
-  NoRecord dependent slots) from `typeDeps_`, so `notifyRelatedNodes` can walk a
+  NoRecord dependent slots) from `typeDeps_`, so `markRelatedDirty` can walk a
   source's dependents at runtime.
 
 ---
@@ -1460,7 +1577,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 - **`record_type_dep_` / `record_type_once_dep_` as separate opcodes.** Merged
   this session into `record_type_leaf_notify_[once_]`. They had become
-  byte-identical handlers once `notifyRelatedNodes` was made generic over
+  byte-identical handlers once the notifier was made generic over
   parent-and-dependents; the split was residual. The former name `leafWithParent`
   was renamed to `leaf_notify` because the merged opcode also covers a parentless
   source.
@@ -1472,9 +1589,9 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
   notify gate every execution. The new axis moves that cost off the common path;
   a root+source now correctly lands in the notifying bucket. This also let
   `notifyParent()` and the separate `recordInnerNode()` primitive be deleted
-  (both inner opcodes route through `recordInner` + `notifyRelatedNodes`).
-- **`shouldNotRecord` check inside `record()`** (the plain-leaf recorder).
-  Removed: leaves are never suppressed (`shouldNotRecord = !isLeaf`), so the check
+  (both inner opcodes route through `recordInner` + `markRelatedDirty`).
+- **suppression check inside `record()`** (the plain-leaf recorder).
+  Removed: leaves are never suppressed, so the check
   was provably dead for its callers and cost a load+branch on the hottest record
   opcode.
 - **Env-bitmap force-behavior (`ForceBehaviorKind::EnvBit` +
@@ -1582,9 +1699,10 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-07-27)
+## 7. Current implementation status (snapshot, 2026-08-11)
 
-Working branch: `recordLessNew2-alloca` (the canonical/"official" branch).
+Working branch: `recordLessNew2-expressionsNewSchema-fixUnary`, at commit
+`8e31b041` ("fix unary and source chains").
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
 
@@ -1593,7 +1711,7 @@ been adapted to the new feedback-recording strategy — that is not started, and
 out of scope for this document. Everything below describes the producer side:
 what the compiler emits and what the interpreter does at runtime.
 
-**In the branch (verified present in the source on 2026-07-27).** Everything this
+**In the branch (verified present in the source on 2026-08-11).** Everything this
 document describes was checked against the tree; the markers below were confirmed
 by direct inspection, not recalled:
 
@@ -1606,9 +1724,9 @@ by direct inspection, not recalled:
 - The opcode family `record_type_leaf_notify_[once_]` /
   `record_type_inner_` / `record_type_inner_notify_`; the old
   `record_type_dep_` / `record_type_once_dep_` are **gone**.
-- `notifyRelatedNodes(slot, isObject, idx)` (takes `idx` directly);
+- `markRelatedDirty(slot, idx)`;
   `recordInner()`; `record()` is a plain `doRecord` with **no**
-  `shouldNotRecord` check; `recordSimple` and `notifyParent` are **gone**.
+  suppression check; `recordSimple` and `notifyParent` are **gone**.
 - `RECORDLESS_EXPTREE_ENABLED` **removed** — the expression-tree scheme is
   unconditionally compiled in (only `RECORDLESS_EXPTREE_DEBUG` remains).
 - FB: `ldvar_cached_` / `ldvar_cached_noRecordFB_` /
@@ -1620,22 +1738,47 @@ by direct inspection, not recalled:
   (`fbgeneric` / `always` / `record_once` / `no_record` + `fbgeneric_bail`
   reported separately). Compile-time toggle, **off** by default.
 
-**Two recent changes (uncommitted at the time of writing).**
+**Changes landed since the previous snapshot (2026-07-27 → 2026-08-11).**
 
-1. **`[` (`Bracket`) demoted** from an elidable inner node to a tracked leaf
-   (`recordTypeTracked(false)`) — justification and the measured counterexample in
-   §2B.3. Verified: `x[i]`'s result slot is now
-   `isLeaf: 1, should not record: 0`, while `x + y` still yields a suppressed
-   inner node.
-2. **`recordTypeTracked` degrades to untracked in default formal arguments**
+1. **`[` (`Bracket`) demoted** from an elidable inner node to a tracked leaf —
+   §2B.3. `x[i]`'s result is a plain always-recording leaf; `x + y` still yields
+   a suppressed inner node.
+2. **`:` (`Colon`) demoted** likewise, to `recordTypeOpaqueResult()`. It stays in
+   the same `compileSpecialCall` binary block (so the bytecode shape is
+   unchanged) but is routed away from `recordTypeTracked(true)` at the record
+   site. `seq_colon` coerces both operands to `double` and derives the result
+   type *and* length from the **values** — `1:1`, `1:5` and `1.5:3.5` all have
+   identical operand feedback and differ in both `seen` and `notScalar`. This is
+   also the one operator that breaks the otherwise-universal
+   `notScalar = disjunction` rule, which comes from `R_binary`'s
+   `n = max(n1, n2)`; `:` never goes through `R_binary`.
+3. **`recordTypeTracked` degrades to untracked in default formal arguments**
    (§2C.3), so default-arg records both always record and are attributed to the
-   `untracked` row — matching the baseline. Verified with a program whose only
-   binary op and only call sit in a default arg: `inner nodes` = 0, the records
-   appearing under `untracked`; a main-body `a + b` still reports
-   `inner nodes 200, 100% skipped`.
+   `untracked` row — matching the baseline.
+4. **New notification mechanism** — per-execution signature + `dirty` bit,
+   replacing the object gate and one-shot latch (§2B.2, §2B.2.1). This is what
+   makes inner-node feedback *lossless*: the node records its own observations
+   instead of relying on a reconstruction that was never implemented and is
+   provably impossible in general.
+5. **`ObservedValues` shrunk 13 → 8 bytes** (§2C.1): `isLeaf`,
+   `shouldNotRecord` and `hasPropagatedNotification` removed, `parent` pointer
+   replaced by a biased 2-byte index, `dirty` and `lastSig` added.
+6. **`slotsStack` moved from `CompilerContext` to `CodeContext`** (§2C.5), so a
+   promise body can no longer register its leaves into whatever expression level
+   its caller left open. Behaviour-neutral today because promises are excluded
+   from the optimization anyway, but it removes the trap for when they are
+   re-enabled.
+7. **Honest def-slot attribution** (§2A.4) — the positional
+   `typeSlotCount() - 1` heuristic replaced by a stamp that must be proven to
+   describe the stored value on every path. Fixes four measured
+   under-approximations (`-a`, `!f()`, `is.null(f())`, `if/else`).
+8. **Flat NoRecord dep graph** (§2A.4, §2C.2) — a NoRecord read stamps the
+   ultimate source, so copy chains resolve in one hop. This also closed a
+   pre-existing hole: with chains, a copy under a suppressed inner node was two
+   hops from the source and `markRelatedDirty`'s one-level walk never reached
+   it, leaving that node recording *nothing* where baseline records real types.
 
-Both build clean and all checked benchmarks produce correct results. The §8
-figures have been **re-measured on this tree** and include both changes.
+All build clean and every checked benchmark produces correct results.
 
 To collect stats: flip `//#define RIR_RECORD_STATS` on in
 `rir/src/interpreter/record_stats.h`, rebuild, run; **flip it back off for any
@@ -1664,14 +1807,18 @@ rigorously this session and must be front-and-center in any writeup.
   of layout/alignment noise, not a real delta. Bidirectional "big-diffs"
   (cholesky 0.90, em 0.91 slower; text_look 1.12, fasta_naive 1.10 faster) around
   a 1.0 mean confirm this.
-- Recommended methodology (not yet fully adopted): compare **retired instruction
-  counts** (`perf stat -e instructions`) — layout/frequency-invariant, so
-  ~identical counts across functionally-equal builds prove wall-clock scatter is
-  artifact; and establish the **noise floor by benchmarking a commit against
-  itself**.
+- Recommended methodology (**now adopted** for the 2026-08-11 work): compare
+  **retired instruction counts** (`perf stat -e instructions`, 3 reps) rather
+  than wall clock — layout/frequency-invariant, so it measures work done rather
+  than layout luck. Observed run-to-run spread with this method is ~0.004%, so
+  sub-1% deltas are resolvable. Every optimization in items 4-8 of §7 was
+  accepted or rejected on this basis, always against a rebuilt A/B pair of the
+  *same tree* (one edit, recompile, measure, restore, verify the restored binary
+  is byte-identical by md5).
 - Prior confounds recorded in the author's memory notes: a "node-size confound"
-  (the +12-byte `ObservedValues` growth for the expression-tree fields inflates
-  per-node cost vs. a clean master, muddying speedup claims); several observed
+  (the `ObservedValues` growth for the expression-tree fields inflates per-node
+  cost vs. a clean master, muddying speedup claims — now +4 bytes over the
+  baseline's 4, down from +12); several observed
   "speedups"/"regressions" (a "specialized nodes" 1.38× on spectralnorm; a ~0.7%
   mandelbrot regression) were each traced to GCC codegen shifts, **not** to the
   algorithm — record counts were byte-identical across those commits.
@@ -1686,7 +1833,16 @@ columns (skip% = skipped/should):
 2. **leaves by class:** `RecordAlways`, `RecordOnce`, `NoRecord (elided)` — each
    row's "should" carries its share of all leaves.
 3. **inner nodes by opcode:** `inner (standalone)`, `inner_notify` — here
-   "skipped" means *suppressed* via `shouldNotRecord` (the elision), not gated.
+   "skipped" means *suppressed* via the `dirty` gate (the elision), not gated:
+   no operand's per-execution signature changed, so the result is the one
+   already absorbed. Unlike the old latch this is re-armable, so a node can go
+   back to being suppressed once its operands settle.
+   Printed under table 2 is a non-row line, **"of all N records, M updated
+   nothing (signature unchanged)"** — the share of records that ran but whose
+   early-out found nothing to do. It *overlaps* the recorded counts rather than
+   partitioning them, and only the `_notify_` paths can early-out (plain
+   `record_type_` has no signature and always does the work). It exists because
+   that work is otherwise invisible: the opcode still executes.
 4. **force behavior (recordForceBehavior variants):** rows `fbgeneric`,
    `always`, `record_once`, `no_record`, `TOTAL`; plus `fbgeneric_bail`
    reported *separately* below the table (loads where the generic dispatcher
@@ -1708,6 +1864,47 @@ tree (i.e. **after** the `[` demotion and the default-arg degradation):
 | fasta_naive_2 ×20000 | 9,093,124 | 4,820,319 | 4,272,805 | **47.0%** |
 | spectralnorm ×3 | 1,466 | 922 | 544 | **37.1%** |
 | binarytrees_naive ×3 | 164,292 | 147,343 | 16,949 | **10.3%** |
+
+Re-measured 2026-08-11 at `8e31b041`, same conditions. Elision rates are
+essentially unchanged by the new notification mechanism — the point of it was
+losslessness, not more skipping — but inner nodes now hold **real recorded
+feedback** rather than nothing:
+
+| benchmark | site | should | recorded | skipped |
+|---|---|---|---|---|
+| mandelbrot ×500 | leaves | 126,614,090 | 52,388,596 | 58.6% |
+| | inner nodes | 92,736,740 | **62** | ≈100% |
+| | TOTAL | 219,665,552 | 52,703,380 | **76.0%** |
+| nbody_naive ×20000 | leaves | 35,161,808 | 20,841,585 | 40.7% |
+| | inner nodes | 8,000,219 | 134 | ≈100% |
+
+Note the inner-node "recorded" column: 62 records out of 92.7 M executions on
+mandelbrot. Under the old object-gated scheme that column would read 0 — and the
+slots would be empty, with no way to reconstruct them. Losslessness costs 62
+records.
+
+The no-op line (§ stats output, table 3) shows how much of the *surviving* work
+the signature early-out removes: **82.2%** of mandelbrot's 52.7 M records update
+nothing, versus 35.4% on nbody_naive — the same workload-shape asymmetry visible
+everywhere else here.
+
+**Instruction-count deltas** for the individual 2026-08-11 optimizations,
+`perf stat -e instructions`, 3 reps, A/B against a rebuilt copy of the same tree
+(spread ~0.004%):
+
+| change | mandelbrot | nbody_naive | storage |
+|---|---|---|---|
+| 13 → 8-byte slot | −1.25% | −0.74% | −0.33% |
+| signature early-out (hoisted check) | −4.35% | −2.42% | −0.78% |
+| readable signature encoding | +0.19% | +0.11% | +0.03% |
+| honest def slot + flat deps | ±0% | ±0% | ±0% |
+| **cumulative vs. no inner-node elision** | **−15.2%** | **−5.3%** | **−2.2%** |
+
+Two entries worth reading carefully. The readable-encoding row is a *deliberate*
+regression: biasing the type rather than the whole value makes the low bits
+genuinely `isScalar`/`hasDim`, at the cost of an `lea` that no longer folds a
+constant. And the honest-def-slot row being zero is the useful result — the
+correctness fix costs nothing on these benchmarks.
 
 Shape of the wins, by benchmark character:
 
@@ -1811,11 +2008,11 @@ setup.
   `ldvar*` handlers.
 - `rir/src/runtime/TypeFeedback.h` — `ObservedValues` (flags, `doRecord`,
   `record`/`recordInner`, notify), `TypeFeedback` (`record_type_*` methods,
-  `notifyRelatedNodes`, `typeDeps_`, `noRecordSourceToDeps_`,
+  `markRelatedDirty`, `typeDeps_`, `noRecordSourceToDeps_`,
   `buildNoRecordReverseMap`, `ForceBehaviorKind`).
 - `rir/src/bc/Compiler.cpp` — `compileGetvar`, `emitRecordTypeForVar`,
   `setTypeFeedbackParents` (the post-pass that specializes opcodes and sets
-  `isLeaf`/`shouldNotRecord`/parents), once-bit assignment & clearing.
+  parents), once-bit assignment & clearing.
 - `rir/src/bc/DefUseAnalysis.h` — `classifyUse` (RecordAlways/RecordOnce/NoRecord
   + `ForceBehaviorKind`), dominance/postdominance conditions.
 - `rir/src/bc/insns.h` — opcode definitions (the value-type record family must
