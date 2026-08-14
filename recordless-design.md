@@ -560,10 +560,14 @@ The data path, end to end (verified 2026-07-27):
 3. **Runtime.** The dependent slot is never written (no opcode). The *notify*
    half is live: when the source's signature changes, `markRelatedDirty` walks
    `noRecordSourceToDeps_[source]` and marks each dependent's parent dirty.
-4. **Consumer side (out of scope here).** `TypeFeedback::propagateDeps()` exists
-   as the intended recovery step (`types_[i] = types_[typeDeps_[i]]` for every
-   slot with a dep). Wiring it into the JIT is future work and is not covered by
-   this document — see the scope boundary in §7.
+4. **Consumer side (out of scope here).** `TypeFeedback::reconstructFeedback()` is the
+   recovery step: it fills every dependent slot from its source
+   (`copyTypeObservationsFrom`, the type fields only) and derives the
+   force-behavior dimension from `forceBehaviorKinds_` in the same pass. It has
+   **no callers** — wiring it into the JIT is future work and is not covered by
+   this document (see the scope boundary in §7), so dependent slots are all-zero
+   at runtime today. **§4.6** gives the full rule set, why the type copy must not
+   be a whole-struct assignment, and the verification.
 
 ### 2A.4 Def/use tracking and invalidation (where source slots come from)
 
@@ -804,8 +808,9 @@ but not lossless, for two independent reasons:
    operand's actual length while the feedback carries only `notScalar`
    (§2B.3).
 
-Worse, inner-node reconstruction was never implemented — `propagateDeps` only
-does the leaf copy — so suppressed inner slots simply stayed empty
+Worse, inner-node reconstruction was never implemented — `reconstructFeedback` only
+does the leaf copy, and is itself never called (§2A.3, §4.6) — so suppressed
+inner slots simply stayed empty
 (`numTypes == 0`, which `PirType::merge` asserts against). And when the old gate
 *did* fire it recorded a biased sample: only post-object executions, missing
 every one before the latch.
@@ -1246,7 +1251,7 @@ already-instrumented site `S` (a definition of `v`, or an earlier recorded use)
 such that the value observed at `U` is *necessarily* the value observed at `S`.
 Then `U` emits no opcode, and `U`'s slot is annotated `typeDeps_[U] = S` so the
 JIT can recover `U`'s feedback by copying `S`'s persisted state
-(`propagateDeps`, §2A.3 — defined but not yet wired up, as PIR-side adaptation
+(`reconstructFeedback`, §2A.3 — defined but not yet wired up, as PIR-side adaptation
 has not started).
 
 **The control-flow condition.** "Necessarily the same value" is established from
@@ -1483,6 +1488,11 @@ below, which are the outlined call targets in the dispatch loop.
 - `RecordOnce` — record FB once per invocation, gated by the same per-code
   `fired` bitmap.
 
+`FBValue` and `Infer` emit the *same* opcode (`ldvar_cached_noRecordFB_`); the
+split exists purely so a consumer can tell "statically a value" from "derivable
+from the source slot". **§4.5** proves each strategy sound and **§4.6** gives the
+reconstruction rule each one implies.
+
 ### 4.3 How FB gets recorded: cached vs. non-cached loads
 
 **Cached loads bake the strategy into the opcode** (chosen by the compiler,
@@ -1546,6 +1556,212 @@ Both are wasted dispatches rather than lost feedback: in each case there is
 genuinely no slot to attribute force-behavior to, so bailing is correct. They are
 a (small) missed opportunity to avoid the call entirely, not a soundness or
 precision problem.
+
+### 4.5 Soundness of the four live strategies
+
+**What "sound" means on this axis.** The lattice has `promise` at the *top*, and
+the baseline accumulates a **max** over every execution of a site. A consumer
+reads the slot to decide how aggressively to speculate that forcing is cheap; the
+dangerous direction is therefore **under**-approximation (reporting a value lower
+than the truth — claiming "never saw an unforced promise" when one occurs).
+Over-approximation is merely pessimistic. So the obligation per strategy is
+`reconstructed ≥ truth`, and *losslessness* is `reconstructed == truth`.
+
+Write `c(e)` for the per-execution classification of §4.1 and
+`FB_base(s) = max_e c(e)` over all executions at site `s`.
+
+**`Always` — exact.** Identical code path to the baseline, on every execution.
+
+**`FBValue` — exact, statically.** All three admission routes in `classifyUse`
+(post-`stvar` reach via `hasLocalStvarReach`, RecordOnce on a local, for-loop
+iter var) mean the binding was last written by `stvar_`, which stores an
+*evaluated* value off the stack. So `c(e) == value` for every execution and the
+reconstruction `value` is exact, not conservative.
+
+`ldvar_noforce_` cannot undermine this. It is the one load that does not force,
+but it is emitted only at `Compiler.cpp` in the `identicalNoforce` call-target
+guard sequence — never through `compileGetvar` — so it never reaches
+`emitRecordTypeForVar`, never calls `trackUseDef`, and therefore can never be the
+source of a useDef subsumption.
+
+**`RecordOnce` — exact, given a monotonicity lemma.** The strategy records only
+the first execution of the site per invocation (`fired` is `alloca`'d and
+zeroed per `evalRirCode` entry, §2A.2.1). This equals the baseline max iff, at a
+fixed site within one invocation, the sequence `c(e)` is **non-increasing**.
+
+That holds because forcing moves *down* the lattice, never up. The only
+transitions available without rebinding are `promise(3) → evaluatedPromise(2)`
+(the binding still holds the `PROMSXP`; R sets `PRVALUE` rather than replacing
+it), and a local `stvar_` rebind to `value(1)`. So the first observation
+dominates the invocation, and
+
+```
+max over all executions  ==  max over first-of-each-invocation
+```
+
+because the per-invocation maxima are exactly the first observations. Note the
+gate only *tests* the bit — `RECORD_TYPE_ONCE_SET` is issued by the following
+`record_type_once_`, so the FB record and the type record fire on the same
+first execution, and FB is taken *before* the force (`record_fb_action` precedes
+`evaluatePromise` in `LDVAR_CACHED_BODY`), which is what makes it a
+"state *before* last force".
+
+**`Infer` — exact, via a clamp (not a copy).** This is the case whose
+reconstruction rule is least obvious, and the natural guess (copy the source
+slot) is wrong.
+
+No-Record admission requires a prior use that **dominates and post-dominates**
+this one (§3), and every load that can be a useDef source forces
+(`if (TYPEOF(res) == PROMSXP) res = evaluatePromise(res)`). Since R does not
+replace the binding when a promise is forced, the dependent read observes,
+per execution:
+
+| `c(source_e)` | ⇒ `c(dep_e)` |
+|---|---|
+| `promise` | `evaluatedPromise` |
+| `evaluatedPromise` | `evaluatedPromise` |
+| `value` | `value` |
+
+i.e. exactly `c(dep_e) = min(c(source_e), evaluatedPromise)`. Because that clamp
+is **monotone**, it commutes with the max the lattice accumulates:
+
+```
+min(max_e c(source_e), evaluatedPromise) == max_e min(c(source_e), evaluatedPromise)
+```
+
+so the clamp can be applied once to the *stored* source value rather than
+per execution. `Infer` is therefore losslessly reconstructible as
+`min(FB(source), evaluatedPromise)` — and this stays exact even when the source's
+recorded value mixes invocations (eager argument in one call, promise in
+another).
+
+**Two identified holes.**
+
+- **The `lazyLoadDBfetch` inversion (theoretical).** The classifier deliberately
+  reports `value(1)` for an *unforced* lazy-load stub, but once forced the next
+  read takes the `PRVALUE != R_UnboundValue` arm and reports
+  `evaluatedPromise(2)`. That is an *increase*, which breaks the
+  `RecordOnce` monotonicity lemma above and would under-approximate. No reachable
+  instance was found: lazy-load stubs live in package environments, and
+  `outerControlled_` is populated only from an enclosing *compiled closure's*
+  captures (`Compiler.cpp`, the closure-compile prologue), so such a name is
+  never `isFormal` nor `isOuterControlled` and never reaches a `RecordOnce`
+  classification. Recorded as theoretical, not live.
+- **Non-`stvar` rebinding (reachable, but not FB-specific).** `delayedAssign`,
+  `assign(..., envir=)` and `makeActiveBinding` can turn a binding into a promise
+  without any `stvar_` the DFA can see. In a loop over an eagerly-passed formal
+  this produces the forbidden increase (`value` on iteration 1, `promise`
+  afterwards), so `RecordOnce` would capture the lower value. This is the same
+  "no local `stvar` ⇒ binding stable" premise the **type** dimension already
+  relies on, and the type recording has identical exposure — it is a pre-existing,
+  dimension-independent hole rather than something the FB strategies introduce.
+
+**Measured distribution** (mandelbrot 500, areWeFast — see §8) confirms which
+paths carry weight. The FB table decomposes exactly against the leaf table:
+
+```
+fbNoRecordSkip 148,512,896 − noRecordSkip 115,732,690 = 32,780,206  RecordOnce uses given FBValue
+                                       + fb record_once     940,038
+                                       = 33,720,244  == RecordOnce leaf total ✓
+```
+
+So all No-Record loads and ~97% of RecordOnce loads pay **zero** FB cost, the
+gated `fbRecordOnce_` path is a rounding error, and essentially the whole residue
+is `Always`. 59.0% of baseline FB work eliminated.
+
+### 4.6 Reconstruction: what a consumer must compute
+
+`TypeFeedback::reconstructFeedback()` implements the reconstruction for **both**
+dimensions. It still has **no callers** — wiring it into the JIT is the consumer
+side and remains out of scope — but it is now a complete, tested recovery step
+rather than a placeholder.
+
+Three things are persisted per slot, and all three are needed:
+`stateBeforeLastForce` (the recorded observation), `forceBehaviorKinds_[i]` (the
+compile-time decision, so "nothing recorded because statically a value" is
+distinguishable from "nothing recorded yet"), and `typeDeps_[i]` (the No-Record
+source, shared with the type dimension).
+
+```
+Always     → the recorded value
+RecordOnce → the recorded value
+FBValue    → value
+Infer      → min(FB(typeDeps_[i]), evaluatedPromise)     // resolve source first
+```
+
+`Infer` needs its source resolved before itself. The forward iteration order
+already guarantees this — a dep always references a lower-numbered slot — and
+since the No-Record graph is kept **flat** (§2A.4, sources rather than chains) the
+resolution is a single hop, never a walk.
+
+Slots that are not loads (inner nodes, opaque call/`[`/`:` results) have no FB in
+*either* mode: FB is recorded in the load handler and keyed to the following
+record's slot, so a slot with no load in front of it is untouched. They keep
+`stateBeforeLastForce == unknown` and the default kind `Always`, which is
+consistent with the baseline and needs no special case.
+
+**Why the type copy is field-by-field.** `reconstructFeedback` used to be a
+whole-struct assignment:
+
+```cpp
+types_[i] = types_[typeDeps_[i]];   // copies ALL of ObservedValues
+```
+
+That is wrong in three separate ways under the current 8-byte layout (§2C.1),
+which is why the type half now goes through
+`ObservedValues::copyTypeObservationsFrom` — copying `numTypes`, `seen[3]`,
+`notScalar`, `attribs`, `object` and `notFastVecelt`, and nothing else:
+
+- **It copied `stateBeforeLastForce`.** For `FBValue` that is strictly worse than
+  doing nothing: in `b <- a; use(b)` the dependent inherits `a`'s `promise` when
+  the truth is statically `value`. For `Infer` it yields `promise` where §4.5
+  proves `evaluatedPromise`. Both are pessimistic rather than unsound, but the
+  correct answers are cheaply derivable and the copy discarded them.
+- **It clobbered `parentPlus1`.** That field did not exist when `reconstructFeedback`
+  was written. Overwriting a dependent's parent index with the *source's* parent
+  corrupts the expression-tree notification graph (§2C.2) — harmless if
+  propagation runs strictly once and recording never resumes, but RIR re-enters
+  the interpreter after deopt and keeps recording.
+- **Same for `lastSig` and `dirty`**, which imported the source's per-execution
+  signature state into a slot that never records for itself.
+
+**Structure of the pass.** One forward loop over all slots, doing the type copy
+and then the FB rule for each. Both rules read only lower-numbered slots — a
+dependency is registered immediately after its source was allocated
+(`registerNoRecordDep` is the sole `setTypeDep` caller), so `src < i` always, and
+an `assert` pins it. A source is therefore fully resolved before any dependent
+reads it, which is what makes the `Infer` clamp read a *final* source value and
+makes a chain of copies resolve in this single pass even though the graph is kept
+flat (§2A.4) and chains should not arise. Every rule is idempotent, so calling
+the pass more than once — e.g. re-optimizing after a deopt has let the
+interpreter record more — is safe and simply refreshes the derived slots.
+
+**Verified behaviour** (via a temporary env-gated call from `Function::disassemble`,
+removed again). For
+
+```r
+f <- function(a) { x <- a + 1; y <- a + 2; z <- x + 1; y + z }
+```
+
+slot 0 (the `a` read, `Always`) records `double (s) | promise`; before the pass
+the four dependents print `<?>`, and after it:
+
+```
+SLOT#0 double (s) | promise           -> Type#1     (recorded, untouched)
+SLOT#2 double (s) | evaluatedPromise  -> Type#3     (Infer:   clamped from #0)
+SLOT#4 double (s) | value             -> Type#5     (FBValue)
+SLOT#6 double (s) | value             -> Type#8     (FBValue)
+SLOT#7 double (s) | value             -> Type#8     (FBValue)
+```
+
+Slot 2 is the case that matters: a whole-struct copy would have given it
+`promise` **and** re-pointed its parent from `Type#3` to `Type#1` (slot 0's
+parent). It shows the clamped `evaluatedPromise` and keeps its own parent. A
+loop-and-formal case (`for (i in 1:n) acc <- acc + v + v`) reproduces the same
+pattern from the other direction: `v`'s `RecordOnce` slot records `promise`, and
+the second `v` — an `Infer` dependent — reconstructs `evaluatedPromise`, which is
+the truth, because the first read forced the promise on its way through. Running
+the pass twice produces byte-identical output.
 
 ---
 
@@ -1689,6 +1905,16 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
   arithmetic has its own rules, e.g. names/dim inheritance from the longer
   operand). This audit should be completed before claiming end-to-end
   losslessness, and it is the most likely place to find another `[`-style case.
+- **Reconstruction is implemented but unwired.** `TypeFeedback::reconstructFeedback()`
+  now recovers both dimensions (§4.6) and is verified, but it has **no callers**,
+  so No-Record dependent slots are still all-zero at runtime. Calling it is a
+  consumer-side decision: it belongs wherever PIR reads the feedback, and PIR has
+  not been adapted to this branch at all (§7 scope boundary). Two things to know
+  before wiring it: the FB dimension is *derived*, not copied — `Infer` needs the
+  clamp `min(FB(source), evaluatedPromise)` and a plain copy of the source is
+  wrong; and the type dimension only propagates the *observations*, so the
+  auxiliary-flag question below (are the flags exactly inferable for the elided
+  inner-node operators?) is untouched by this and remains the real gap.
 - **`alloca` vs. fixed-size `fired`** — no confident perf verdict (see §5, §7).
 - **`pc`-by-reference capture in the FB lambdas.** The FB helper lambdas capture
   the interpreter frame by reference (`[&]`), including `pc`. Whether taking
@@ -1754,7 +1980,10 @@ by direct inspection, not recalled:
   `ldvar_cached_fbRecordOnce_`; helpers named **`recordForceBehaviorNoCheck`**
   and **`recordForceBehaviorRecordOnceNoCheck`** (both carry a `SLOWASSERT` on
   the following opcode); `ldvar_super_` calls `recordForceBehaviorNoCheck`; the
-  generic `recordForceBehavior` recognizes the `leaf_notify_` family.
+  generic `recordForceBehavior` recognizes the `leaf_notify_` family. The
+  soundness argument for each strategy and the reconstruction rule each implies
+  are written up in §4.5 / §4.6; the reconstruction itself is **not**
+  implemented (consumer side, out of scope).
 - `RIR_RECORD_STATS` instrumentation incl. the force-behavior table
   (`fbgeneric` / `always` / `record_once` / `no_record` + `fbgeneric_bail`
   reported separately). Compile-time toggle, **off** by default.
@@ -1808,6 +2037,25 @@ by direct inspection, not recalled:
    because the signature was unchanged. That last one exists because the
    signature early-out is otherwise invisible in the tables — the opcode still
    executes, so the work it avoids was being counted as "recorded".
+10. **Force-behavior soundness written up** (§4.5). Each of the four live
+    strategies now has an explicit soundness argument rather than an assertion in
+    a comment: `Infer` turns out to be losslessly reconstructible via a clamp,
+    and the `RecordOnce` "first observation is the maximum" claim reduces to the
+    fact that forcing moves *down* the lattice. Two holes are recorded — a
+    theoretical `lazyLoadDBfetch` inversion (no reachable instance found) and
+    non-`stvar` rebinding via `delayedAssign`, which the type dimension already
+    shares.
+11. **`reconstructFeedback` now reconstructs both dimensions** (§4.6). It was a
+    whole-struct copy that carried `stateBeforeLastForce` and clobbered
+    `parentPlus1` / `lastSig` / `dirty` — fields added after it was written. Now
+    the type half goes through the new
+    `ObservedValues::copyTypeObservationsFrom` (observations only) and the FB
+    half is *derived* per slot from `forceBehaviorKinds_`. Still deliberately
+    **callerless**: it is the consumer-side step and PIR has not been adapted.
+    Verified against a temporary env-gated call (since removed) on a
+    formal/copy/loop mix, including that the `Infer` clamp yields
+    `evaluatedPromise` where a copy would have said `promise`, that parents
+    survive, and that repeated calls are idempotent.
 
 All build clean and every checked benchmark produces correct results.
 

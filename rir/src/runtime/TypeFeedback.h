@@ -322,6 +322,29 @@ struct ObservedValues {
 
     void reset() { *this = ObservedValues(); }
 
+    // Adopt `src`'s *type* observations, and nothing else. Used by
+    // TypeFeedback::reconstructFeedback to fill a NoRecord dependent from its
+    // source.
+    //
+    // Deliberately field-by-field rather than `*this = src`. Three of the eight
+    // bytes must NOT come from the source:
+    //  * stateBeforeLastForce belongs to the force-behavior dimension, which is
+    //    a property of how this binding was reached at THIS site, not of the
+    //    value. Copying it is wrong for both kinds a dependent can carry —
+    //    see reconstructFeedback and recordless-design.md §4.6.
+    //  * parentPlus1 is this slot's own edge in the expression tree. Taking the
+    //    source's would re-point our notifications at the source's parent.
+    //  * lastSig / dirty describe a per-execution recording history this slot
+    //    does not have (it never records — that is what NoRecord means).
+    void copyTypeObservationsFrom(const ObservedValues& src) {
+        numTypes = src.numTypes;
+        notScalar = src.notScalar;
+        attribs = src.attribs;
+        object = src.object;
+        notFastVecelt = src.notFastVecelt;
+        seen = src.seen;
+    }
+
     void print(std::ostream& out) const;
 
   private:
@@ -849,7 +872,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // For each type slot that has a dependency, copy the source slot's
     // ObservedValues into it. Call this before JIT compilation so that
     // unrecorded slots have the same type info as their source.
-    void propagateDeps();
+    void reconstructFeedback();
 
     void print(std::ostream& out) const;
 

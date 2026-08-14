@@ -6,6 +6,7 @@
 #include "runtime/Code.h"
 #include "runtime/Function.h"
 
+#include <algorithm>
 #include <cassert>
 #include <ostream>
 #include <vector>
@@ -368,10 +369,79 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     }
 }
 
-void TypeFeedback::propagateDeps() {
+// Reconstruct the feedback that recordless chose not to observe at runtime, so
+// that every slot ends up holding what a record-everything build would have.
+// Two independent dimensions, both handled here — see recordless-design.md
+// §2A.3 (types) and §4.5/§4.6 (force behavior) for the soundness arguments.
+//
+// NO CALLERS YET. This is the consumer-side step; wiring it into the JIT is
+// separate work. It is written to be safe to call more than once: every rule
+// below is idempotent, and re-running after the interpreter has recorded some
+// more simply refreshes the derived slots from their (now newer) sources.
+//
+// Single forward pass. Both rules read only *lower-numbered* slots — a
+// dependency is always registered after its source has been allocated
+// (registerNoRecordDep) — so a source is fully resolved by the time a dependent
+// reads it. That in turn means a chain of copies resolves in this one pass even
+// though the graph is kept flat (§2A.4) and chains should not arise.
+void TypeFeedback::reconstructFeedback() {
     for (size_t i = 0; i < types_size_; ++i) {
-        if (typeDeps_[i] != NoDep) {
-            types_[i] = types_[typeDeps_[i]];
+        const uint32_t src = typeDeps_[i];
+        assert((src == NoDep || src < i) &&
+               "dep must reference an earlier slot; the single forward pass "
+               "relies on the source already being resolved");
+
+        // ---- type dimension -------------------------------------------
+        // A NoRecord use emits no opcode, so its slot was never written. By
+        // the def-site subsumption argument (§3) its value is the source's,
+        // hence so are its type observations.
+        if (src != NoDep)
+            types_[i].copyTypeObservationsFrom(types_[src]);
+
+        // ---- force-behavior dimension ---------------------------------
+        // Slots whose FB was recorded at runtime already hold the answer;
+        // the two skipped kinds are derived. Note this is keyed on the
+        // compile-time kind, not on having a dep: a RecordOnce *use* can also
+        // be classified FBValue and skip FB recording without being a copy of
+        // anything.
+        switch (forceBehaviorKind((uint32_t)i)) {
+        case ForceBehaviorKind::Always:
+        case ForceBehaviorKind::RecordOnce:
+        case ForceBehaviorKind::EnvBit: // disabled; behaves as Always
+            // Observed directly. RecordOnce recorded only the first execution
+            // of each invocation, which is the maximum over that invocation
+            // because forcing moves *down* the lattice (§4.5).
+            break;
+
+        case ForceBehaviorKind::FBValue:
+            // Statically a value: the binding was last written by stvar_,
+            // which stores an evaluated value off the stack.
+            types_[i].stateBeforeLastForce = ObservedValues::value;
+            break;
+
+        case ForceBehaviorKind::Infer: {
+            // Derived from the source, but NOT copied from it. The use that
+            // subsumes this one dominates it and forced the binding on its way
+            // through, and R leaves the PROMSXP in place when it forces, so an
+            // unforced `promise` at the source is necessarily an
+            // `evaluatedPromise` here. Per execution the relation is exactly
+            //     c(dep) = min(c(source), evaluatedPromise)
+            // and because that clamp is monotone it commutes with the max the
+            // lattice accumulates — so applying it once to the stored value is
+            // lossless, not conservative (§4.5).
+            if (src == NoDep) {
+                assert(false && "Infer without a source slot");
+                types_[i].stateBeforeLastForce = ObservedValues::promise;
+                break;
+            }
+            // The temporary is required, not stylistic: std::min takes its
+            // arguments by const reference and a reference cannot bind to a
+            // bitfield.
+            const uint8_t s = types_[src].stateBeforeLastForce;
+            types_[i].stateBeforeLastForce =
+                std::min(s, (uint8_t)ObservedValues::evaluatedPromise);
+            break;
+        }
         }
     }
 }

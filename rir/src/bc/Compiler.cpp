@@ -486,9 +486,9 @@ class CompilerContext {
     //
     // Callers pass the *source* slot, not the dep slot allocated for the read,
     // so `b <- a` points straight at whatever recorded `a` rather than adding a
-    // hop. Chains of deps do resolve — propagateDeps iterates forward and a dep
-    // always references an earlier, lower-numbered slot — but staying flat
-    // keeps that property from being load-bearing.
+    // hop. Chains of deps do resolve — reconstructFeedback iterates forward and
+    // a dep always references an earlier, lower-numbered slot — but staying
+    // flat keeps that property from being load-bearing.
     void noteValueRecordAt(int slot, unsigned pos) {
         valueRecord() = {slot, pos, defUseAnalysis().scopeIdHere()};
     }
