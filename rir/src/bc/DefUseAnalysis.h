@@ -101,10 +101,10 @@ class DefUseAnalysis {
                    const std::unordered_set<SEXP>* outerControlled,
                    const std::unordered_set<SEXP>* outerImmutable,
                    const std::unordered_set<SEXP>* formalNames,
-                   std::unordered_set<SEXP> argAssignedVars = {})
+                   std::unordered_set<SEXP> promiseAssignedVars = {})
         : localOrParam_(localOrParam), outerControlled_(outerControlled),
           outerImmutable_(outerImmutable), formalNames_(formalNames),
-          argAssignedVars_(std::move(argAssignedVars)) {}
+          promiseAssignedVars_(std::move(promiseAssignedVars)) {}
 
     // bool hasRead(SEXP name) const {
     //     return readVars_ && readVars_->count(name);
@@ -185,13 +185,24 @@ class DefUseAnalysis {
     // const std::unordered_set<SEXP>* readVars_ = nullptr;
 
     // Variables assigned inside promise-argument positions of this code
-    // context's AST. Assignments there run at an unpredictable point (when
-    // the promise is forced), invisible to the DFA — so we exclude them from
-    // all optimizations (RecordAlways).
-    std::unordered_set<SEXP> argAssignedVars_;
+    // context's AST. Named for where the *assignment* sits, not for any role of
+    // the variable: in `g(x <- 1)` it is `x` that lands here, and `x` is not an
+    // argument of anything.
+    //
+    // Such an assignment runs when the promise is forced, which is a point this
+    // Code object's instruction sequence does not contain — so the reaching-def
+    // state is simply wrong about the variable and every optimization keyed on
+    // it must be refused (hence RecordAlways, rule 0 of classifyUse).
+    //
+    // Worse than merely invisible, it can be *conditionally* visible, which a
+    // naive analysis would mistake for full knowledge. A guarded-fast-path call
+    // emits the assignment twice — `length(x <- 1)` compiles `stvar_ x` into
+    // the promise for the slow path AND inline into the fast path — so the DFA
+    // does see a def, just not the one that may actually run.
+    std::unordered_set<SEXP> promiseAssignedVars_;
 
-    bool isArgAssigned(SEXP name) const {
-        return argAssignedVars_.count(name) > 0;
+    bool isAssignedInPromise(SEXP name) const {
+        return promiseAssignedVars_.count(name) > 0;
     }
 
     std::unordered_map<SEXP, Def> defs_;
@@ -526,7 +537,7 @@ class DefUseAnalysis {
         // the DFA (the assignment runs when the promise is forced, which is
         // invisible to the main code's stvar sequence). Exclude from all
         // optimizations.
-        if (isArgAssigned(name))
+        if (isAssignedInPromise(name))
             return {UseKind::RecordAlways, kNoSlot, ForceBehaviorKind::Always};
 
         // Only locals/params and stable outer captures are eligible for
@@ -670,8 +681,9 @@ class DefUseAnalysis {
     // function calls. Control-flow forms (if/while/for/repeat/{/switch) and
     // assignment forms compile sub-expressions inline — not promise boundaries.
     // Does not cross inner function definitions.
-    static void collectArgAssignedVars(SEXP ast, std::unordered_set<SEXP>& out,
-                                       bool inPromise = false) {
+    static void collectPromiseAssignedVars(SEXP ast,
+                                           std::unordered_set<SEXP>& out,
+                                           bool inPromise = false) {
         if (!ast || ast == R_NilValue || TYPEOF(ast) != LANGSXP)
             return;
         SEXP fun = CAR(ast);
@@ -694,7 +706,7 @@ class DefUseAnalysis {
                 out.insert(lhs);
         }
         for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
-            collectArgAssignedVars(CAR(s), out, inPromise || !isInline);
+            collectPromiseAssignedVars(CAR(s), out, inPromise || !isInline);
     }
 
     // True when a scope captured earlier (by currentScopeId()) is still open,

@@ -171,12 +171,12 @@ class CompilerContext {
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
-        std::unordered_set<SEXP> argAssigned;
+        std::unordered_set<SEXP> promiseAssigned;
         if (Compiler::recordLess_Leaf_Enabled)
-            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
+            DefUseAnalysis::collectPromiseAssignedVars(ast, promiseAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
                            &outerImmutable_, &formalNames_,
-                           std::move(argAssigned));
+                           std::move(promiseAssigned));
         code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top(),
                                   std::move(dua)));
         if (!mainBodyCtx_)
@@ -187,12 +187,12 @@ class CompilerContext {
 
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
-        std::unordered_set<SEXP> argAssigned;
+        std::unordered_set<SEXP> promiseAssigned;
         if (Compiler::recordLess_Leaf_Enabled)
-            DefUseAnalysis::collectArgAssignedVars(ast, argAssigned);
+            DefUseAnalysis::collectPromiseAssignedVars(ast, promiseAssigned);
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
                            &outerImmutable_, &formalNames_,
-                           std::move(argAssigned));
+                           std::move(promiseAssigned));
         // Inherit the enclosing loop depth so the first use of a local/param
         // inside a promise compiled within a loop gets RecordOnce rather than
         // RecordAlways.

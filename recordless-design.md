@@ -232,7 +232,7 @@ matching rule wins:
 
 | # | condition | result | FB kind |
 |---|---|---|---|
-| 0 | `isArgAssigned(name)` — assigned in a **promise-argument position** | `RecordAlways` | `Always` |
+| 0 | `isAssignedInPromise(name)` — assigned in a **promise-argument position** | `RecordAlways` | `Always` |
 | 1 | *(eligible)* ∧ ∃ recorded use `ud` with `dominates(ud) ∧ postDominates(ud)` | `NoRecord` → `ud.feedbackSlot` | `FBValue` if local-stvar-reach or for-loop var, else `Infer` |
 | 2 | reaching def `d` ∧ `isLocalOrParam` ∧ `postDominates(*d)` ∧ `d` has a slot | `NoRecord` → `d.feedbackSlot` | `FBValue` |
 | 3 | `d` ∧ local/param ∧ `loopDepth_>0` ∧ `!assignedInInnermostLoop` ∧ `assignedInEnclosingLoop` | `RecordOnce` *(dynamic — bit gets cleared)* | `FBValue` |
@@ -703,7 +703,7 @@ and `isOuterControlled` all read pre-scan sets (`localOrParam_`, `formalNames_`,
   environment, not the local binding, so local def/use reasoning does not apply
   (and such names are not `isLocalOrParam` anyway).
 
-This is the same family of guard as the `isArgAssigned` carve-out (rule 0,
+This is the same family of guard as the `isAssignedInPromise` carve-out (rule 0,
 §2A.1.1): both are points where a write happens that the naive `stvar` sequence
 would otherwise misrepresent.
 
