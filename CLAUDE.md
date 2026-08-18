@@ -18,4 +18,5 @@ justification for def-site subsumption, alternatives considered and rejected,
 open questions, current implementation status, and benchmark/evaluation notes
 — including an important caveat about codegen-artifact noise in this codebase's
 benchmarks. It is a living document; check its "Current implementation status"
-section for what's stable vs. still in flux.
+section for what's stable vs. still in flux. When in doubt , scan the source code instead
+of relying on the doc.
