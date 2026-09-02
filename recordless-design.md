@@ -296,7 +296,24 @@ Write $F_f$ for `f`'s formals, $L_f$ for its body-assigned names, and $S_f$ for
 `innerSuperAssigned_` — the names `<<-`-assigned anywhere in `f`'s nested
 closures. Both of the sets below are built from **$(F_f \cup L_f) \setminus S_f$**;
 that subtraction is the whole soundness requirement, and it applies to formals
-and locals alike (see §2A.1.3 for what happened when it did not).
+and locals alike (see §2A.1.3 for what happened, twice, when it did not).
+
+The predicate that consumes them is the `optimizable` expression at the top of
+`classifyUse`, and the shape that matters is that `isLocalOrParam` — i.e.
+membership in $(F_f \cup L_f) \setminus S_f$ — is a **conjunct on every local
+route**, never a disjunct beside them:
+
+```cpp
+const bool optimizable =
+    isOuterControlled(name) ||
+    (isLocalOrParam(name) && (isFormal(name) || d != nullptr));
+```
+
+`isFormal` and a dominating def `d` are two ways to establish that the read is
+not a fallthrough to an uncontrolled scope; neither is a licence to skip the
+`\ S_f` filter. `isOuterControlled` sits outside the conjunction because
+`computeCapturesForInner` has already applied that same subtraction on the way
+down.
 
 - `functionLocalOrParam_` = $(F_f \cup L_f) \setminus S_f$. `S_f` is collected by
   a pre-scan, `collectInnerSuperAssigned`, which walks nested `function` bodies
@@ -357,13 +374,19 @@ for it — so a naive reaching-def analysis concludes the final `x` is subsumed 
 `function` bodies at any depth for `<<-` targets and removes them from
 `functionLocalOrParam_`, so `optimizable` is false and the read records.
 
-### 2A.1.3 The sibling-closure hole (found and fixed 2026-09-02)
+### 2A.1.3 Two `<<-`-escape holes (found and fixed 2026-09-02)
 
 The regression shape just above covers the case where the `<<-`-escaped variable
-is used **in `f` itself**, which goes through `functionLocalOrParam_` — and that
-filter was correct. There was a second route into the optimization,
-`computeCapturesForInner` → `controlled` → `isOuterControlled`, and on that route
-the `\ S_f` subtraction was applied to body-locals but **not to formals**:
+is used **in `f` itself** *and reaches the optimization through*
+`functionLocalOrParam_` — that filter was correct. But `functionLocalOrParam_`
+is only one of **three** disjuncts in the eligibility predicate, and the other
+two each bypassed it. Both are fixed; they are described in the order they were
+found, because the second subsumes the first.
+
+#### The capture route (`isOuterControlled`)
+
+`computeCapturesForInner` → `controlled` → `isOuterControlled` applied the
+`\ S_f` subtraction to body-locals but **not to formals**:
 
 ```cpp
 for (SEXP f : formalNames_) {
@@ -422,13 +445,84 @@ for (SEXP f : formalNames_) {
 
 After the fix `g` records use 2 as `character (s)`, matching the local variant.
 
-**Cost: none measured.** The guard was instrumented and the benchmark suite run
-(fasta, fastaredux, nbody, binarytrees, storage, bounce, mandelbrot, random — all
-chosen because they contain `<<-`): **0 firings**, against 2 on the witness above
-(once per inner closure literal in `f`). The window is genuinely narrow, which is
-likely why it survived this long. No timing comparison was attempted — a
-one-function change like this can shift `evalRirCode`'s codegen and any delta
-would be unattributable (§8).
+#### The `isFormal` route — the same hole, one closure shorter
+
+Fixing the capture route was **not sufficient**, because `classifyUse`'s
+eligibility predicate had `isFormal` as a *bare* disjunct:
+
+```cpp
+const bool optimizable = isFormal(name) || isOuterControlled(name) ||
+                         (isLocalOrParam(name) && d != nullptr);
+```
+
+`formalNames_` is populated unconditionally and is **not** filtered by
+`innerSuperAssigned_` — and it cannot be, because the same set does shadowing on
+the way down (§2A.1.2), where a `<<-`-escaped formal must still shadow an outer
+name. So `isFormal` admitted exactly the names `isLocalOrParam` was excluding,
+and the sibling closure turned out to be unnecessary — both uses can sit in `f`'s
+own body:
+
+```r
+f <- function(x) {
+  h <- function() { x <<- "str" }
+  x        # use 1 — recorded, becomes a useDef via trackUseDef
+  h()      # retypes x
+  x        # use 2 — optimizable via isFormal, dominated and post-dominated
+}          #          by use 1 -> NoRecord
+f(1)
+```
+
+`isLocalOrParam(x)` is false here (the pre-scan filter works), but `optimizable`
+was true anyway through `isFormal`, so rule 1's `useDefs` dedup fired.
+Disassembly before the fix, identical in kind to the sibling case:
+
+```
+ 25   ldvar_cached_  x{1}
+ 34   [ double (s) | evaluatedPromise ] Type#0 (record_type_)   <- use 1
+ 76   ldvar_cached_noRecordFB_  x{1}                            <- use 2, elided
+...
+NoRecord Type#1 (dep: #0)
+```
+
+The fix makes `isLocalOrParam` a **mandatory conjunct on every route**. Since
+`functionLocalOrParam_` is $(F_f \cup L_f) \setminus S_f$, for a formal
+`isLocalOrParam` is true precisely when it is not `<<-`-escaped, so the
+conjunction supplies the missing filter without touching `formalNames_` —
+`isFormal` keeps its real job, which is letting a formal be optimizable with **no
+dominating store** (it is bound at call time):
+
+```cpp
+const bool optimizable =
+    isOuterControlled(name) ||
+    (isLocalOrParam(name) && (isFormal(name) || d != nullptr));
+```
+
+This is strictly a tightening: the new predicate's truth set is a subset of the
+old one.
+
+**A dead duplicate is what hid this.** A helper `isOptimizable` also existed,
+with a third, *differently worded* disjunct (`hasDominatingDef` with no
+`isLocalOrParam` conjunct) — but it had **no callers**; `classifyUse` carried its
+own copy of the predicate, and the two had silently diverged unnoticed. Patching
+the helper alone would have compiled cleanly and changed nothing. It has been
+**deleted**, leaving the `classifyUse` expression above as the only definition —
+the divergence is impossible because there is now just one copy, and the comment
+on it says explicitly not to lift either sub-case out beside `isLocalOrParam`.
+
+#### Cost of both fixes: none measured
+
+Each guard was instrumented in turn and the benchmark suite run (fasta,
+fastaredux, nbody, binarytrees, storage, bounce, mandelbrot, random — all chosen
+because they contain `<<-`): **0 firings** for both, against 2 apiece on the
+witnesses. The window is genuinely narrow, which is likely why they survived this
+long. No timing comparison was attempted — a change this small can shift
+`evalRirCode`'s codegen and any delta would be unattributable (§8).
+
+**Note on `recordLess_Leaf_Enabled`.** Making `isLocalOrParam` mandatory looks
+like it could change behaviour when the flag is off, since `localOrParam_` would
+then be empty. It cannot: `Compiler::finalize` populates `formalNames_`,
+`outerControlled_` **and** `functionLocalOrParam_` only under that flag, so with
+it off all three are empty and the old predicate was already false everywhere.
 
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
@@ -2145,17 +2239,30 @@ by direct inspection, not recalled:
 
 **Changes landed since (2026-08-11 → 2026-09-02).**
 
-12. **Sibling-closure soundness hole in `computeCapturesForInner` fixed**
-    (§2A.1.3). A `<<-`-escaped **formal** was inserted into the `controlled`
-    capture set unconditionally, while body-locals were correctly filtered by
-    `innerSuperAssigned_`. An inner closure could therefore subsume a second use
-    of such a formal against the first across a call to a *sibling* closure that
-    `<<-`-rebound it — narrowing the recorded feedback. Confirmed by disassembly
-    (`ldvar_cached_noRecordFB_` + `NoRecord Type#1 (dep: #0)` where the runtime
-    value had become `character`), fixed by applying the same guard to the
-    formals loop so both yield $(F_f \cup L_f) \setminus S_f$. Instrumented
-    across the `<<-`-containing benchmarks: 0 firings, so no optimization is lost
-    in practice. **Not yet covered by a regression test** — the existing test
+12. **Two `<<-`-escape soundness holes fixed** (§2A.1.3). A `<<-`-escaped
+    **formal** could reach NoRecord subsumption by two routes that both bypassed
+    the `\ S_f` filter in `functionLocalOrParam_`, letting a use be subsumed
+    against an earlier one across a `<<-` that had retyped the binding —
+    narrowing the recorded feedback:
+    - `computeCapturesForInner` inserted formals into the `controlled` capture
+      set unconditionally (body-locals *were* filtered), so a *sibling* closure
+      could subsume via `isOuterControlled`. Fixed by applying the same guard to
+      the formals loop.
+    - `classifyUse`'s eligibility predicate had `isFormal` as a **bare
+      disjunct**, which readmitted exactly the names `isLocalOrParam` excludes.
+      This needs no sibling closure at all — both uses can sit in the defining
+      function's own body. Fixed by making `isLocalOrParam` a mandatory conjunct.
+      The divergence was hidden by a **dead duplicate**: a helper
+      `isOptimizable` had no callers while `classifyUse` carried its own
+      differently-worded copy, so patching the helper would have changed
+      nothing. The helper has been deleted; `classifyUse`'s expression is now
+      the only copy.
+
+    Both confirmed by disassembly (`ldvar_cached_noRecordFB_` +
+    `NoRecord Type#1 (dep: #0)` where the runtime value had become `character`)
+    and re-checked after the fix. Each guard instrumented separately across the
+    `<<-`-containing benchmarks: 0 firings, so no optimization is lost in
+    practice. **Neither is covered by a regression test** — the existing test
     shape exercises only the `functionLocalOrParam_` route, which was never
     broken.
 

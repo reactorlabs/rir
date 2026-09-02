@@ -232,9 +232,9 @@ class CompilerContext {
         // retyped between two uses in a *sibling* closure with no stvar of ours
         // in between — the sibling would subsume the second use against the
         // first and narrow the feedback. Same guard as the body-locals loop
-        // below; together they give (formals ∪ body-locals) \
-        // innerSuperAssigned. Immutable additionally requires the binding never
-        // be body-assigned.
+        // below; together they give (formals + body-locals) minus
+        // innerSuperAssigned. Immutable additionally requires the binding
+        // never be body-assigned.
         for (SEXP f : formalNames_) {
             if (innerSuperAssigned_.count(f))
                 continue;

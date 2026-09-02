@@ -154,7 +154,9 @@ class DefUseAnalysis {
 
     // Pointer to the function-wide set of local/param variables (owned by
     // CompilerContext::functionLocalOrParam_). Set once per CodeContext; never
-    // mutated. Null when recordLess_Leaf_Enabled is off.
+    // mutated. Never null; simply *empty* when recordLess_Leaf_Enabled is off,
+    // since Compiler::finalize populates it (and formalNames_/outerControlled_)
+    // only under that flag.
     const std::unordered_set<SEXP>* localOrParam_ = nullptr;
 
     // Pointer to the set of variables captured from enclosing scopes that are
@@ -277,16 +279,6 @@ class DefUseAnalysis {
     bool isFormal(SEXP name) const {
         return formalNames_ && formalNames_->count(name) > 0;
     }
-    // A use is optimizable when the variable is provably "under our control":
-    //   isFormal          — always bound at call time
-    //   isOuterControlled — fallthrough goes to a controlled env, not global
-    //   hasDominatingDef  — a local stvar dominates this point (no path reads
-    //                       an unbound value from an uncontrolled outer scope)
-    bool isOptimizable(SEXP name) const {
-        return isFormal(name) || isOuterControlled(name) ||
-               hasDominatingDef(name);
-    }
-
     // True when `name` is assigned in the body of any currently-open loop.
     // Such a variable can change type between iterations, so one recording
     // per invocation is not representative — RecordOnce is unsafe.
@@ -543,9 +535,28 @@ class DefUseAnalysis {
         // Only locals/params and stable outer captures are eligible for
         // NoRecord-via-useDefs and RecordOnce. Free variables from outer
         // scopes (not captured-stable) must always be recorded.
+        //
+        //   isOuterControlled — fallthrough goes to a controlled env, not
+        //                       global. computeCapturesForInner has already
+        //                       subtracted innerSuperAssigned from that set.
+        //   isLocalOrParam    — own formal or body-local, MINUS
+        //                       innerSuperAssigned. This conjunct is mandatory,
+        //                       not a convenience: a `<<-` in a nested closure
+        //                       retypes the binding with no stvar in our
+        //                       instruction stream, so neither a formal's
+        //                       call-time binding nor a dominating store says
+        //                       anything about a *later* use. Every local route
+        //                       into the optimization must pass through it —
+        //                       do not lift either sub-case out beside it.
+        //     - isFormal      — bound at call time, so no dominating store is
+        //                       needed to know the read is not a fallthrough.
+        //     - d != nullptr  — a local stvar dominates this point (no path
+        //                       reads an unbound value from an uncontrolled
+        //                       outer scope).
         const Def* d = findReachingDef(name);
-        const bool optimizable = isFormal(name) || isOuterControlled(name) ||
-                                 (isLocalOrParam(name) && d != nullptr);
+        const bool optimizable =
+            isOuterControlled(name) ||
+            (isLocalOrParam(name) && (isFormal(name) || d != nullptr));
 
         // A reaching def from a local stvar means the binding currently holds
         // the result of an expression evaluation — always a value, never a
