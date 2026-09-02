@@ -226,12 +226,20 @@ class CompilerContext {
         for (SEXP s : outerControlled_)
             result.controlled.insert(s);
 
-        // Own formals: always bound at call time → controlled.
-        // Immutable only if never body-assigned (so the binding never changes)
-        // and not <<-escaped from an inner function.
+        // Own formals: always bound at call time → controlled, UNLESS
+        // <<-escaped from an inner function. A `<<-` in a nested closure skips
+        // that closure's own frame and lands in ours, so the binding can be
+        // retyped between two uses in a *sibling* closure with no stvar of ours
+        // in between — the sibling would subsume the second use against the
+        // first and narrow the feedback. Same guard as the body-locals loop
+        // below; together they give (formals ∪ body-locals) \
+        // innerSuperAssigned. Immutable additionally requires the binding never
+        // be body-assigned.
         for (SEXP f : formalNames_) {
+            if (innerSuperAssigned_.count(f))
+                continue;
             result.controlled.insert(f);
-            if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
+            if (!bodyAssignedCount_.count(f))
                 result.immutable.insert(f);
         }
 

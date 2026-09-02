@@ -1,6 +1,6 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot, last revised **2026-07-27**. The author is
+**Status:** working design snapshot, last revised **2026-09-02**. The author is
 actively iterating; see *Current implementation status* (§7) for what is stable
 vs. in flux.
 
@@ -290,21 +290,35 @@ Hence the rule, as implemented:
 > not mutated after the inner function was created.**
 
 Mechanically (`Compiler::finalize` and `computeCapturesForInner`, verified
-2026-07-27):
+2026-07-27, re-verified 2026-09-02):
 
-- `functionLocalOrParam_` = own formals ∪ body-assigned names, **minus**
-  `innerSuperAssigned_` (collected by a pre-scan, `collectInnerSuperAssigned`,
-  which walks nested `function` bodies at any depth looking for `<<-`).
+Write $F_f$ for `f`'s formals, $L_f$ for its body-assigned names, and $S_f$ for
+`innerSuperAssigned_` — the names `<<-`-assigned anywhere in `f`'s nested
+closures. Both of the sets below are built from **$(F_f \cup L_f) \setminus S_f$**;
+that subtraction is the whole soundness requirement, and it applies to formals
+and locals alike (see §2A.1.3 for what happened when it did not).
+
+- `functionLocalOrParam_` = $(F_f \cup L_f) \setminus S_f$. `S_f` is collected by
+  a pre-scan, `collectInnerSuperAssigned`, which walks nested `function` bodies
+  at any depth looking for `<<-`.
 - For a nested compilation, the enclosing function hands down two capture sets:
-  - **`controlled`** — "in our realm": carried-through outer captures, own
-    formals, and own body-locals (minus inner-super-assigned). The inner function
-    may rely on name lookup falling through to a controlled environment rather
-    than to the global env. This is what enables **RecordOnce** on such captures.
+  - **`controlled`** — "in our realm": carried-through outer captures, plus
+    $(F_f \cup L_f) \setminus S_f$. The inner function may rely on name lookup
+    falling through to a controlled environment rather than to the global env.
+    This is what enables **RecordOnce** on such captures, and — via
+    `isOuterControlled` in `classifyUse` — **NoRecord** subsumption too.
   - **`immutable`** — a strict subset whose *value* cannot change during the
     inner function's lifetime: formals never body-assigned, and body-locals
-    assigned exactly once, not for-loop variables, not `<<-`-escaped, with a
-    dominating def at the point the closure is created. Reserved for future
-    cross-invocation optimizations; not yet exploited.
+    assigned exactly once, not for-loop variables, with a dominating def at the
+    point the closure is created. (Both start from the $\setminus S_f$ set, so
+    `<<-`-escaped names are already gone.) Reserved for future cross-invocation
+    optimizations; not yet exploited.
+- The carry-through of an *outer* function's `controlled`/`immutable` needs no
+  `S_f` filter of its own. `collectInnerSuperAssigned` → `scanForSuperAssigns`
+  recurses through **all** nested functions at any depth, so a `<<-` anywhere in
+  a subtree is already in the `innerSuperAssigned_` of *every* ancestor whose
+  subtree contains it. Filtering where a name **enters** the capture sets is
+  therefore complete; carry-through only ever sees already-filtered names.
 - Both sets are shadowed correctly on the way down: a name that the inner
   function re-declares as its own formal (or, for `immutable`, body-assigns)
   is dropped from the inherited set.
@@ -342,6 +356,79 @@ for it — so a naive reaching-def analysis concludes the final `x` is subsumed 
 `collectInnerSuperAssigned` pre-scan is what excludes `x`: it walks nested
 `function` bodies at any depth for `<<-` targets and removes them from
 `functionLocalOrParam_`, so `optimizable` is false and the read records.
+
+### 2A.1.3 The sibling-closure hole (found and fixed 2026-09-02)
+
+The regression shape just above covers the case where the `<<-`-escaped variable
+is used **in `f` itself**, which goes through `functionLocalOrParam_` — and that
+filter was correct. There was a second route into the optimization,
+`computeCapturesForInner` → `controlled` → `isOuterControlled`, and on that route
+the `\ S_f` subtraction was applied to body-locals but **not to formals**:
+
+```cpp
+for (SEXP f : formalNames_) {
+    result.controlled.insert(f);                 // unconditional — the bug
+    if (!bodyAssignedCount_.count(f) && !innerSuperAssigned_.count(f))
+        result.immutable.insert(f);              // guard only on immutable
+}
+```
+
+That let a `<<-`-escaped **formal** reach an inner closure as an outer-controlled
+capture, where `optimizable` is true and rule 1 can subsume. The witness needs a
+`<<-` in one nested closure, a use of that name in a **sibling** closure, and the
+first closure called between two uses:
+
+```r
+f <- function(x) {                    # x is a FORMAL of f
+  h <- function() { x <<- "str" }     # rebinds f's x, no stvar in f
+  g <- function() {
+    x                                 # use 1 — records, sees double
+    h()                               # x becomes character
+    x                                 # use 2 — subsumed against use 1
+  }
+  g()
+}
+f(1)
+```
+
+Confirmed by disassembly, not by reading alone. Before the fix, `g` compiled to:
+
+```
+  0   ldvar_cached_  x{1}
+  9   [ double (s) | evaluatedPromise ] Type#0 (record_type_)   <- use 1
+ 51   ldvar_cached_noRecordFB_  x{1}                            <- use 2, elided
+...
+NoRecord Type#1 (dep: #0)   /   FB Type#1 (Infer)
+```
+
+Slot Type#1 claims `double` for a binding that observes `"str"` — a **narrowing**,
+the unsound direction. Changing `x` to a body-local of `f` made the identical
+program safe, because that branch was guarded; nothing about the hazard differs
+between the two, since `<<-` skips `h`'s own frame and lands in `f`'s frame either
+way.
+
+The fix is the missing guard, making the formals loop structurally identical to
+the body-locals loop and the two together yield $(F_f \cup L_f) \setminus S_f$:
+
+```cpp
+for (SEXP f : formalNames_) {
+    if (innerSuperAssigned_.count(f))
+        continue;
+    result.controlled.insert(f);
+    if (!bodyAssignedCount_.count(f))
+        result.immutable.insert(f);
+}
+```
+
+After the fix `g` records use 2 as `character (s)`, matching the local variant.
+
+**Cost: none measured.** The guard was instrumented and the benchmark suite run
+(fasta, fastaredux, nbody, binarytrees, storage, bounce, mandelbrot, random — all
+chosen because they contain `<<-`): **0 firings**, against 2 on the witness above
+(once per inner closure literal in `f`). The window is genuinely narrow, which is
+likely why it survived this long. No timing comparison was attempted — a
+one-function change like this can shift `evalRirCode`'s codegen and any delta
+would be unattributable (§8).
 
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
@@ -1946,10 +2033,9 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-08-11)
+## 7. Current implementation status (snapshot, 2026-09-02)
 
-Working branch: `recordLessNew2-expressionsNewSchema-fixUnary`, at commit
-`8e31b041` ("fix unary and source chains").
+Working branch: `recordLessNew2-expressionsNewSchema`, at commit `b8076079`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
 
@@ -2056,6 +2142,22 @@ by direct inspection, not recalled:
     formal/copy/loop mix, including that the `Infer` clamp yields
     `evaluatedPromise` where a copy would have said `promise`, that parents
     survive, and that repeated calls are idempotent.
+
+**Changes landed since (2026-08-11 → 2026-09-02).**
+
+12. **Sibling-closure soundness hole in `computeCapturesForInner` fixed**
+    (§2A.1.3). A `<<-`-escaped **formal** was inserted into the `controlled`
+    capture set unconditionally, while body-locals were correctly filtered by
+    `innerSuperAssigned_`. An inner closure could therefore subsume a second use
+    of such a formal against the first across a call to a *sibling* closure that
+    `<<-`-rebound it — narrowing the recorded feedback. Confirmed by disassembly
+    (`ldvar_cached_noRecordFB_` + `NoRecord Type#1 (dep: #0)` where the runtime
+    value had become `character`), fixed by applying the same guard to the
+    formals loop so both yield $(F_f \cup L_f) \setminus S_f$. Instrumented
+    across the `<<-`-containing benchmarks: 0 firings, so no optimization is lost
+    in practice. **Not yet covered by a regression test** — the existing test
+    shape exercises only the `functionLocalOrParam_` route, which was never
+    broken.
 
 All build clean and every checked benchmark produces correct results.
 
