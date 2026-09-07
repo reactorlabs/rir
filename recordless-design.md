@@ -241,8 +241,14 @@ matching rule wins:
 | 6 | *(fallthrough)* | `RecordAlways` | `Always` |
 
 where **eligible** (rule 1) = *optimizable* ∨ `isForLoopVar` ∨ (local/param with
-a dominating def), and ***optimizable*** = `isFormal(name) ∨
-isOuterControlled(name) ∨ (isLocalOrParam(name) ∧ reaching-def exists)`.
+a dominating def), and ***optimizable*** = `isOuterControlled(name) ∨
+(isLocalOrParam(name) ∧ (isFormal(name) ∨ reaching-def exists))`.
+
+Note `isLocalOrParam` is a **conjunct**, not an alternative beside `isFormal` —
+§2A.1.2 for why that is a soundness requirement and §2A.1.3 for what broke when
+it was not. **eligible** simplifies; see §2A.4.1, which also explains why rule 1
+takes `findDominatingDef` while rule 2 takes the back-edge-vetoed
+`findReachingDef`.
 
 Three consequences worth stating explicitly, none of which were obvious from the
 prose description:
@@ -775,14 +781,22 @@ void trackDef(SEXP name, int feedbackSlot = kNoSlot) {   // name was (re)defined
 }
 ```
 
-There are exactly four call sites (verified 2026-07-27):
+There are exactly four call sites (line numbers re-verified 2026-09-02):
 
 | site | construct | what it records |
 |---|---|---|
-| `Compiler.cpp:428` | `recordTypeTracked(name)` — a **RecordAlways** leaf | `trackUseDef(name, slot)` — this use is now a subsumption candidate |
-| `Compiler.cpp:2438` | a **RecordOnce** leaf | `trackUseDef(name, slot)` — same |
-| `Compiler.cpp:1029` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
-| `Compiler.cpp:1199` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
+| `Compiler.cpp:612` | `recordTypeTracked(name)` — a **RecordAlways** leaf | `trackUseDef(name, slot)` — this use is now a subsumption candidate |
+| `Compiler.cpp:2638` | a **RecordOnce** leaf | `trackUseDef(name, slot)` — same |
+| `Compiler.cpp:1219` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
+| `Compiler.cpp:1388` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
+
+Note what is *absent* from that table: a **NoRecord** read does not call
+`trackUseDef`. It emits no record, so it has no slot of its own to offer; it
+stamps `uc.defSlot` instead (see "NoRecord reads stamp the source" below). So
+`useDefs_[name]` holds only uses that genuinely recorded, and every subsumed use
+points at the original recording site rather than chaining through its
+predecessor. Nothing is lost — a subsumed use holds the same value by
+construction.
 
 **Plain assignment donates its rhs's slot — but only when it can prove which
 slot that is.** The requirement on the donated slot is stronger than "it
@@ -887,6 +901,120 @@ and `isOuterControlled` all read pre-scan sets (`localOrParam_`, `formalNames_`,
 This is the same family of guard as the `isAssignedInPromise` carve-out (rule 0,
 §2A.1.1): both are points where a write happens that the naive `stvar` sequence
 would otherwise misrepresent.
+
+### 2A.4.1 Why the two subsumption rules disagree about loops
+
+Rules 1 and 2 both ask "is this read's value already described by an existing
+slot?", and both are gated on dominance — but they take **different** queries for
+the dominating def, and the difference is deliberate. The two differ by exactly
+one line:
+
+```cpp
+const Def* findReachingDef(SEXP name) const {
+    auto it = defs_.find(name);
+    if (it == defs_.end()) return nullptr;
+    if (hasUnseenLoopDef(name)) return nullptr;      // <-- the only difference
+    return dominates(it->second) ? &it->second : nullptr;
+}
+```
+
+`hasUnseenLoopDef` is the single-pass correction described above: while some
+currently-open loop body still has `seen < expected` assignments to `name`, a
+store *later in the body* has not been compiled yet, but from iteration 2 onward
+it has already *executed* via the back edge. So "most recent def in source order"
+is not the def that reaches here.
+
+**Rule 1 (use-to-use) does not care.** Its gate is:
+
+```cpp
+if (optimizable || isForLoopVar(name) ||
+    (isLocalOrParam(name) && findDominatingDef(name)))
+```
+
+Since `findReachingDef != nullptr` implies `findDominatingDef != nullptr`, the
+third disjunct absorbs the `d` term inside `optimizable`, and the whole gate
+reduces to:
+
+> `isOuterControlled || isForLoopVar || (isLocalOrParam && (isFormal || findDominatingDef))`
+
+— *formal, or outer-controlled, or a local with **some** dominating def*, with the
+back-edge veto playing no part. What that dominating def establishes is **not**
+locality (`isLocalOrParam` already says that, statically, from a pre-scan set). It
+establishes that **the binding already exists in our frame at this point**: before
+a body-local's first store, an `ldvar` for it falls through to the enclosing env,
+which may be uncontrolled. That is also exactly why `isFormal` is an *alternative*
+to it rather than an addition — a formal is bound at call time, so no store is
+needed to rule out the fallthrough.
+
+Value identity is then established independently, by
+`dominates(ud) && postDominates(ud)` on the use-record — and *that* test is
+immune to the back edge:
+
+- a def **between** `ud` and here would have erased `useDefs_[name]` entirely;
+- a def **after** here in the body executes before `ud` on the next iteration,
+  never in the gap between them.
+
+**Rule 2 (def-to-use) very much cares**, and uses the vetoed `d`:
+
+```cpp
+if (d && isLocalOrParam(name) && postDominates(*d) && d->feedbackSlot != kNoSlot)
+```
+
+The asymmetry is not an inconsistency — the two rules make different claims:
+
+| | claim | effect of a later in-loop def |
+|---|---|---|
+| rule 1, use-to-use | *these two **reads** see the same value as each other* | none — both re-execute each iteration and see whatever is live |
+| rule 2, def-to-use | *this read's value is the one **that store** wrote* | fatal — from iteration 2 the live value comes from the back edge |
+
+**What rule 1's third disjunct buys, measured.** Removing
+`(isLocalOrParam(name) && findDominatingDef(name))` and recompiling turns three
+recording sites into one, in the ordinary accumulator loop:
+
+```r
+f <- function(n) {
+  x <- 1
+  i <- 0
+  while (i < n) {
+    x                 # records
+    x                 # subsumed only because of the third disjunct
+    x <- x + 1        # the x operand here: subsumed too; then the "unseen" def
+    i <- i + 1
+  }
+  x
+}
+```
+
+```
+WITHOUT the disjunct              WITH it
+ 75  ldvar_cached_  x{0}           75  ldvar_cached_  x{0}
+ 90  ldvar_cached_  x{0}           90  ldvar_cached_noRecordFB_  x{0}
+105  ldvar_cached_  x{0}          100  ldvar_cached_noRecordFB_  x{0}
+131  stvar_cached_  x{0}          121  stvar_cached_  x{0}
+```
+
+Without it the gate never opens, so the `useDefs_` loop is not entered at all,
+`d` is null so rules 2/3/4 cannot fire either, and every read degrades to
+RecordAlways. Note the third read is the `x` *inside* `x <- x + 1` — the operand
+of the very store whose existence caused `findReachingDef` to abstain. Since this
+is the shape of any loop that carries state, the disjunct is load-bearing rather
+than an edge case.
+
+The clause is *only* what separates that function from this one, which is
+identical but for the missing pre-loop store, and where `findDominatingDef` fails
+too so both reads record:
+
+```r
+g <- function(n) {
+  i <- 0
+  while (i < n) {
+    y                 # records
+    y                 # records again — no dominating def of y exists yet
+    y <- i
+    i <- i + 1
+  }
+}
+```
 
 ### 2A.5 Force-behavior rides on the leaf load
 
@@ -1569,7 +1697,7 @@ erroring run contributes an observation to the def that the use never saw, i.e.
 the same over-approximation as above — but it means the post-dominance test is
 "quasi post-dominance", and worth remembering when reasoning about the guarantee.
 
-### 3.1 The guarded-fast-path problem (`v[[i]]`): a real postdominance failure
+### 3.1 The guarded-fast-path problem (`v[[i]]`): a real dominance failure
 
 The dominance condition is broken by a construct that looks innocuous at source
 level. **`v[[i]]` (and `v[i]`) does not compile to straight-line code** — it
@@ -1602,8 +1730,12 @@ v[[i]]; i          # can the second `i` copy from the first?
 
 the answer is **no** — the first `i`'s slot is not guaranteed to have been
 populated when the second use runs, because control may have taken the promise
-branch. It fails post-dominance, and treating it as a source would mean copying
-from a slot that was never written.
+branch. It is **dominance** that fails, not post-dominance: the slow path reaches
+the second use without ever executing the first use's record, so the first use
+does not lie on every path to the second. (Post-dominance does hold here — every
+path from the fast-path record continues through `extract1_1_` to the second
+use.) Treating the first use as a source would mean copying from a slot that was
+never written.
 
 **This was overlooked initially and the correction is expensive.** Because
 guarded fast paths appear throughout real bytecode, tightening this rule removes
@@ -2265,6 +2397,16 @@ by direct inspection, not recalled:
     practice. **Neither is covered by a regression test** — the existing test
     shape exercises only the `functionLocalOrParam_` route, which was never
     broken.
+13. **Documentation only — §2A.4.1 added**, writing up why rules 1 and 2 take
+    different dominating-def queries (`findDominatingDef` vs the
+    back-edge-vetoed `findReachingDef`). Includes the algebraic simplification of
+    rule 1's gate, what a dominating def actually establishes for a body-local
+    (that the binding exists in our frame at this point — *not* locality, which
+    is a pre-scan set), the fact that NoRecord reads are absent from `useDefs_`,
+    and an A/B disassembly showing the third disjunct is what makes the ordinary
+    accumulator loop elide. §2A.1.1's *optimizable* formula was also stale
+    (pre-fix, bare `isFormal`) and the `trackDef`/`trackUseDef` call-site line
+    numbers had drifted; both corrected.
 
 All build clean and every checked benchmark produces correct results.
 
