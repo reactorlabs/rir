@@ -152,13 +152,22 @@ RecordSkipStats::~RecordSkipStats() {
     // every load; recordless keeps that generic dispatcher for non-cached
     // loads (fbgeneric) but splits the ldvar_cached_ family into one opcode
     // per compile-time FB-kind decision (always / record_once / no_record).
-    uint64_t fbGenericShould = fbGenericRec + fbGenericSkip;
+    //
+    // The generic dispatcher is reported as two rows, because its two switch
+    // arms are different concepts and pair with different specialized rows:
+    //   fbgeneric      pairs with always      — no gate, records every time
+    //   fbgeneric_once pairs with record_once — same RECORD_TYPE_ONCE_GATE,
+    //                                           reached by an unpatchable load
+    uint64_t fbGenericShould = fbGenericRec; // plain arm, never skipped
+    uint64_t fbGenericOnceShould = fbGenericOnceRec + fbGenericSkip;
     uint64_t fbAlwaysShould = fbAlwaysRec; // unconditional, never skipped
     uint64_t fbRecordOnceShould = fbRecordOnceRec + fbRecordOnceSkip;
     uint64_t fbNoRecordShould = fbNoRecordSkip; // never recorded
-    uint64_t fbShouldTotal = fbGenericShould + fbAlwaysShould +
-                             fbRecordOnceShould + fbNoRecordShould;
-    uint64_t fbRecTotal = fbGenericRec + fbAlwaysRec + fbRecordOnceRec;
+    uint64_t fbShouldTotal = fbGenericShould + fbGenericOnceShould +
+                             fbAlwaysShould + fbRecordOnceShould +
+                             fbNoRecordShould;
+    uint64_t fbRecTotal =
+        fbGenericRec + fbGenericOnceRec + fbAlwaysRec + fbRecordOnceRec;
     uint64_t fbSkipTotal = fbGenericSkip + fbRecordOnceSkip + fbNoRecordSkip;
     fprintf(stderr, "\nforce behavior (recordForceBehavior variants)\n");
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "case", W, "should", W,
@@ -167,8 +176,11 @@ RecordSkipStats::~RecordSkipStats() {
             W, dash, W, dash, W, dash);
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "fbgeneric", W,
             col(fbGenericShould).c_str(), W, col(fbGenericRec).c_str(), W,
-            col(fbGenericSkip).c_str(),
-            pctStr(fbGenericSkip, fbGenericShould).c_str());
+            col(0).c_str(), pctStr(0, fbGenericShould).c_str());
+    fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "fbgeneric_once", W,
+            col(fbGenericOnceShould).c_str(), W, col(fbGenericOnceRec).c_str(),
+            W, col(fbGenericSkip).c_str(),
+            pctStr(fbGenericSkip, fbGenericOnceShould).c_str());
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "always", W,
             col(fbAlwaysShould).c_str(), W, col(fbAlwaysRec).c_str(), W,
             col(0).c_str(), pctStr(0, fbAlwaysShould).c_str());

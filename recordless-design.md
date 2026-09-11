@@ -1826,15 +1826,21 @@ immediate — are exactly the ones the compiler patches to `noRecordFB_` /
 pins this in debug builds.
 
 **Non-cached loads use a generic runtime dispatcher.** `ldvar_`,
-`ldvar_for_update_*`, `ldvar_super_`, `ldddvar_` call the generic
-`recordForceBehavior`, which peeks the following opcode and dispatches:
+`ldvar_for_update_`, `ldvar_for_update_cache_`, `ldddvar_` call the generic
+`recordForceBehavior`, which peeks the following opcode and dispatches.
+(`ldvar_super_` does **not**: it calls `recordForceBehaviorNoCheck`, which is
+safe because a super-assign target is always followed by
+`recordTypeUntracked()` — a plain record with a raw immediate.)
 
 ```cpp
 switch (*pc) {
-case record_type_:  case record_type_leaf_notify_:            idx = raw;          break; // always
-case record_type_once_: case record_type_leaf_notify_once_:                            // once
-    RECORD_TYPE_ONCE_GATE(fired, raw, { /*skip*/ return; });  idx = RECORD_TYPE_ONCE_SLOT_IDX(raw); break;
-default: /* no record follows this load — bail */             return;
+case record_type_:  case record_type_leaf_notify_:            idx = raw;          // always
+    REC_STAT(fbGenericRec++);                                                     break;
+case record_type_once_: case record_type_leaf_notify_once_:                        // once
+    RECORD_TYPE_ONCE_GATE(fired, raw, { REC_STAT(fbGenericSkip++); return; });
+    idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
+    REC_STAT(fbGenericOnceRec++);                                                 break;
+default: REC_STAT(fbGenericBail++); /* no record follows this load */  return;
 }
 recordFbAtSlot(idx, s);
 ```
@@ -1843,6 +1849,27 @@ Note the dispatcher recognizes **all four** value-type leaf opcodes, including
 the `leaf_notify_` variants. Recognizing only the plain `record_type_`/`_once_`
 (the older behavior) silently dropped FB for any non-cached, tree-participating
 leaf — a real bug fixed this session.
+
+**The two arms are counted apart** (`fbGenericRec` vs `fbGenericOnceRec`). They
+are different concepts and pair with different cached rows: the plain arm has no
+gate and records every time, making it the generic counterpart of `fbAlwaysRec`,
+while the once arm reaches the *same* `RECORD_TYPE_ONCE_GATE` as
+`recordForceBehaviorRecordOnceNoCheck` and so pairs with
+`fbRecordOnceRec`/`fbRecordOnceSkip`. A single counter across both arms cannot
+tell a first firing from an unconditional record, which is what the composition
+figure in the paper needs in order to group by gate outcome rather than by
+dispatch path.
+
+Expect `fbGenericOnceRec` and `fbGenericSkip` to be **small**. A once-record
+after a non-patched load needs `UseKind::RecordOnce`, and `ldvar_for_update_*`
+can never get it: the complex assignment *is* the assignment to its own target,
+so the target is always in the containing loop's `expected` map (note
+`collectAssignedVars` walks `` `<-`(`[`(x,i), v) `` down to `x`), which fails
+`!assignedInInnermostLoop` on the enclosing-loop path and `!assignedInEnclosingLoop`
+on the stable path; and outside a loop both paths fail `loopDepth_ > 0`. That
+leaves only non-cached `ldvar_` — names passed to `rm()` (explicitly
+`BindingCacheDisabled` by `scanNames`) and functions exceeding
+`MAX_CACHE_SIZE` = 255 distinct names.
 
 The `default` bail ("`fbgeneric_bail`") fires when no value-type record follows
 the load. Empirically the callers that bail are: the discarded subassign
@@ -2245,7 +2272,20 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 - **Whether the generic `recordForceBehavior` should honor `fbKind`.** Non-cached
   loads currently ignore the compile-time FB strategy (they always attempt FB via
   the peek). This is inherited from the pre-recordless single-dispatcher design;
-  harmless but asymmetric with the cached path.
+  harmless but asymmetric with the cached path. Since the split into
+  `fbGenericRec` / `fbGenericOnceRec` the accounting at least shows how much
+  traffic each arm carries, so the question can be settled on measurement.
+- **`ldvar_for_update_cache_` is never FB-specialized, though it is cached.**
+  `compileGetvar` records a `ldvarCachedPos` for the patch, but the complex-
+  assignment path calls the three-argument `emitRecordTypeForVar`, whose
+  `ldvarCachedPos` defaults to `kNoLdvarCached` — so the patch block is skipped
+  even when a cache slot exists. This cannot cost a RecordOnce (see above: the
+  target can never be classified `RecordOnce`), but it does cost the `NoRecord`
+  cases: an `FBValue`/`Infer` target that would have become
+  `ldvar_cached_noRecordFB_` instead pays the `noinline` generic call plus the
+  opcode peek, only to hit `default:` and bail. Fixing it needs either a new
+  `ldvar_for_update_cache_fbRecordOnce_`/`_noRecordFB_` pair or threading the
+  position through the overload.
 - **`recordForceBehaviorNoCheck` assumes profiling is on.** It blind-reads `pc+1`
   as a raw slot index with no opcode peek; that is sound only because base
   `ldvar_cached_` is always followed by a record instruction — which holds only
@@ -2297,8 +2337,11 @@ by direct inspection, not recalled:
   are written up in §4.5 / §4.6; the reconstruction itself is **not**
   implemented (consumer side, out of scope).
 - `RIR_RECORD_STATS` instrumentation incl. the force-behavior table
-  (`fbgeneric` / `always` / `record_once` / `no_record` + `fbgeneric_bail`
-  reported separately). Compile-time toggle, **off** by default.
+  (`fbgeneric` / `fbgeneric_once` / `always` / `record_once` / `no_record` +
+  `fbgeneric_bail` reported separately). Compile-time toggle, **off** by
+  default. *(As of this revision the toggle is `#define`d unconditionally in
+  `record_stats.h` — i.e. currently **on** in the tree. Turn it back off before
+  any timing run.)*
 
 **Changes landed since the previous snapshot (2026-07-27 → 2026-08-11).**
 
@@ -2474,10 +2517,15 @@ columns (skip% = skipped/should):
    `record_type_` has no signature and always does the work). It exists because
    that work is otherwise invisible: the opcode still executes.
 4. **force behavior (recordForceBehavior variants):** rows `fbgeneric`,
-   `always`, `record_once`, `no_record`, `TOTAL`; plus `fbgeneric_bail`
-   reported *separately* below the table (loads where the generic dispatcher
-   found no following record — a genuine "nothing to attribute FB to," not a
-   skip, hence not a table row).
+   `fbgeneric_once`, `always`, `record_once`, `no_record`, `TOTAL`; plus
+   `fbgeneric_bail` reported *separately* below the table (loads where the
+   generic dispatcher found no following record — a genuine "nothing to
+   attribute FB to," not a skip, hence not a table row).
+   The generic dispatcher occupies two rows because its two switch arms are
+   different concepts: `fbgeneric` is the plain arm (no gate, never skipped —
+   pairs with `always`) and `fbgeneric_once` the gate arm (pairs with
+   `record_once`, and carries the whole of `fbGenericSkip`). Grouping the table
+   this way lets each generic row be read alongside its cached equivalent.
 
 **Recording-elision rates (what the stats *do* reliably show).** With
 `RIR_RECORD_STATS` on, the fraction of baseline "record-everything" sites the

@@ -2057,6 +2057,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         case Opcode::record_type_:
         case Opcode::record_type_leaf_notify_:
             idx = raw; // always: raw immediate is the slot index
+            // No gate exists on this arm, so it records every time — the
+            // generic counterpart of fbAlwaysRec, not of fbRecordOnceRec.
+            REC_STAT(g_recStats.fbGenericRec++);
             break;
         case Opcode::record_type_once_:
         case Opcode::record_type_leaf_notify_once_:
@@ -2066,13 +2069,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 return;
             });
             idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
+            // Gate checked and passed: this is a first firing, so count it
+            // apart from the always-recording arm above.
+            REC_STAT(g_recStats.fbGenericOnceRec++);
             break;
         default:
             REC_STAT(g_recStats.fbGenericBail++);
             return; // no value-type record follows this load
         }
         recordFbAtSlot(idx, s);
-        REC_STAT(g_recStats.fbGenericRec++);
     };
 
     // For ldvar_cached_ (RecordAlways): the next instruction is always a plain

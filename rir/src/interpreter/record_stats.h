@@ -87,9 +87,26 @@ struct RecordSkipStats {
     // splits the ldvar_cached_ family into per-FB-kind opcodes/wrappers, but
     // still needs the original generic dispatcher for non-cached loads
     // (ldvar_, ldvar_for_update_*, ldvar_super_, ldddvar_).
-    uint64_t fbGenericRec = 0;  // recordForceBehavior (generic) — recorded
-    uint64_t fbGenericSkip = 0; // recordForceBehavior (generic) — skipped
-                                // (once-gated-and-fired)
+    uint64_t fbGenericRec = 0; // recordForceBehavior (generic) — recorded on
+                               // the plain arm (the following value-type
+                               // record is a record_type_[leaf_notify_], so
+                               // no gate exists and this records every time:
+                               // the generic counterpart of fbAlwaysRec)
+    uint64_t fbGenericOnceRec = 0; // recordForceBehavior (generic) — recorded
+                                   // on the once arm: the gate was checked and
+                                   // let it through, i.e. the first firing of
+                                   // this activation. Counterpart of
+                                   // fbRecordOnceRec. Expected to be small:
+                                   // ldvar_for_update_* can never carry a
+                                   // once-record (the complex assignment is
+                                   // itself the assignment to its target, so
+                                   // classifyUse's RecordOnce loop guards
+                                   // always fail), which leaves only
+                                   // non-cached ldvar_ — rm()'d names and
+                                   // functions with >MAX_CACHE_SIZE names.
+    uint64_t fbGenericSkip = 0;    // recordForceBehavior (generic) — skipped
+                                   // (once-gated-and-fired). Counterpart of
+                                   // fbRecordOnceSkip.
     uint64_t fbGenericBail = 0; // recordForceBehavior (generic) — the opcode
                                 // after the load matched none of the
                                 // recognized value-type record opcodes
