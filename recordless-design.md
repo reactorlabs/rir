@@ -1,6 +1,6 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot, last revised **2026-09-02**. The author is
+**Status:** working design snapshot, last revised **2026-09-14**. The author is
 actively iterating; see *Current implementation status* (§7) for what is stable
 vs. in flux.
 
@@ -1042,7 +1042,8 @@ strategy selection (`ldvar_cached_` / `ldvar_cached_noRecordFB_` /
   the dependent to be a registered child (`childSlots.find(d) != end`) before
   treating `typeDep(d)`'s target as a notifying source (§2C.5).
 - **Reentrancy** — handled by the per-invocation `fired` array (§2A.2.1); would
-  be a correctness bug if the bitmap were global.
+  be a correctness bug if the bitmap were global. The inner-node dirty gate *was*
+  global in exactly this sense and had exactly this bug — see §2B.5.
 - **Stats ambiguity** — a genuinely untracked leaf and a RecordAlways leaf both
   emit plain `record_type_`; telling them apart for measurement needs a runtime
   side table (`isStatsUntracked`, §2C.3).
@@ -1237,11 +1238,117 @@ distinct from the `Colon` result node.
   often has the *inner* expression's operands as children even when the inner
   result itself is untracked — enough to make it an inner node, not enough to make
   the elision sound.)
+- **Reentrancy of the dirty gate.** The suppress/notify handshake spans two
+  instructions, and the flag was global to the Code, so a nested activation could
+  consume a notification meant for an outer one and cost it an observation.
+  Written up with the witness and the fix in **§2B.5**.
 - **Root inner nodes that are also sources.** The top of an assigned expression
   (`a <- f(x)+1`) is an inner node that may *also* be a NoRecord source for other
   reads of `a`; when it observes an object it must notify its *dependents'*
   parents, not a parent of its own. This is the reason the inner opcodes split on
   the "notifies-or-not" axis (§2C.3), not the root-vs-non-root axis.
+
+---
+
+### 2B.5 Reentrancy: the dirty gate needs an owner
+
+The suppress/notify scheme of §2B.2 is not a point event. It is a **two-instruction
+protocol**: a child sets its parent's `dirty`, and the parent consumes it when its
+own record instruction runs. Between those two instructions lies a window, and
+`dirty` lives in the persistent `TypeFeedback` — one copy shared by every
+activation of the Code. Anything in that window that re-enters the same Code can
+therefore consume a notification meant for an activation further out.
+
+This is the same hazard §2A.2.1 already calls out for record-once, where §2A.6
+states the rule plainly: *"would be a correctness bug if the bitmap were global."*
+The `fired` bitmap is per-invocation precisely to avoid it. The inner-node dirty
+gate was global in exactly that sense, and had exactly that bug.
+
+**The witness.** The window opens at the *first child's record*, so whether a
+re-entrant call falls inside it depends on operand order:
+
+```r
+f <- function(a, n) {
+  if (n == 0) return(1L)
+  a + f(1L, n - 1)          # leaf FIRST, then the recursive call
+}
+f(1.5, 2)
+```
+
+| step | activation | action |
+|---|---|---|
+| 1 | A | `ldvar a` (double) records, sets the `+` node dirty |
+| 2 | B | nested call; its `ldvar a` (integer) records |
+| 3 | B | `add_` sees dirty, records **integer**, clears |
+| 4 | A | `add_` sees a clean slot, **skips** — A's `double` is lost |
+
+Measured, the `add_` slot ends with `[integer]`. Moving the call to the other
+operand (`f(1L, n-1) + a`) puts it *before* any flag is set, and the same slot
+ends with `[integer, double]`; hoisting it into a temporary (`b <- f(...); a + b`)
+also records both. Of the three arrangements of the same computation, only one
+loses. The shape is not exotic — `binarytrees_naive`'s hot line is
+`tree[[1]] + check(tree[[2]]) - check(tree[[3]])`, where `check` recurses to
+depth 13+ through both operators.
+
+**Why that is more than a lost type.** `seen` is a set of observed types,
+accumulated by union, and the flags accumulate with `||` — both commutative by
+construction. "Which types did this site see" ought to be a question about a
+multiset of executions, not about their sequence. The steal makes *whether an
+execution is observed at all* depend on a syntactic accident, so the profile stops
+being stable under semantics-preserving edits: hoisting a call into a temporary
+changes the recorded feedback. It is also silent — nothing distinguishes "this
+site only ever saw integer" from "it saw double and lost it" — and it falsifies
+the losslessness claim of §2B.2, which is the stated reason the notify scheme
+replaced the abandoned reconstruction approach (§2B.2.1).
+
+(The one *deliberate* order-dependence is unaffected: `numTypes < MaxTypes` caps
+`seen` at three distinct types, so which three you keep is the first three to
+arrive. That is a documented capacity limit, not an accident.)
+
+#### 2B.5.1 The stamp protocol
+
+`dirty` is given an **owner**: the activation that armed it, identified by the
+address of a frame-local in that activation of `evalRirCode`. Three rules, each
+load-bearing — getting any of them wrong either reinstates the bug or deletes the
+optimization:
+
+| | guard | why |
+|---|---|---|
+| **arm** | `!dirty` — first setter wins | The outer activation always sets before it calls inward, so the first setter is the **outermost** pending one, which is also the last to consume. Stamping unconditionally instead lets the nested activation seize ownership and the bug returns verbatim — one stamp cannot name two owners. |
+| **consume** | record always; clear only if `stamp == me` | A non-owner here is a nested activation inside the owner's window. It still records (its own operands changed too), but clearing would leave the owner to find a clean slot and skip. |
+| **skip** | `!dirty` alone — **never** consult the stamp | Since nobody clears a flag they do not own, a flag I armed survives until I consume it, so `!dirty` proves no operand of mine changed. Testing the stamp here instead would make the bail fail on every iteration after the first clear and delete the inner-node optimization outright — on mandelbrot that is 185,473,342 skips, ≈100% of the dimension. |
+
+The third rule is what keeps the hot path unchanged: the suppressed case is still
+a single `dirty` test, and the stamp is touched only when a node actually records.
+
+**Soundness** follows from arm and consume together: a flag is never cleared by
+anyone but its owner, so no activation can be made to observe a false "clean". An
+inner activation may record when it did not strictly need to — harmless, since a
+spurious record writes correct data.
+
+**Why a frame address is the right identity.** Live stack frames are disjoint, so
+addresses are unique among *simultaneously live* activations — exactly the set
+that matters. Reuse of a dead frame's address by a later activation is benign in
+the only direction it can go: it can cause a spurious record, never a skip.
+
+**Known hole: a leaked stamp.** If an owner arms the flag but never reaches its
+consume — an R error, or a `return()` from a forced promise, longjmp'ing past the
+operator — the flag stays armed with a dead owner. Every later execution then sees
+`dirty && stamp != me`, records, and never clears: that node loses suppression
+permanently. It over-records, never under-records, so it is a silent performance
+decay rather than a correctness bug. A cheap reclaim exists and is **not
+implemented**: the stack grows down, so a stamp numerically below the current
+frame's address belongs to a dead frame and can be treated as unowned.
+
+**Cost.** Deterministic instruction counts (the subtraction method of §8), same
+commit with and without the protocol: binarytrees +0.13%, nbody +0.13%,
+mandelbrot +0.23%, against a repeat-measurement floor of about ±0.04pp. Recording
+work itself is unchanged — the stats table is byte-identical, so `doRecord` fires
+exactly as often; the delta is the protocol's own test-and-store. Wall-clock A/B
+on this host was useless for a change this small (mixed signs spanning six points
+under the powersave governor), as §8 warns. Note the cost is sensitive to *where*
+the stamp is kept, which is an implementation choice deliberately left out of this
+section.
 
 ---
 
@@ -2299,7 +2406,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-09-02)
+## 7. Current implementation status (snapshot, 2026-09-14)
 
 Working branch: `recordLessNew2-expressionsNewSchema`, at commit `b8076079`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
@@ -2450,6 +2557,22 @@ by direct inspection, not recalled:
     accumulator loop elide. §2A.1.1's *optimizable* formula was also stale
     (pre-fix, bare `isFormal`) and the `trackDef`/`trackUseDef` call-site line
     numbers had drifted; both corrected.
+
+**Changes landed since (2026-09-02 → 2026-09-14).**
+
+14. **Inner-node dirty gate given an owner** (§2B.5). The suppress/notify
+    handshake spans two instructions and the flag was global to the Code, so a
+    nested activation landing in that window consumed notifications meant for an
+    outer one — `a + f(...)` inside `f` lost the outer activation's type, while
+    `f(...) + a` did not, making recorded observations depend on operand order.
+    Fixed by stamping the flag with the arming activation: first setter wins,
+    only the owner clears, and the skip path never consults the stamp (it must
+    not — that would delete the ≈100% inner-node suppression). Verified on both
+    orderings, on `binarytrees`' `check()`, and against the full benchmark suite;
+    stats byte-identical, so recording work is unchanged. Costs +0.13% to +0.23%
+    of executed instructions. **Open:** a stamp leaked by a non-local exit
+    disables suppression for that node permanently — over-records, never
+    under-records; the stack-direction reclaim is not implemented.
 
 All build clean and every checked benchmark produces correct results.
 
