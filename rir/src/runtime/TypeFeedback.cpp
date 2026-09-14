@@ -172,15 +172,12 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (auto i = 0; i < size; ++i) {
         ObservedValues tmp;
         InBytes(inp, &tmp, sizeof(ObservedValues));
-        // `dirty` and `activationStamp` are transient per-run state — a
-        // notification in flight and the identity of the frame that armed it —
-        // not observations, and both are inside sizeof() so they ride along in
-        // the byte image. A stamp deserialized from another process is a
-        // meaningless address that could alias a live frame here, which would
-        // let an activation disarm a flag it does not own: exactly the
-        // reentrancy bug the stamp exists to prevent. Reset both.
+        // `dirty` is transient per-run state — a notification in flight — not
+        // an observation, yet it is inside sizeof() so it rides along in the
+        // byte image. Its owner lives in activationStamps_, which is rebuilt
+        // empty, so a deserialized set bit would be owned by nobody and could
+        // never be cleared: the node would record on every execution forever.
         tmp.dirty = 0;
-        tmp.activationStamp = 0;
         types.push_back(std::move(tmp));
     }
 
@@ -350,6 +347,10 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     forceBehaviorKinds_ =
         (uint8_t*)(slots_ + callees_mem_size + tests_mem_size + types_mem_size +
                    types_size_ * sizeof(uint32_t));
+
+    // Sized here rather than alongside noRecordSourceToDeps_ (which the
+    // compiler builds) so it also exists for deserialized feedback.
+    activationStamps_.assign(types_size_, 0);
 
     if (callees_size_) {
         memcpy(callees_, callees.data(), callees_mem_size);
