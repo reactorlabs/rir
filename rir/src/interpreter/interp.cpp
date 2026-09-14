@@ -1996,6 +1996,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
         memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
     }
+    // Identity of THIS activation, used to stamp inner-node dirty flags so a
+    // nested activation cannot disarm a flag it does not own (§2B.5). The
+    // address of a frame-local is unique among simultaneously live frames,
+    // which is the only set that matters, and costs nothing to produce.
+    char activationAnchor;
+    const uintptr_t act = (uintptr_t)&activationAnchor;
 
     // Per-function-invocation bitmap for record_type_once_promise_ — disabled:
     // record_type_once_promise_ / ldvar_cached_envRecordFB_ are not emitted;
@@ -2527,7 +2533,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             // doRecord + propagate (own parent + any deps, together)
-            typeFeedback->record_type_leaf_notify(idx, ostack_top());
+            typeFeedback->record_type_leaf_notify(idx, ostack_top(), act);
             REC_STAT(g_recStats.leafAlwaysRec++);
             NEXT();
         }
@@ -2540,7 +2546,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 NEXT();
             });
             typeFeedback->record_type_leaf_notify(
-                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top());
+                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), act);
             RECORD_TYPE_ONCE_SET(fired, raw);
             REC_STAT(g_recStats.leafOnceRec++);
             NEXT();
@@ -2562,7 +2568,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // here — passing it was measured slower, see the note on
             // record_type_inner_when_dirty.
             if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner_when_dirty(idx, ostack_top());
+                typeFeedback->record_type_inner_when_dirty(idx, ostack_top(),
+                                                           act);
             NEXT();
         }
 
@@ -2574,8 +2581,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                      else g_recStats.innerNotifyRec++);
             // Same as record_type_inner_: skip the call when suppressed.
             if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner_notify_when_dirty(idx,
-                                                                  ostack_top());
+                typeFeedback->record_type_inner_notify_when_dirty(
+                    idx, ostack_top(), act);
             NEXT();
         }
 

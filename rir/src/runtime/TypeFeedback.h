@@ -256,7 +256,35 @@ struct ObservedValues {
     // constructor, so a 0xFFFF sentinel would be one forgotten initializer
     // away from silently designating slot 0 as everyone's parent.
     uint16_t parentPlus1;
-    // total (packed): 1+1+3+1+2 = 8 bytes
+    // bytes 8-15: which ACTIVATION set `dirty`, as the address of a frame-local
+    // in that activation of evalRirCode. 0 = unowned.
+    //
+    // `dirty` is a notification in flight between a child's record and its
+    // parent's, but it lives here, shared by every activation of the Code. A
+    // nested activation landing in that window used to consume the flag and
+    // silently cost the outer activation its record — `a + f(...)` inside `f`
+    // lost the outer type (§2B.5). The stamp names the owner so only the owner
+    // clears:
+    //
+    //   set     — FIRST setter wins (only stamp when !dirty). The outer
+    //             activation always sets before it calls inward, so the first
+    //             setter is the OUTERMOST pending one — which is also the last
+    //             to consume, exactly the owner we want. Overwriting here is
+    //             what reintroduces the bug: one stamp cannot name two owners.
+    //   consume — record either way; clear only when the stamp is ours,
+    //             otherwise leave the flag standing for its owner.
+    //   skip    — `!dirty` alone, NEVER consulting the stamp. Since nobody
+    //             clears a flag they do not own, a flag I set survives until I
+    //             consume it, so `!dirty` proves no operand of mine changed.
+    //             Testing the stamp here instead would make the bail fail on
+    //             every iteration after the first clear and delete the whole
+    //             inner-node optimization.
+    //
+    // Addresses are unique among *simultaneously live* frames, which is the
+    // only set that matters. Reuse by a later activation of a dead frame's
+    // address can only cause a spurious record, never a skip.
+    uintptr_t activationStamp;
+    // total (packed): 1+1+3+1+2+8 = 16 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -508,6 +536,46 @@ struct ObservedValues {
     // check, no signature to maintain, and nothing to notify — just doRecord.
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
+    // ---- the dirty-gate ownership protocol -------------------------------
+    //
+    // These two are a MATCHED PAIR and only work together; the guard in each
+    // name is the load-bearing part. Keep them adjacent and change neither
+    // alone. Full rationale on ObservedValues::activationStamp.
+    //
+    //   armIfClean    guard !dirty     — first setter wins, so the stamp names
+    //                                    the OUTERMOST pending activation,
+    //                                    which is also the last to consume.
+    //                                    Overwriting instead lets a nested
+    //                                    activation seize ownership, which is
+    //                                    the original lost-observation bug.
+    //   disarmIfOwner guard stamp==act — only the owner clears. A non-owner
+    //                                    here is a nested activation running
+    //                                    inside the owner's window: it still
+    //                                    records, but clearing would leave the
+    //                                    owner to find a clean slot and skip.
+    //
+    // Together they give the property the skip path relies on: a flag I armed
+    // is never cleared by anyone else, so `!dirty` proves no operand of mine
+    // changed — which is why the skip path must NOT consult the stamp.
+    //
+    // always_inline so each call site keeps the compare-and-stores it had when
+    // these were written out longhand.
+    __attribute__((__always_inline__)) void armIfClean(uintptr_t act) {
+        if (!dirty) {
+            dirty = true;
+            activationStamp = act;
+        }
+        // Already dirty: an activation further out owns it and clears after us.
+        // Leave the stamp alone.
+    }
+
+    __attribute__((__always_inline__)) void disarmIfOwner(uintptr_t act) {
+        if (activationStamp == act) {
+            dirty = false;
+            activationStamp = 0;
+        }
+    }
+
   public:
     // Inner-node record for a node the caller has ALREADY established is dirty.
     // The interpreter tests `dirty` inline before calling, so that the common
@@ -520,9 +588,10 @@ struct ObservedValues {
     //
     // For a standalone inner node (record_type_inner_): a root with no
     // NoRecord dependents, so nothing to notify and no signature to keep.
-    __attribute__((__always_inline__)) void recordInnerWhenDirty(SEXP e) {
+    __attribute__((__always_inline__)) void
+    recordInnerWhenDirty(SEXP e, uintptr_t act) {
         SLOWASSERT(dirty && "recordInnerWhenDirty called on a clean slot");
-        dirty = false;
+        disarmIfOwner(act);
         doRecord(e);
     }
 
@@ -530,10 +599,10 @@ struct ObservedValues {
     // Also caller-guarded on dirty. Returns whether its own signature changed,
     // i.e. whether there is anything to tell its parent.
     __attribute__((__always_inline__)) bool
-    recordInnerAndSignWhenDirty(SEXP e) {
+    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act) {
         SLOWASSERT(dirty &&
                    "recordInnerAndSignWhenDirty called on a clean slot");
-        dirty = false;
+        disarmIfOwner(act);
         return doRecordAndSign(e);
     }
 };
@@ -543,7 +612,8 @@ struct ObservedValues {
 // existing bits costs a byte per slot and changes the on-disk layout.
 // Power of two on purpose: types_[idx] is then a scaled index rather than a
 // multiply, and it is indexed on every record.
-static_assert(sizeof(ObservedValues) == 8, "ObservedValues must stay 8 bytes");
+static_assert(sizeof(ObservedValues) == 16,
+              "ObservedValues must stay 16 bytes (8 + activationStamp)");
 
 enum class Opcode : uint8_t;
 
@@ -760,9 +830,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // callee-saved register across the call, which costs more than redoing
     // types(idx) — a single scaled lea from a loop-invariant base and an index
     // that was just decoded.
-    __attribute__((noinline)) void record_type_inner_when_dirty(uint32_t idx,
-                                                                const SEXP e) {
-        types(idx).recordInnerWhenDirty(e);
+    __attribute__((noinline)) void
+    record_type_inner_when_dirty(uint32_t idx, const SEXP e, uintptr_t act) {
+        types(idx).recordInnerWhenDirty(e, act);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
     // Inner node that must mark a related node dirty when its own value
@@ -776,12 +846,13 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // `_when_dirty` as above: caller-guarded, so this always records.
     // Takes only `idx`, as above — see record_type_inner_when_dirty.
     __attribute__((noinline)) void
-    record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e) {
+    record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e,
+                                        uintptr_t act) {
         ObservedValues& slot = types(idx);
         // Propagate only when our own value changed — recording does not imply
         // that, since different operands can yield the same result.
-        if (slot.recordInnerAndSignWhenDirty(e))
-            markRelatedDirty(slot, idx);
+        if (slot.recordInnerAndSignWhenDirty(e, act))
+            markRelatedDirty(slot, idx, act);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
     // A simple leaf that must mark related nodes dirty when its per-execution
@@ -794,12 +865,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // parent slot.)
     // A simple leaf that is neither stays plain record_type_ /
     // record_type_once_ and pays nothing.
-    __attribute__((noinline)) void record_type_leaf_notify(uint32_t idx,
-                                                           const SEXP e) {
+    __attribute__((noinline)) void
+    record_type_leaf_notify(uint32_t idx, const SEXP e, uintptr_t act) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
         if (slot.doRecordAndSign(e))
-            markRelatedDirty(slot, idx); // own parent + any dependents
+            markRelatedDirty(slot, idx, act); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
 
@@ -814,13 +885,18 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // which always compares unequal, so its parent records on every execution
     // for as long as the object keeps showing up — and stops once it does not,
     // which the permanent latch could never do.
+    // `act` identifies the calling activation; see ObservedValues::
+    // activationStamp for why only the FIRST setter stamps.
+    // The graph walk lives here because it needs types_ and the reverse dep
+    // map; the per-slot mutation is ObservedValues::armIfClean, paired there
+    // with its disarm half.
     __attribute__((__always_inline__)) void
-    markRelatedDirty(ObservedValues& slot, uint32_t idx) {
+    markRelatedDirty(ObservedValues& slot, uint32_t idx, uintptr_t act) {
         if (slot.hasParent()) // this node's own parent (leaf-with-parent case)
-            types_[slot.parentSlot()].dirty = true;
+            types_[slot.parentSlot()].armIfClean(act);
         for (uint32_t d : noRecordSourceToDeps_[idx]) { // dependents' parents
             if (types_[d].hasParent())
-                types_[types_[d].parentSlot()].dirty = true;
+                types_[types_[d].parentSlot()].armIfClean(act);
         }
     }
 
