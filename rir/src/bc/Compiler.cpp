@@ -430,17 +430,14 @@ class CompilerContext {
     // Degrades to recordTypeUntracked() outside the analysis's domain, so that
     // such records both always record (matching the baseline, which has no
     // suppression anywhere) and are attributed to the "untracked" stats row:
-    //   * isInPromise() — recordless does not optimize inside promises, so a
-    //     promise body records plainly throughout. emitRecordTypeForVar bails
-    //     for the same reason, which is what also suppresses
-    //     NoRecord/RecordOnce classification there. Note this guard is only
-    //     about *not optimizing* promises: it is no longer what keeps a
-    //     promise's leaves out of the enclosing expression's tree, since
-    //     slotsStack now lives on the CodeContext. Relaxing the guard
-    //     re-enables promise-local trees without reintroducing cross-Code
-    //     parenting.
     //   * !mainBodyCtx_ — compiling default formal arguments (themselves
     //     promises, but reached before any main-body context exists).
+    // Promises are NO LONGER degraded here: a promise body builds its own
+    // expression tree, so its inner nodes are suppressible. Only the leaf
+    // classification is withheld there, in emitRecordTypeForVar — see the note
+    // at its isInPromise() branch. This is safe precisely because slotsStack
+    // lives on the CodeContext, so a promise-local tree cannot reach across the
+    // Code boundary into the expression that created the promise.
     //   * leaf optimization off — likewise, all leaves are untracked.
     // In each case the operand leaves are untracked and hold no parent pointer,
     // so a tracked inner node above them could never be un-suppressed: e.g.
@@ -540,8 +537,7 @@ class CompilerContext {
     }
 
     BC recordTypeTracked(bool isParent) {
-        if (isInPromise() || !mainBodyCtx_ ||
-            !Compiler::isRecordlessLeafEnabled())
+        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
             return recordTypeUntracked();
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack().empty())
@@ -566,8 +562,7 @@ class CompilerContext {
     // notifies anyway). Consuming them leaves them parent-less, so they stay
     // plain record_type_.
     BC recordTypeOpaqueResult() {
-        if (isInPromise() || !mainBodyCtx_ ||
-            !Compiler::isRecordlessLeafEnabled())
+        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
             return recordTypeUntracked();
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack().empty()) {
@@ -2588,16 +2583,33 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 // emitted, don't patch.
 static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
                                  SEXP name, unsigned ldvarCachedPos) {
-    // Recordless does not optimize inside promises: every record emitted in a
-    // promise body is a plain untracked record_type_. Returning here (rather
-    // than relying on the degradation in recordTypeTracked) is what suppresses
-    // the *classification* as well — otherwise classifyUse could still make
-    // this use NoRecord (no opcode at all) or RecordOnce, both of which are
-    // optimizations. Covers default formal arguments too, which are compiled as
-    // promises; the !mainBodyCtx_ test additionally catches them before any
-    // main-body context exists.
-    if (ctx.isInPromise() || !ctx.mainBodyCtx_) {
+    // Default formal arguments are reached before any main-body context exists,
+    // so there is nothing to analyse: plain untracked record_type_.
+    if (!ctx.mainBodyCtx_) {
         cs << ctx.recordTypeUntracked();
+        return;
+    }
+
+    // Inside a promise, exactly ONE optimization is enabled: the inner-node
+    // suppression. Leaves always record — returning here (rather than relying
+    // on a degradation further down) is what suppresses the *classification*,
+    // so classifyUse can never make a promise-local use NoRecord (no opcode at
+    // all) or RecordOnce. Both of those rest on the def/use analysis, and a
+    // promise's instruction sequence is decoupled in time from the code that
+    // created it, so its dominance conclusions do not hold here.
+    //
+    // But the leaf is TRACKED, not untracked: it registers as a child in the
+    // promise's own expression level, which is what lets an inner node in the
+    // SAME promise Code be suppressed and then un-suppressed by it. In
+    // `f(x + y)` the loads of `x` and `y` record on every execution and the
+    // `+` records only when one of their signatures changes. Parenting stays
+    // inside the promise because slotsStack lives on the CodeContext (§2C.5),
+    // so a promise's leaves can never be adopted by the enclosing expression.
+    //
+    // Leaving FB alone (no patch below) likewise keeps force-behavior on the
+    // always-record path here.
+    if (ctx.isInPromise()) {
+        cs << ctx.recordTypeTracked(false);
         return;
     }
 
