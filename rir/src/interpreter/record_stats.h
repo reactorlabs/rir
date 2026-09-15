@@ -30,8 +30,6 @@
 // perf/production builds so evalRirCode stays byte-identical and the hot loop
 // pays zero overhead.
 
-//#define RIR_RECORD_STATS
-
 #ifdef RIR_RECORD_STATS
 #include <cstdint>
 #endif
