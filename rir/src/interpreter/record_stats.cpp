@@ -3,7 +3,10 @@
 #ifdef RIR_RECORD_STATS
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
+#include <vector>
 
 namespace rir {
 
@@ -38,16 +41,62 @@ static std::string pctStr(uint64_t value, uint64_t total) {
     return s;
 }
 
+namespace {
+
+// One CSV line. Numeric fields are optional: an unset field is written as an
+// empty cell, meaning "not applicable to this metric" (e.g. fbgeneric_bail has
+// no should/recorded/skipped breakdown, only a raw count).
+struct CsvRow {
+    const char* section;
+    const char* metric;
+    bool hasCounts;
+    uint64_t should, recorded, skipped;
+};
+
+CsvRow row(const char* section, const char* metric, uint64_t should,
+           uint64_t recorded, uint64_t skipped) {
+    return {section, metric, true, should, recorded, skipped};
+}
+
+CsvRow bare(const char* section, const char* metric, uint64_t count) {
+    return {section, metric, false, count, 0, 0};
+}
+
+void writeCsv(const std::vector<CsvRow>& rows) {
+    printf("section,metric,count,should,recorded,skipped\n");
+    for (const auto& r : rows) {
+        if (r.hasCounts)
+            fprintf(stderr, "%s,%s,,%llu,%llu,%llu\n", r.section, r.metric,
+                    (unsigned long long)r.should,
+                    (unsigned long long)r.recorded,
+                    (unsigned long long)r.skipped);
+        else
+            fprintf(stderr, "%s,%s,%llu,,,\n", r.section, r.metric,
+                    (unsigned long long)r.should);
+    }
+    fflush(stderr);
+}
+
+bool csvRequested() {
+    const char* v = getenv("RIR_RECORD_STATS_CSV");
+    return v && strcmp(v, "1") == 0;
+}
+
+} // namespace
+
 RecordSkipStats::~RecordSkipStats() {
     // leaves (ldvar reads + opaque value results: call / [[ / for /
     // replacement)
     uint64_t leafRec = leafAlwaysRec + leafOnceRec;
     uint64_t leafSkip = leafOnceSkip + noRecordSkip;
     uint64_t leafShould = leafRec + leafSkip;
+    uint64_t onceShould = leafOnceRec + leafOnceSkip;
     // inner nodes (standalone + notifying)
     uint64_t allInnerRec = innerRec + innerNotifyRec;
     uint64_t allInnerSkip = innerSkip + innerNotifySkip;
     uint64_t allInnerShould = allInnerRec + allInnerSkip;
+    uint64_t innerShould = innerRec + innerSkip;
+    uint64_t innerNotifyShould = innerNotifyRec + innerNotifySkip;
     // untracked records (record_type_): always fire, never skipped
     uint64_t untrackedShould = untrackedRec;
     // totals
@@ -56,6 +105,59 @@ RecordSkipStats::~RecordSkipStats() {
     uint64_t baselineTotal = recordedTotal + skippedTotal;
     if (baselineTotal == 0)
         return; // trivial invocation, stay quiet
+
+    // Force-behavior (FB) recording — a separate feedback dimension
+    // piggybacked on the same slots. The baseline has a single dispatcher for
+    // every load; recordless keeps that generic dispatcher for non-cached
+    // loads (fbgeneric) but splits the ldvar_cached_ family into one opcode
+    // per compile-time FB-kind decision (always / record_once / no_record).
+    //
+    // The generic dispatcher is reported as two rows, because its two switch
+    // arms are different concepts and pair with different specialized rows:
+    //   fbgeneric      pairs with always      — no gate, records every time
+    //   fbgeneric_once pairs with record_once — same RECORD_TYPE_ONCE_GATE,
+    //                                           reached by an unpatchable load
+    uint64_t fbGenericShould = fbGenericRec; // plain arm, never skipped
+    uint64_t fbGenericOnceShould = fbGenericOnceRec + fbGenericSkip;
+    uint64_t fbAlwaysShould = fbAlwaysRec; // unconditional, never skipped
+    uint64_t fbRecordOnceShould = fbRecordOnceRec + fbRecordOnceSkip;
+    uint64_t fbNoRecordShould = fbNoRecordSkip; // never recorded
+    uint64_t fbShouldTotal = fbGenericShould + fbGenericOnceShould +
+                             fbAlwaysShould + fbRecordOnceShould +
+                             fbNoRecordShould;
+    uint64_t fbRecTotal =
+        fbGenericRec + fbGenericOnceRec + fbAlwaysRec + fbRecordOnceRec;
+    uint64_t fbSkipTotal = fbGenericSkip + fbRecordOnceSkip + fbNoRecordSkip;
+
+    if (csvRequested()) {
+        writeCsv({
+            row("leaves", "RecordAlways", leafAlwaysRec, leafAlwaysRec, 0),
+            row("leaves", "RecordOnce", onceShould, leafOnceRec, leafOnceSkip),
+            row("leaves", "NoRecord", noRecordSkip, 0, noRecordSkip),
+
+            row("inner", "inner_standalone", innerShould, innerRec, innerSkip),
+            row("inner", "inner_notify", innerNotifyShould, innerNotifyRec,
+                innerNotifySkip),
+
+            row("force_behavior", "fbgeneric", fbGenericShould, fbGenericRec,
+                0),
+            row("force_behavior", "fbgeneric_once", fbGenericOnceShould,
+                fbGenericOnceRec, fbGenericSkip),
+            row("force_behavior", "always", fbAlwaysShould, fbAlwaysRec, 0),
+            row("force_behavior", "record_once", fbRecordOnceShould,
+                fbRecordOnceRec, fbRecordOnceSkip),
+            row("force_behavior", "no_record", fbNoRecordShould, 0,
+                fbNoRecordSkip),
+
+            // Overlaps the rows above rather than partitioning them: of all
+            // records that ran, how many updated nothing because the
+            // per-execution signature was unchanged.
+            row("extra", "sig_unchanged_no_op", recordedTotal,
+                recordedTotal - sigUnchangedNoOp, sigUnchangedNoOp),
+            bare("extra", "fbgeneric_bail", fbGenericBail),
+        });
+        return;
+    }
 
     const int W = 15; // value column width (fits ~ billions w/ separators)
     auto col = [&](uint64_t v) { return commafy(v); };
@@ -91,7 +193,6 @@ RecordSkipStats::~RecordSkipStats() {
     auto leafShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, leafShould) + ")";
     };
-    uint64_t onceShould = leafOnceRec + leafOnceSkip;
     fprintf(stderr, "\nleaves (total): %s\n", col(leafShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "class", Ws, "should",
             W, "recorded", W, "skipped", "skip%");
@@ -113,17 +214,13 @@ RecordSkipStats::~RecordSkipStats() {
     // the per-execution signature was unchanged — the work the signature
     // early-out avoids, which is otherwise invisible here since the opcode
     // still executed.
-    {
-        uint64_t recorded = leafAlwaysRec + leafOnceRec + innerRec +
-                            innerNotifyRec + untrackedRec;
-        fprintf(stderr,
-                "  of all %s records, %s updated nothing (signature "
-                "unchanged) = %s\n",
-                col(recorded).c_str(), col(sigUnchangedNoOp).c_str(),
-                pctStr(sigUnchangedNoOp, recorded).c_str());
-        fprintf(stderr, "    (only the _notify_ paths can early-out; plain "
-                        "record_type_ always does the work)\n");
-    }
+    fprintf(stderr,
+            "  of all %s records, %s updated nothing (signature "
+            "unchanged) = %s\n",
+            col(recordedTotal).c_str(), col(sigUnchangedNoOp).c_str(),
+            pctStr(sigUnchangedNoOp, recordedTotal).c_str());
+    fprintf(stderr, "    (only the _notify_ paths can early-out; plain "
+                    "record_type_ always does the work)\n");
 
     // Table 3: inner nodes by opcode. "skipped" = suppressed because the slot's
     // `dirty` bit was clear, i.e. no operand's per-execution signature changed
@@ -132,8 +229,6 @@ RecordSkipStats::~RecordSkipStats() {
     auto innerShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, allInnerShould) + ")";
     };
-    uint64_t innerShould = innerRec + innerSkip;
-    uint64_t innerNotifyShould = innerNotifyRec + innerNotifySkip;
     fprintf(stderr, "\ninner nodes (total): %s\n", col(allInnerShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "class", Ws, "should",
             W, "recorded", W, "skipped", "skip%");
@@ -147,28 +242,8 @@ RecordSkipStats::~RecordSkipStats() {
             col(innerNotifyRec).c_str(), W, col(innerNotifySkip).c_str(),
             pctStr(innerNotifySkip, innerNotifyShould).c_str());
 
-    // Table 4: force-behavior (FB) recording — a separate feedback dimension
-    // piggybacked on the same slots. The baseline has a single dispatcher for
-    // every load; recordless keeps that generic dispatcher for non-cached
-    // loads (fbgeneric) but splits the ldvar_cached_ family into one opcode
-    // per compile-time FB-kind decision (always / record_once / no_record).
-    //
-    // The generic dispatcher is reported as two rows, because its two switch
-    // arms are different concepts and pair with different specialized rows:
-    //   fbgeneric      pairs with always      — no gate, records every time
-    //   fbgeneric_once pairs with record_once — same RECORD_TYPE_ONCE_GATE,
-    //                                           reached by an unpatchable load
-    uint64_t fbGenericShould = fbGenericRec; // plain arm, never skipped
-    uint64_t fbGenericOnceShould = fbGenericOnceRec + fbGenericSkip;
-    uint64_t fbAlwaysShould = fbAlwaysRec; // unconditional, never skipped
-    uint64_t fbRecordOnceShould = fbRecordOnceRec + fbRecordOnceSkip;
-    uint64_t fbNoRecordShould = fbNoRecordSkip; // never recorded
-    uint64_t fbShouldTotal = fbGenericShould + fbGenericOnceShould +
-                             fbAlwaysShould + fbRecordOnceShould +
-                             fbNoRecordShould;
-    uint64_t fbRecTotal =
-        fbGenericRec + fbGenericOnceRec + fbAlwaysRec + fbRecordOnceRec;
-    uint64_t fbSkipTotal = fbGenericSkip + fbRecordOnceSkip + fbNoRecordSkip;
+    // Table 4: force-behavior (FB) recording — see the derivation above for
+    // why the generic dispatcher gets two rows.
     fprintf(stderr, "\nforce behavior (recordForceBehavior variants)\n");
     fprintf(stderr, "  %-21s | %*s | %*s | %*s | %6s\n", "case", W, "should", W,
             "recorded", W, "skipped", "skip%");

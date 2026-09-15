@@ -29,6 +29,10 @@
 // summary printed to stderr on every process exit). Leave it undefined for
 // perf/production builds so evalRirCode stays byte-identical and the hot loop
 // pays zero overhead.
+//
+// Runtime toggle: if RIR_RECORD_STATS_CSV=1, the same numbers are written to
+// stdout as CSV instead of the pretty table — one row per table row, columns
+// section,metric,count,should,recorded,skipped.
 
 #ifdef RIR_RECORD_STATS
 #include <cstdint>
