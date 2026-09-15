@@ -63,7 +63,7 @@ CsvRow bare(const char* section, const char* metric, uint64_t count) {
 }
 
 void writeCsv(const std::vector<CsvRow>& rows) {
-    printf("section,metric,count,should,recorded,skipped\n");
+    fprintf(stderr, "section,metric,count,should,recorded,skipped\n");
     for (const auto& r : rows) {
         if (r.hasCounts)
             fprintf(stderr, "%s,%s,,%llu,%llu,%llu\n", r.section, r.metric,
