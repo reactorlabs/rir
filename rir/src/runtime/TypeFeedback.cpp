@@ -172,15 +172,20 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (auto i = 0; i < size; ++i) {
         ObservedValues tmp;
         InBytes(inp, &tmp, sizeof(ObservedValues));
-        // `dirty` and `activationStamp` are transient per-run state — a
-        // notification in flight and the identity of the frame that armed it —
-        // not observations, and both are inside sizeof() so they ride along in
-        // the byte image. A stamp deserialized from another process is a
-        // meaningless address that could alias a live frame here, which would
-        // let an activation disarm a flag it does not own: exactly the
-        // reentrancy bug the stamp exists to prevent. Reset both.
+        // `dirty` and both stamps are transient per-run state — a notification
+        // in flight and the identities of the frames that armed it / last wrote
+        // lastSig — not observations, yet all three are inside sizeof() so they
+        // ride along in the byte image. A stamp deserialized from another
+        // process is a meaningless address that could alias a live frame here:
+        // a stale activationStamp would let an activation disarm a flag it does
+        // not own, and a stale sigStamp would let the signature early-out fire
+        // for an activation that never wrote it — the two bugs the stamps exist
+        // to prevent. Reset all three. (Zero is safe: a real stamp is a frame
+        // address and never 0, so both comparisons fail and we arm
+        // conservatively.)
         tmp.dirty = 0;
         tmp.activationStamp = 0;
+        tmp.sigStamp = 0;
         types.push_back(std::move(tmp));
     }
 

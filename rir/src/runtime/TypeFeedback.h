@@ -284,7 +284,23 @@ struct ObservedValues {
     // only set that matters. Reuse by a later activation of a dead frame's
     // address can only cause a spurious record, never a skip.
     uintptr_t activationStamp;
-    // total (packed): 1+1+3+1+2+8 = 16 bytes
+    // bytes 16-23: which ACTIVATION last wrote `lastSig`, same encoding.
+    //
+    // `lastSig` serves two purposes that pull in opposite directions. As a
+    // *dedup memo* ("have I already absorbed this value-shape?") sharing it
+    // across activations is the whole point — it is what makes a hot loop
+    // collapse to a compare. As the *notify trigger* ("should I arm my
+    // parent?") sharing it is wrong: the parent's suppression state is
+    // per-activation, so the question must be "did MY operand change since I
+    // last recorded", not "since anyone last recorded".
+    //
+    // Without this, an interleaved activation can write lastSig so that the
+    // outer activation's operand compares EQUAL and never arms, and the outer
+    // node skips a combination nobody recorded — the flag is not stolen, it is
+    // never raised. See §2B.5.2. The early-out therefore requires both an
+    // unchanged signature AND that this activation is the one that wrote it.
+    uintptr_t sigStamp;
+    // total (packed): 1+1+3+1+2+8+8 = 24 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -442,7 +458,7 @@ struct ObservedValues {
     // operands' signatures — never on what that function is. Operators for
     // which it is not (`:` and `[`, whose result length comes from operand
     // *values*) are not inner nodes at all.
-    __attribute__((always_inline)) bool doRecordAndSign(SEXP e) {
+    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uintptr_t act) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         const int type = TYPEOF(e);
@@ -497,7 +513,12 @@ struct ObservedValues {
         // The sentinel is excluded deliberately: it says the value could not
         // be summarised, so nothing can be concluded from two consecutive
         // occurrences of it.
-        if (sig != SigAlwaysDirty && sig == lastSig) {
+        // `sigStamp == act` is the correctness half: an unchanged signature
+        // only licenses skipping the notify when THIS activation is the one
+        // that last wrote it. If a nested activation wrote it in between, our
+        // operand has changed relative to what *we* last recorded even though
+        // the bytes compare equal, and our parent must be armed.
+        if (sig != SigAlwaysDirty && sig == lastSig && sigStamp == act) {
             REC_HOOK(recording::recordSCChanged(0));
             REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
@@ -525,8 +546,10 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
 
         lastSig = sig;
-        // Reaching here means the early-out did not fire, i.e. the signature
-        // is the sentinel or differs from last time — either way, changed.
+        sigStamp = act;
+        // Reaching here means the early-out did not fire: the signature is the
+        // sentinel, or differs from last time, or was last written by another
+        // activation — in every case our parent must be armed.
         return true;
     }
 
@@ -603,7 +626,7 @@ struct ObservedValues {
         SLOWASSERT(dirty &&
                    "recordInnerAndSignWhenDirty called on a clean slot");
         disarmIfOwner(act);
-        return doRecordAndSign(e);
+        return doRecordAndSign(e, act);
     }
 };
 
@@ -612,8 +635,8 @@ struct ObservedValues {
 // existing bits costs a byte per slot and changes the on-disk layout.
 // Power of two on purpose: types_[idx] is then a scaled index rather than a
 // multiply, and it is indexed on every record.
-static_assert(sizeof(ObservedValues) == 16,
-              "ObservedValues must stay 16 bytes (8 + activationStamp)");
+static_assert(sizeof(ObservedValues) == 24,
+              "ObservedValues must stay 24 bytes (8 + two activation stamps)");
 
 enum class Opcode : uint8_t;
 
@@ -869,7 +892,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     record_type_leaf_notify(uint32_t idx, const SEXP e, uintptr_t act) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
-        if (slot.doRecordAndSign(e))
+        if (slot.doRecordAndSign(e, act))
             markRelatedDirty(slot, idx, act); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
