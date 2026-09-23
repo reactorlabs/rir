@@ -1,6 +1,6 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot, last revised **2026-09-14**. The author is
+**Status:** working design snapshot, last revised **2026-09-22**. The author is
 actively iterating; see *Current implementation status* (§7) for what is stable
 vs. in flux.
 
@@ -781,14 +781,19 @@ void trackDef(SEXP name, int feedbackSlot = kNoSlot) {   // name was (re)defined
 }
 ```
 
-There are exactly four call sites (line numbers re-verified 2026-09-02):
+There are six call sites (line numbers re-verified 2026-09-22):
 
 | site | construct | what it records |
 |---|---|---|
-| `Compiler.cpp:612` | `recordTypeTracked(name)` — a **RecordAlways** leaf | `trackUseDef(name, slot)` — this use is now a subsumption candidate |
-| `Compiler.cpp:2638` | a **RecordOnce** leaf | `trackUseDef(name, slot)` — same |
-| `Compiler.cpp:1219` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
-| `Compiler.cpp:1388` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
+| `Compiler.cpp:607` | `recordTypeTracked(name)` — a **RecordAlways** leaf | `trackUseDef(name, slot)` — this use is now a subsumption candidate |
+| `Compiler.cpp:2716` | a **RecordOnce** leaf | `trackUseDef(name, slot)` — same |
+| `Compiler.cpp:1214` | **plain assignment** `x <- expr` | `trackDef(lhs, defSlot)` **with a real slot** |
+| `Compiler.cpp:1432` | **subassignment** `x[i] <- v` | `trackDef(target, kNoSlot)` — **slot-less** |
+| `Compiler.cpp:1623` | **replacement function** `f(x) <- v` | `trackDef(root, kNoSlot)` — slot-less |
+| `Compiler.cpp:1284` | **any bail-out** (`bailToGnuR`) | `trackDef(root, kNoSlot)` — slot-less |
+
+The last three are one family and are the subject of "Complex assignment is a
+type barrier" below.
 
 Note what is *absent* from that table: a **NoRecord** read does not call
 `trackUseDef`. It emits no record, so it has no slot of its own to offer; it
@@ -840,20 +845,63 @@ the `ldvar`'s position. That is what makes `a <- f(); b <- a; c <- b; d <- c`
 resolve as `#1→#0, #2→#0, #3→#0, #4→#0` instead of a chain, which
 `markRelatedDirty`'s one-level walk requires (§2C.2).
 
-**Subassignment is a type barrier.** At site 1199 (`x[i] <- v`, `x[[i]] <- v`,
-and the multi-dim forms), the emitted sequence is
-`subassign1_1/…; stvar[Cached]` — **no `record_type_` follows**, so nothing
-observed the new value of `x`. Hence `kNoSlot`. This matters because a
-subassignment can *change the type*:
+**Complex assignment is a type barrier.** Every form of `f(x) <- v` stores a
+value that nothing observed, so all of them reseat the def with `kNoSlot`. This
+matters because such a store can change the type *or the flags*:
 
 ```r
-x <- c(1, 2, 3)   # REALSXP
-x[1] <- "a"       # x is now STRSXP
+x <- c(1, 2, 3)     # REALSXP, no attributes
+x[1] <- "a"         # x is now STRSXP
+dim(x) <- c(2, 2)   # x now has attributes  -> the `attribs` flag
+class(x) <- "k"     # x is now an object    -> the `object` flag, which gates dispatch
 ```
 
-Without invalidation, a later read of `x` could be classified NoRecord against a
-def or use from *before* the subassign and inherit a stale type — and since
-NoRecord is a correctness commitment (§3), that would simply be wrong feedback.
+Without invalidation a later read of `x` is classified NoRecord against a def or
+use from *before* the assignment and inherits a stale description — and since
+NoRecord is a correctness commitment (§3), that is simply wrong feedback.
+
+There are **three routes** into a complex assignment, and they fail differently:
+
+1. **Subassignment** (`x[i] <- v`, `x[[i]] <- v`, multi-dim). Emits
+   `subassign1_1/…; stvar[Cached]` with **no `record_type_`** after it. The
+   store is visible, its result is not.
+2. **Replacement function** (`dim(x) <- v`, `names<-`, `attr<-`, `levels<-`, …).
+   Emits `named_call_ \`dim<-\`; stvar[Cached]`. Also visible-but-unobserved —
+   and note the record that *does* follow in non-void context describes the RHS
+   left on the stack, not what was stored.
+3. **Bail-out** (`class(x) <- v`, `slot<-`, `$<-`, `@<-`, and any LHS with more
+   than one level of nesting). The compiler gives up and emits a plain call to
+   GNU R's `<-` special, which performs the store itself — so there is **no
+   `stvar_` in the instruction stream at all**. Not merely an unobserved store,
+   an *invisible* one.
+
+Route 1 was always guarded. Routes 2 and 3 were not, and produced exactly the
+errors above: `x <- c(1,2,3,4); dim(x) <- c(2,2); x` elided the final read and
+reported `double ()` where the baseline records `double (a)`; `class(x) <- "k"`
+reported `object = false` for an object. Route 3 has six separate exits, so they
+are funnelled through one `bailToGnuR` helper rather than guarded individually —
+a bail added later inherits the barrier by construction.
+
+**The name invalidated is the ROOT of the LHS chain**, not the immediate target.
+`dim(a$b) <- v` rebuilds and re-stores `a`:
+
+```r
+`*tmp*` <- a
+a <- `$<-`(`*tmp*`, "b", `dim<-`(`*tmp*`$b, v))
+```
+
+so the walk peels one container per step — `dim(a$b)` → `a$b` → `a` — using the
+fact that in every replacement form the object being modified is the *first*
+argument (`a$b` is `` `$`(a, b) ``). This must be the **same walk** that
+`collectAssignedVars` performs when it builds the `expected` counts. If the two
+disagree, `trackDef`'s `bumpSeen` never increments the name the pre-scan counted,
+`seen` never catches up to `expected`, and `hasUnseenLoopDef` pins itself true
+for that variable for the rest of the enclosing loop (§2A.4.1) — silently
+disabling `findReachingDef` there. Using the compiler's immediate `dest` instead
+of the root is what caused this: `dest` is `a$b`, not a symbol, so the guard
+skipped it. A non-symbol root (`dim(g()) <- v`, invalid R) walks to
+`R_NilValue` and is skipped — it compiles, then fails at runtime with R's own
+`invalid (NULL) left side of assignment`.
 
 **Why `defs_` is reseated rather than erased.** This is the subtle part. The three
 operations in `trackDef` have distinct effects, and the split is deliberate:
@@ -2406,7 +2454,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-09-14)
+## 7. Current implementation status (snapshot, 2026-09-22)
 
 Working branch: `recordLessNew2-expressionsNewSchema`, at commit `b8076079`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
@@ -2573,6 +2621,24 @@ by direct inspection, not recalled:
     of executed instructions. **Open:** a stamp leaked by a non-local exit
     disables suppression for that node permanently — over-records, never
     under-records; the stack-direction reclaim is not implemented.
+
+**Changes landed since (2026-09-14 → 2026-09-22).**
+
+15. **Complex assignment made a type barrier on all three routes** (§2A.4).
+    Only subassignment was guarded; replacement functions (`dim<-`, `names<-`,
+    `attr<-`, `levels<-`, `dimnames<-`) and every bail-out to GNU R's `<-`
+    (`class<-`, `slot<-`, `$<-`, `@<-`, nested LHS) stored without reseating the
+    def, so a later read was subsumed against the pre-assignment value.
+    Symptoms: `dim(x) <- c(2,2); x` reported `double ()` where baseline records
+    `double (a)`, and `class(x) <- "k"; x` reported `object = false` for an
+    object — the flag that gates dispatch. The six bail exits now funnel through
+    one `bailToGnuR` helper, and the invalidated name is the **root of the LHS
+    chain**, matching `collectAssignedVars` so `bumpSeen` stays in step with the
+    pre-scan's `expected` counts. Verified against baseline on `dim<-`,
+    `dimnames<-`, `names<-`, `class<-`, `attr<-`, `levels<-`, `x$a <-`,
+    `dim(a$b) <-`, `names(a$b) <-` and `dim(x)[1] <-`; full suite passes. No
+    measurable cost on the benchmarks, none of which use replacement functions
+    in hot code.
 
 All build clean and every checked benchmark produces correct results.
 

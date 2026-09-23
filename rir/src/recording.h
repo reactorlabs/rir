@@ -568,7 +568,10 @@ class Record {
         expr_to_body_index.clear();
         log.clear();
     }
+
+    void collectTFs();
 };
+
 
 } // namespace recording
 

@@ -73,6 +73,14 @@ bool in_deopt_ = false;
 
 /************************ Hooks **********************************/
 
+void captureName(const char* name, SEXP closure) {
+    auto dt = DispatchTable::check(BODY(closure));
+    if (!dt)
+        return;
+    auto idx = recorder_.initOrGetRecording(dt);
+    recorder_.get_recording(idx).name = name;
+}
+
 #define RECORDER_FILTER_GUARD(field_name)                                      \
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
@@ -407,6 +415,8 @@ void recordReasonsClear() {
 void recordFinalizer(SEXP) {
     std::cerr << "Saving recording to \"" << finalizerPath << "\"\n";
     stopRecordings();
+
+    recorder_.collectTFs();
 
     SEXP filepath = PROTECT(Rf_mkString(finalizerPath));
     saveRecordings(filepath);

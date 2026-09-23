@@ -23,6 +23,18 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
+namespace {
+SEXP associate_name(SEXP result, SEXP name) {
+    REC_HOOK({
+        if (TYPEOF(result) == CLOSXP) {
+            const char* strname = CHAR(PRINTNAME(name));
+            recording::captureName(strname, result);
+        }
+    })
+    return result;
+};
+} // namespace
+
 void context_init() {
     InterpreterInstance* c = globalContext();
     c->list = Rf_allocVector(VECSXP, 2);
@@ -48,7 +60,7 @@ void context_init() {
     char pir[] = "off";
 
     c->closureCompiler = [](SEXP closure, SEXP name) {
-        return rirCompile(closure, R_NilValue);
+        return associate_name(rirCompile(closure, R_NilValue), name);
     };
     c->closureOptimizer = [](SEXP f, const Context&, SEXP n) { return f; };
 
@@ -57,11 +69,13 @@ void context_init() {
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rirCompile(f, R_NilValue);
+            associate_name(rir, n);
             return rirOptDefaultOpts(rir, Context(), n);
         };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rirCompile(f, R_NilValue);
+            associate_name(rir, n);
             return rirOptDefaultOptsDryrun(rir, Context(), n);
         };
     } else {

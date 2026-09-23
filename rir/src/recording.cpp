@@ -414,6 +414,59 @@ std::string getClosureName(SEXP cls) {
     return name;
 }
 
+namespace {
+void printTF(ObservedValues& tf, std::ostream& out) {
+    if (!tf.numTypes) {
+        out << "<?>";
+        return;
+    }
+
+    if (tf.numTypes == ObservedValues::MaxTypes) {
+        out << "any";
+    } else {
+        for (size_t i = 0; i < tf.numTypes; ++i) {
+            out << Rf_type2char(tf.seen[i]);
+            if (i != (unsigned)tf.numTypes - 1)
+                out << ", ";
+        }
+    }
+
+    out << " (" << (tf.object ? "o" : "") << (tf.attribs ? "a" : "")
+        << (tf.notFastVecelt ? "v" : "") << (!tf.notScalar ? "s" : "") << ")";
+    if (tf.stateBeforeLastForce !=
+        ObservedValues::StateBeforeLastForce::unknown) {
+        out << " | "
+            << ((tf.stateBeforeLastForce ==
+                 ObservedValues::StateBeforeLastForce::value)
+                    ? "value"
+                : (tf.stateBeforeLastForce ==
+                   ObservedValues::StateBeforeLastForce::evaluatedPromise)
+                    ? "evaluatedPromise"
+                    : "promise");
+    }
+}
+} // namespace
+
+void Record::collectTFs() {
+    std::cerr << "=== TYPE FEEDBACKS ===\n";
+    for (auto& i : dt_to_recording_index_) {
+        auto dt = i.first;
+        auto tf = dt->baseline()->typeFeedback();
+        tf->reconstructFeedback();
+
+        std::string name = functions[i.second].name;
+
+        std::cerr << "FUN: '" << name << "'\n";
+        for (size_t idx = 0; idx < tf->types_size(); ++idx) {
+
+            std::cerr << idx << ": ";
+            printTF(tf->types(idx), std::cerr);
+            std::cerr << "\n";
+        }
+        std::cerr << "\n";
+    }
+}
+
 } // namespace recording
 } // namespace rir
 

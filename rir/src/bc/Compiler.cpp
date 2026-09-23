@@ -1251,12 +1251,46 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // 3) Special case f(a) <- b
 
+        // Every `return false` from here on means "we give up; GNU R's `<-`
+        // special performs this assignment". That store then happens with NO
+        // stvar_ in our instruction stream at all — not merely an unrecorded
+        // store, an invisible one. Walking away leaving the target's old def in
+        // place lets a later read be subsumed against a value that no longer
+        // exists: `x <- c(1,2); class(x) <- "k"; x` elided the final read
+        // against the pre-class value and reported object=false for an object,
+        // which is what gates dispatch.
+        //
+        // The name invalidated is the ROOT of the LHS chain, not the immediate
+        // target: `dim(a$b) <- v` rebuilds and re-stores `a`. This must match
+        // DefUseAnalysis::collectAssignedVars, which walks the same chain to
+        // build the `expected` counts — if the two disagree, `seen` never
+        // catches up and hasUnseenLoopDef pins itself true for that name for
+        // the rest of the enclosing loop.
+        //
+        // kNoSlot is the same type barrier the subassignment and
+        // replacement-function paths apply after their own stores (§2A.4): it
+        // kills both subsumption routes while keeping the name a tracked local
+        // that still holds a value, so RecordOnce and FBValue stay available.
+        // Costs nothing in precision — every bail below is reached before any
+        // code has been emitted for this assignment.
+        auto assignedRoot = [](SEXP d) {
+            while (TYPEOF(d) == LANGSXP)
+                d = CADR(d);
+            return d;
+        };
+        auto bailToGnuR = [&]() {
+            SEXP root = assignedRoot(lhs);
+            if (Compiler::isRecordlessLeafEnabled() && TYPEOF(root) == SYMSXP)
+                ctx.defUseAnalysis().trackDef(root, DefUseAnalysis::kNoSlot);
+            return false;
+        };
+
         // Only allow one level of nesting:
         //     f(x) <- 1         ok
         //     f(g(x)) <- 1      not supported
         // TODO: compile nested complex assignments
         if (lhsParts.size() != 2) {
-            return false;
+            return bailToGnuR();
         }
 
         RList g(lhs);
@@ -1271,21 +1305,36 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         SEXP fun2 = g[0]; // symbol `f`
         SEXP dest = g[1]; // symbol `x`
 
+        // Every `return false` below means "we give up; GNU R's `<-` special
+        // will perform this assignment". That store then happens with NO
+        // stvar_ in our instruction stream at all — it is not merely an
+        // unrecorded store, it is an invisible one. If we walk away leaving
+        // `dest`'s old def in place, a later read is subsumed against a value
+        // that no longer exists: `x <- c(1,2); class(x) <- "k"; x` elided the
+        // final read against the pre-class value and reported object=false for
+        // an object, which is what gates dispatch.
+        //
+        // Reseating with kNoSlot is the same type barrier the subassignment
+        // and replacement-function paths apply after their own stores (§2A.4).
+        // Costs nothing in precision: every bail below is reached before any
+        // code has been emitted for this assignment, so no elision has been
+        // granted yet.
+
         // 3.a) Special case [ and [[
         if (fun2 == symbol::Bracket || fun2 == symbol::DoubleBracket) {
             int dims = g.length() - 2;
             if (dims < 1 || dims > 3) {
-                return false;
+                return bailToGnuR();
             }
 
             SEXP fun2 = *g.begin();
             RListIter idx = g.begin() + 2;
             if (!isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
                 (dims > 2 && !isRegularArg(idx + 2))) {
-                return false;
+                return bailToGnuR();
             }
             if (dims == 3 && fun2 == symbol::DoubleBracket)
-                return false;
+                return bailToGnuR();
 
             emitGuardForNamePrimitive(cs, fun);
 
@@ -1407,7 +1456,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // "slot<-" ignores value semantics and modifies shared objects
             // in-place, our implementation does not deal with this case.
             if (fun2name == "slot" || fun2name == "class") {
-                return false;
+                return bailToGnuR();
             }
 
             // We need to get the SEXP for `f<-` from the SEXP for `f`
@@ -1450,7 +1499,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             bool const maybe_special = (fun2name == "$" || fun2name == "@");
             if (maybe_special) {
-                return false;
+                return bailToGnuR();
             }
 
             // Get the LISTSXP of args for f
@@ -1557,6 +1606,23 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                                           ctx.code.top()->cacheSlotFor(dest));
                 else
                     cs << BC::stvar(dest);
+                // A replacement function is a TYPE BARRIER, exactly like the
+                // subassignment case above (§2A.4). It returns an arbitrary new
+                // value — `dim<-` adds attributes, `class<-` can make the value
+                // an object — and nothing observed it: the record emitted below
+                // describes the RHS that is left on the stack, not what was
+                // stored. Without reseating the def here, `dest` keeps the def
+                // it had BEFORE the call, and a later read is subsumed against
+                // it: `x <- c(1,2,3,4); dim(x) <- c(2,2); x` elided the final
+                // read against the pre-dim value and lost the `attribs` flag.
+                // kNoSlot kills both use-to-use and def-to-use subsumption
+                // while keeping `dest` a tracked local for RecordOnce.
+                if (Compiler::isRecordlessLeafEnabled()) {
+                    SEXP root = assignedRoot(lhs);
+                    if (TYPEOF(root) == SYMSXP)
+                        ctx.defUseAnalysis().trackDef(root,
+                                                      DefUseAnalysis::kNoSlot);
+                }
             }
 
             if (!voidContext) {
