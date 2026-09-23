@@ -215,8 +215,22 @@ struct ObservedValues {
     // Saturation for lastSigDepth (6 bits). Deliberately never compares equal
     // to a real depth, so recursion past it over-records instead of skipping.
     static constexpr uint8_t kDepthUnknown = 63;
-    __attribute__((always_inline)) static uint8_t clampDepth(unsigned d) {
+    // Asymmetric clamps, so the saturation guard costs nothing at the test.
+    //
+    // A writer past the saturation point stores kDepthUnknown, which is
+    // greater than any real depth and so fails `lastSigDepth <= depth` for
+    // every shallower reader — it arms, which is what we want.
+    //
+    // A reader past it compares as 0, and `lastSigDepth <= 0` can only hold
+    // for lastSigDepth == 0, which means "never written" — and that case is
+    // already rejected because lastSig is then SigAlwaysDirty. So a very deep
+    // reader never early-outs, with no explicit check on the hot path.
+    __attribute__((always_inline)) static uint8_t clampDepthStore(unsigned d) {
         return d < kDepthUnknown ? (uint8_t)d : kDepthUnknown;
+    }
+    __attribute__((always_inline)) static uint8_t
+    clampDepthCompare(unsigned d) {
+        return d < kDepthUnknown ? (uint8_t)d : 0;
     }
     // byte 0: existing flags
     uint8_t numTypes : 2;
@@ -464,7 +478,10 @@ struct ObservedValues {
     // which it is not (`:` and `[`, whose result length comes from operand
     // *values*) are not inner nodes at all.
     // `depth` is clampDepth(Code::liveDepth) for the running activation.
-    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uint8_t depth) {
+    // `depth` is clampDepthCompare(liveDepth); `depthStore` is
+    // clampDepthStore(liveDepth). Both are computed once per activation.
+    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uint8_t depth,
+                                                        uint8_t depthStore) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         const int type = TYPEOF(e);
@@ -539,8 +556,7 @@ struct ObservedValues {
         // kDepthUnknown must be rejected on BOTH sides: it satisfies `<=`
         // against itself, so without this, recursion past the saturation point
         // would silently start skipping instead of over-recording.
-        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth <= depth &&
-            depth != kDepthUnknown && lastSigDepth != kDepthUnknown) {
+        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth <= depth) {
             REC_HOOK(recording::recordSCChanged(0));
             REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
@@ -568,7 +584,7 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
 
         lastSig = sig;
-        lastSigDepth = depth;
+        lastSigDepth = depthStore;
         // Reaching here means the early-out did not fire: the signature is the
         // sentinel, or differs from last time, or was last written by another
         // activation — in every case our parent must be armed.
@@ -644,11 +660,12 @@ struct ObservedValues {
     // Also caller-guarded on dirty. Returns whether its own signature changed,
     // i.e. whether there is anything to tell its parent.
     __attribute__((__always_inline__)) bool
-    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act, uint8_t depth) {
+    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act, uint8_t depth,
+                                uint8_t depthStore) {
         SLOWASSERT(dirty &&
                    "recordInnerAndSignWhenDirty called on a clean slot");
         disarmIfOwner(act);
-        return doRecordAndSign(e, depth);
+        return doRecordAndSign(e, depth, depthStore);
     }
 };
 
@@ -892,11 +909,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // Takes only `idx`, as above — see record_type_inner_when_dirty.
     __attribute__((noinline)) void
     record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e,
-                                        uintptr_t act, uint8_t depth) {
+                                        uintptr_t act, uint8_t depth,
+                                        uint8_t depthStore) {
         ObservedValues& slot = types(idx);
         // Propagate only when our own value changed — recording does not imply
         // that, since different operands can yield the same result.
-        if (slot.recordInnerAndSignWhenDirty(e, act, depth))
+        if (slot.recordInnerAndSignWhenDirty(e, act, depth, depthStore))
             markRelatedDirty(slot, idx, act);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
@@ -910,13 +928,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // parent slot.)
     // A simple leaf that is neither stays plain record_type_ /
     // record_type_once_ and pays nothing.
-    __attribute__((noinline)) void record_type_leaf_notify(uint32_t idx,
-                                                           const SEXP e,
-                                                           uintptr_t act,
-                                                           uint8_t depth) {
+    __attribute__((noinline)) void
+    record_type_leaf_notify(uint32_t idx, const SEXP e, uintptr_t act,
+                            uint8_t depth, uint8_t depthStore) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
-        if (slot.doRecordAndSign(e, depth))
+        if (slot.doRecordAndSign(e, depth, depthStore))
             markRelatedDirty(slot, idx, act); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }

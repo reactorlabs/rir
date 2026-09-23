@@ -2014,7 +2014,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     const uintptr_t savedAnchor = c->depthAnchor;
     c->liveDepth = savedDepth + 1;
     c->depthAnchor = act;
-    const uint8_t sigDepth = ObservedValues::clampDepth(c->liveDepth);
+    const uint8_t sigDepth = ObservedValues::clampDepthCompare(c->liveDepth);
+    const uint8_t sigDepthStore = ObservedValues::clampDepthStore(c->liveDepth);
 
     // Per-function-invocation bitmap for record_type_once_promise_ — disabled:
     // record_type_once_promise_ / ldvar_cached_envRecordFB_ are not emitted;
@@ -2547,7 +2548,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             // doRecord + propagate (own parent + any deps, together)
             typeFeedback->record_type_leaf_notify(idx, ostack_top(), act,
-                                                  sigDepth);
+                                                  sigDepth, sigDepthStore);
             REC_STAT(g_recStats.leafAlwaysRec++);
             NEXT();
         }
@@ -2560,7 +2561,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 NEXT();
             });
             typeFeedback->record_type_leaf_notify(
-                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), act, sigDepth);
+                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), act, sigDepth,
+                sigDepthStore);
             RECORD_TYPE_ONCE_SET(fired, raw);
             REC_STAT(g_recStats.leafOnceRec++);
             NEXT();
@@ -2596,7 +2598,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // Same as record_type_inner_: skip the call when suppressed.
             if (typeFeedback->types(idx).dirty)
                 typeFeedback->record_type_inner_notify_when_dirty(
-                    idx, ostack_top(), act, sigDepth);
+                    idx, ostack_top(), act, sigDepth, sigDepthStore);
             NEXT();
         }
 
