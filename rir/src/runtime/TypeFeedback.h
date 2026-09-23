@@ -524,8 +524,23 @@ struct ObservedValues {
         // that last wrote it. If a nested activation wrote it in between, our
         // operand has changed relative to what *we* last recorded even though
         // the bytes compare equal, and our parent must be armed.
-        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth == depth &&
-            depth != kDepthUnknown) {
+        // `<=`, not `==`: the write must not have been made INSIDE my window,
+        // and anything that could write inside my window is nested within me
+        // and therefore at a strictly GREATER depth. A write at my own depth is
+        // a previous, finished activation at my level; a write at a shallower
+        // depth is an activation enclosing me. Neither ran between two of my
+        // own children, so the pair I am about to produce is the state that was
+        // current at my entry — one in which the parent had already recorded.
+        //
+        // With `==` this cost the whole recursive case: every new depth
+        // re-armed even when nothing changed (recursion to depth 20 recorded
+        // 20,501 of 30,500 executions; with `<=`, 22).
+        //
+        // kDepthUnknown must be rejected on BOTH sides: it satisfies `<=`
+        // against itself, so without this, recursion past the saturation point
+        // would silently start skipping instead of over-recording.
+        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth <= depth &&
+            depth != kDepthUnknown && lastSigDepth != kDepthUnknown) {
             REC_HOOK(recording::recordSCChanged(0));
             REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
