@@ -178,14 +178,12 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         // ride along in the byte image. A stamp deserialized from another
         // process is a meaningless address that could alias a live frame here:
         // a stale activationStamp would let an activation disarm a flag it does
-        // not own, and a stale sigStamp would let the signature early-out fire
-        // for an activation that never wrote it — the two bugs the stamps exist
-        // to prevent. Reset all three. (Zero is safe: a real stamp is a frame
-        // address and never 0, so both comparisons fail and we arm
-        // conservatively.)
+        // not own. Reset both. (`lastSigDepth` rides along too but is bounded
+        // and only ever causes an extra record, so it needs nothing.) (Zero is
+        // safe: a real stamp is a frame address and never 0, so both
+        // comparisons fail and we arm conservatively.)
         tmp.dirty = 0;
         tmp.activationStamp = 0;
-        tmp.sigStamp = 0;
         types.push_back(std::move(tmp));
     }
 

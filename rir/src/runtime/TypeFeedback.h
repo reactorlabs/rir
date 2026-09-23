@@ -212,6 +212,12 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
+    // Saturation for lastSigDepth (6 bits). Deliberately never compares equal
+    // to a real depth, so recursion past it over-records instead of skipping.
+    static constexpr uint8_t kDepthUnknown = 63;
+    __attribute__((always_inline)) static uint8_t clampDepth(unsigned d) {
+        return d < kDepthUnknown ? (uint8_t)d : kDepthUnknown;
+    }
     // byte 0: existing flags
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
@@ -225,8 +231,22 @@ struct ObservedValues {
     // "shouldNotRecord": nothing reads them at runtime (PirType::merge, the
     // JIT-side consumer, never looks at them) and the opcode already says
     // whether a slot is a leaf or an elidable inner node.
-    // 7 bits spare.
+    // 1 bit spare.
     uint8_t dirty : 1;
+    // Reentrancy identity for the per-execution signature: the value of
+    // Code::liveDepth when `lastSig` was written. Sharing `lastSig` across
+    // activations is what makes a hot loop collapse to a compare, and that must
+    // be kept; what must NOT be shared is a signature an *interleaved*
+    // activation rewrote, because then two operands can each compare
+    // "unchanged" against writes that never co-occurred (§2B.5.2).
+    //
+    // liveDepth changes only under genuine reentrancy of this Code, so
+    // sequential calls — from any call site, at any stack address — compare
+    // equal and keep the early-out, while a nested activation always differs.
+    // kDepthUnknown is the saturation value and never compares equal to
+    // itself, so recursion deeper than it degrades to always-recording rather
+    // than to a wrong skip.
+    uint8_t lastSigDepth : 6;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
     // byte 5: signature of the value seen on the PREVIOUS execution.
@@ -284,23 +304,8 @@ struct ObservedValues {
     // only set that matters. Reuse by a later activation of a dead frame's
     // address can only cause a spurious record, never a skip.
     uintptr_t activationStamp;
-    // bytes 16-23: which ACTIVATION last wrote `lastSig`, same encoding.
-    //
-    // `lastSig` serves two purposes that pull in opposite directions. As a
-    // *dedup memo* ("have I already absorbed this value-shape?") sharing it
-    // across activations is the whole point — it is what makes a hot loop
-    // collapse to a compare. As the *notify trigger* ("should I arm my
-    // parent?") sharing it is wrong: the parent's suppression state is
-    // per-activation, so the question must be "did MY operand change since I
-    // last recorded", not "since anyone last recorded".
-    //
-    // Without this, an interleaved activation can write lastSig so that the
-    // outer activation's operand compares EQUAL and never arms, and the outer
-    // node skips a combination nobody recorded — the flag is not stolen, it is
-    // never raised. See §2B.5.2. The early-out therefore requires both an
-    // unchanged signature AND that this activation is the one that wrote it.
-    uintptr_t sigStamp;
-    // total (packed): 1+1+3+1+2+8+8 = 24 bytes
+
+    // total (packed): 1+1+3+1+2+8 = 16 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -458,7 +463,8 @@ struct ObservedValues {
     // operands' signatures — never on what that function is. Operators for
     // which it is not (`:` and `[`, whose result length comes from operand
     // *values*) are not inner nodes at all.
-    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uintptr_t act) {
+    // `depth` is clampDepth(Code::liveDepth) for the running activation.
+    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uint8_t depth) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         const int type = TYPEOF(e);
@@ -518,7 +524,8 @@ struct ObservedValues {
         // that last wrote it. If a nested activation wrote it in between, our
         // operand has changed relative to what *we* last recorded even though
         // the bytes compare equal, and our parent must be armed.
-        if (sig != SigAlwaysDirty && sig == lastSig && sigStamp == act) {
+        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth == depth &&
+            depth != kDepthUnknown) {
             REC_HOOK(recording::recordSCChanged(0));
             REC_STAT(g_recStats.sigUnchangedNoOp++);
             return false;
@@ -546,7 +553,7 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
 
         lastSig = sig;
-        sigStamp = act;
+        lastSigDepth = depth;
         // Reaching here means the early-out did not fire: the signature is the
         // sentinel, or differs from last time, or was last written by another
         // activation — in every case our parent must be armed.
@@ -622,11 +629,11 @@ struct ObservedValues {
     // Also caller-guarded on dirty. Returns whether its own signature changed,
     // i.e. whether there is anything to tell its parent.
     __attribute__((__always_inline__)) bool
-    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act) {
+    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act, uint8_t depth) {
         SLOWASSERT(dirty &&
                    "recordInnerAndSignWhenDirty called on a clean slot");
         disarmIfOwner(act);
-        return doRecordAndSign(e, act);
+        return doRecordAndSign(e, depth);
     }
 };
 
@@ -635,8 +642,8 @@ struct ObservedValues {
 // existing bits costs a byte per slot and changes the on-disk layout.
 // Power of two on purpose: types_[idx] is then a scaled index rather than a
 // multiply, and it is indexed on every record.
-static_assert(sizeof(ObservedValues) == 24,
-              "ObservedValues must stay 24 bytes (8 + two activation stamps)");
+static_assert(sizeof(ObservedValues) == 16,
+              "ObservedValues must stay 16 bytes");
 
 enum class Opcode : uint8_t;
 
@@ -870,11 +877,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // Takes only `idx`, as above — see record_type_inner_when_dirty.
     __attribute__((noinline)) void
     record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e,
-                                        uintptr_t act) {
+                                        uintptr_t act, uint8_t depth) {
         ObservedValues& slot = types(idx);
         // Propagate only when our own value changed — recording does not imply
         // that, since different operands can yield the same result.
-        if (slot.recordInnerAndSignWhenDirty(e, act))
+        if (slot.recordInnerAndSignWhenDirty(e, act, depth))
             markRelatedDirty(slot, idx, act);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
@@ -888,11 +895,13 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // parent slot.)
     // A simple leaf that is neither stays plain record_type_ /
     // record_type_once_ and pays nothing.
-    __attribute__((noinline)) void
-    record_type_leaf_notify(uint32_t idx, const SEXP e, uintptr_t act) {
+    __attribute__((noinline)) void record_type_leaf_notify(uint32_t idx,
+                                                           const SEXP e,
+                                                           uintptr_t act,
+                                                           uint8_t depth) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
-        if (slot.doRecordAndSign(e, act))
+        if (slot.doRecordAndSign(e, depth))
             markRelatedDirty(slot, idx, act); // own parent + any dependents
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }

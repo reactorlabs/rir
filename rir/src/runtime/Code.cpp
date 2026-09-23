@@ -29,7 +29,7 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
       stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
       codeSize(cs), srcLength(sourceLength), extraPoolSize(0),
-      recordTypeOnceCount(0) {
+      recordTypeOnceCount(0), liveDepth(0), depthAnchor(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
