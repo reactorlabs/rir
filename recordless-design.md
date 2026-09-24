@@ -1,6 +1,6 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot, last revised **2026-09-22**. The author is
+**Status:** working design snapshot, last revised **2026-09-24**. The author is
 actively iterating; see *Current implementation status* (§7) for what is stable
 vs. in flux.
 
@@ -1298,7 +1298,16 @@ distinct from the `Colon` result node.
 
 ---
 
-### 2B.5 Reentrancy: the dirty gate needs an owner
+### 2B.5 Reentrancy
+
+There are **two** independent reentrancy holes in the suppress/notify scheme,
+with the same root cause — a field that is per-execution state but lives in the
+Code-wide `TypeFeedback` — and different symptoms. §2B.5.1 covers `dirty`, the
+flag that can be *stolen* after being armed. §2B.5.2 covers `lastSig`, which
+decides whether to arm at all and so produces a flag that is *never raised*.
+Fixing one does nothing for the other.
+
+#### 2B.5.0 The dirty gate needs an owner
 
 The suppress/notify scheme of §2B.2 is not a point event. It is a **two-instruction
 protocol**: a child sets its parent's `dirty`, and the parent consumes it when its
@@ -1353,7 +1362,7 @@ replaced the abandoned reconstruction approach (§2B.2.1).
 `seen` at three distinct types, so which three you keep is the first three to
 arrive. That is a documented capacity limit, not an accident.)
 
-#### 2B.5.1 The stamp protocol
+#### 2B.5.1 The stamp protocol (for `dirty`)
 
 `dirty` is given an **owner**: the activation that armed it, identified by the
 address of a frame-local in that activation of `evalRirCode`. Three rules, each
@@ -1397,6 +1406,149 @@ on this host was useless for a change this small (mixed signs spanning six point
 under the powersave governor), as §8 warns. Note the cost is sensitive to *where*
 the stamp is kept, which is an implementation choice deliberately left out of this
 section.
+
+### 2B.5.2 The second reentrancy hole: a shared signature
+
+The stamp of §2B.5.1 protects a flag that **has** been armed. It says nothing
+about a flag that is **never armed**, and that is a separate, equally real miss.
+
+`lastSig` is shared across activations, and it is what *decides* whether to arm.
+So an interleaved activation can rewrite it such that each of an outer
+activation's operands compares "unchanged" against a write that the outer never
+made — and the combination they form is one nobody recorded:
+
+```r
+f <- function(x, ret, n) {
+  if (n == 0) return(ret)
+  w <- x + f(1+0i, ret, n - 1)     # leaf first, then the recursive call
+  ret
+}
+f(1L, 2.5,  1)      # A1:  1L + 2.5  -> double
+f(1L, TRUE, 2)      # B:   1+0i + TRUE -> complex ;  A: 1L + TRUE -> integer
+```
+
+| | `x` (leaf) | call result | armed? |
+|---|---|---|---|
+| call 1, A1 | `1L` int — first, arms | `2.5` dbl — first, arms | yes → records `double` |
+| call 2, A | `1L` int — matches | *(later)* | **no** |
+| call 2, B | `1+0i` cplx — differs, arms | `TRUE` lgl — differs, arms | yes → records `complex` |
+| call 2, A resumes | | `TRUE` lgl — matches, **B just wrote it** | **no** → skips |
+
+Measured, the `+` node ends with `[double, complex]`; the truth is
+`{double, complex, integer}`. `MaxTypes` is 3, so the cap is not the cause.
+
+Both operands **were** observed — the leaf slot holds `[integer, complex]`, the
+call-result slot `[double, logical]`. The node simply never learned they were
+paired that way. The miss is a **cross-product of two independently stale
+signatures**, and it needs three records that never co-occur: one establishing
+each stale half, and a third execution combining them. That is why the smallest
+witness needs recursion plus a third parameter — `ret` is returned instead of
+`w` so the return value can be steered independently of the node's own value.
+
+#### The identity has to be reentrancy, not activation
+
+The fix is the same shape as §2B.5.1 — stamp `lastSig` with who wrote it, and
+only take the early-out if the writer was not nested inside us — but the
+*identity* matters enormously, and the obvious choice is wrong.
+
+Stamping with the **frame address** works, but it distinguishes *every*
+activation, including sequential ones. Suppression then depends on the caller's
+shape rather than on the data:
+
+```r
+{ f(); (function() { f() })(); }        # alternating call depth, in a loop
+```
+
+| | inner nodes armed, 10,000 calls, types never change |
+|---|---|
+| frame-address stamp, single call site | 1 / 10,000 |
+| frame-address stamp, **alternating depth** | **10,000 / 10,000** — suppression gone entirely |
+| depth stamp, either shape | 1 / 10,000 |
+
+The flat case only looked fine because a loop calling one function from one site
+reuses the same stack position, so the address happened to repeat. That is an
+accident of layout, not a property of the design.
+
+What the check actually needs to ask is *"was `lastSig` written by something
+nested inside me?"* — and the answer is carried by a count of live activations
+**of this Code** (`Code::liveDepth`, incremented on entry, decremented on exit).
+A nested activation necessarily runs at a strictly greater depth, so:
+
+```cpp
+lastSigDepth <= depth      // written at my level or shallower ⇒ not inside me
+```
+
+- **equal** — a previous, finished activation at my level, or me earlier. Safe
+  to inherit: every write arms the parent, and the parent's record captures the
+  then-current pair, so a surviving set of signatures is one that was recorded.
+- **shallower** — an activation enclosing me. Also not inside my window.
+- **deeper** — the only case that can have written between two of my own
+  children. Rejected → arm.
+
+Using `<` instead of `<=` would break the flat case outright: it all runs at
+depth 1, and `1 < 1` is false, so nothing would ever early-out.
+
+`<=` rather than `==` matters a great deal for recursion, where `==` makes every
+new depth re-arm even though nothing changed:
+
+| | recursion to depth 20, 30,500 executions |
+|---|---|
+| `lastSigDepth == depth` | 20,501 recorded (32.8% skipped) |
+| `lastSigDepth <= depth` | **22 recorded (99.9% skipped)** |
+
+#### The asymmetric clamp
+
+`lastSigDepth` is 6 bits, stolen from the byte that already held `dirty`, so the
+depth costs **no space at all** — and removing the frame-address stamp it
+replaces takes `ObservedValues` from 24 bytes back to **16**.
+
+Six bits hold 0–63, so deeper recursion must saturate, and the saturation must
+fail *safe* in both directions. Doing that with explicit tests costs two extra
+conjuncts on the single hottest comparison in the system — measured at **+0.6%**
+on mandelbrot, which runs it ~126M times per iteration. Instead the two sides
+saturate in **opposite** directions, so the ordinary comparison fails by itself:
+
+| | saturates to | effect on `lastSigDepth <= depth` | why that is right |
+|---|---|---|---|
+| **writer** too deep | `63` (above every real depth) | false for any shallower reader | a write I cannot place must be assumed nested inside me → arm |
+| **reader** too deep | `0` (below every real depth) | only true if `lastSigDepth == 0` | and `0` means "never written", already rejected because `lastSig` is then `SigAlwaysDirty` → arm |
+
+So the test stays three comparisons — fewer than the frame-address version's
+four — and both clamps are computed once per activation, not once per execution:
+
+```cpp
+const uint8_t sigDepth      = clampDepthCompare(c->liveDepth);   // d < 63 ? d : 0
+const uint8_t sigDepthStore = clampDepthStore(c->liveDepth);     // d < 63 ? d : 63
+```
+
+This is hand-rolled NaN semantics: under `==` the saturation value was safe for
+free, because like NaN it never compared equal to itself. `<=` destroys that
+(`63 <= 63` holds), so the sentinel has to be split per side to keep losing.
+
+#### Self-correcting depth
+
+Twenty `Rf_error` sites longjmp out of `evalRirCode` and skip the decrement,
+which would leave `liveDepth` permanently high and silently degrade the Code to
+always-arming. `Code::depthAnchor` repairs it: at entry, every *live* activation
+of this Code is an outer one and therefore at a **higher** stack address, so an
+anchor below us belongs to a frame that is gone and the count it left is stale —
+reset to 0. Same stack-direction argument that makes frame-address reuse benign.
+
+#### Cost
+
+Deterministic instruction counts against the frame-address stamp, five
+benchmarks:
+
+| | binarytrees | storage | mandelbrot | nbody | fasta |
+|---|---|---|---|---|---|
+| depth, `==` | −1.79% | −0.03% | −0.20% | −0.07% | +0.16% |
+| depth, `<=`, explicit guards | −4.09% | −0.78% | +0.63% | +0.40% | +0.68% |
+| **depth, `<=`, asymmetric clamp** | **−4.23%** | **−0.91%** | **−0.17%** | **+0.00%** | **+0.27%** |
+
+Recursion-heavy code gains ~4%; nothing else moves beyond about ±0.27%. Wall
+clock was unusable throughout — the host carried an unrelated load average of 25
+during these runs, which affects elapsed time but not retired-instruction counts
+(§8).
 
 ---
 
@@ -2454,7 +2606,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-09-22)
+## 7. Current implementation status (snapshot, 2026-09-24)
 
 Working branch: `recordLessNew2-expressionsNewSchema`, at commit `b8076079`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
@@ -2639,6 +2791,41 @@ by direct inspection, not recalled:
     `dim(a$b) <-`, `names(a$b) <-` and `dim(x)[1] <-`; full suite passes. No
     measurable cost on the benchmarks, none of which use replacement functions
     in hot code.
+
+**Changes landed since (2026-09-22 → 2026-09-24).**
+
+16. **Second reentrancy hole closed: the shared signature** (§2B.5.2). The
+    owner-stamp of §2B.5.1 protects a flag that *has* been armed; it does
+    nothing for a flag that is **never armed**, because `lastSig` — which
+    decides whether to arm — is itself shared across activations. An
+    interleaved activation can rewrite it so that each of an outer
+    activation's operands compares "unchanged" against a write the outer never
+    made, and the pair they form is recorded by nobody.
+
+    Fixed by stamping `lastSig` with a count of live activations **of this
+    Code** (`Code::liveDepth`) and taking the early-out only when
+    `lastSigDepth <= depth`. Three things were load-bearing and each was
+    measured, not assumed:
+    - **Depth, not frame address.** An address distinguishes *sequential*
+      activations too, so suppression became a property of the caller's shape:
+      `{ f(); (function() f())(); }` in a loop armed **10,000 / 10,000** times
+      with an address stamp and **1 / 10,000** with depth.
+    - **`<=`, not `==`.** `==` makes every new recursion depth re-arm:
+      recursion to depth 20 recorded 20,501 of 30,500 executions under `==`
+      and **22** under `<=`. (`<` would break the flat case outright — it all
+      runs at depth 1 and `1 < 1` is false.)
+    - **Asymmetric clamp.** The 6-bit depth must saturate, and guarding that
+      with explicit tests cost **+0.6%** on mandelbrot (two extra conjuncts on
+      a comparison it runs ~126M times per iteration). Saturating writer→63 and
+      reader→0 makes the ordinary comparison fail safe in both directions, so
+      the test is three comparisons — fewer than the address version's four.
+
+    `ObservedValues` drops **24 → 16 bytes** (the depth reuses spare bits in
+    the `dirty` byte). Versus the address stamp: binarytrees **−4.23%**,
+    storage **−0.91%**, mandelbrot −0.17%, nbody +0.00%, fasta +0.27%. All
+    three witnesses and the full benchmark suite pass. **Open:** the
+    `depthAnchor` self-correction for longjmp'd decrements is implemented but
+    untested against an actual error unwind.
 
 All build clean and every checked benchmark produces correct results.
 
