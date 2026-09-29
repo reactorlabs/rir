@@ -1525,14 +1525,137 @@ This is hand-rolled NaN semantics: under `==` the saturation value was safe for
 free, because like NaN it never compared equal to itself. `<=` destroys that
 (`63 <= 63` holds), so the sentinel has to be split per side to keep losing.
 
-#### Self-correcting depth
+#### Keeping the depth exact across non-local exits (fixed 2026-09-29, `69c05f03`)
 
-Twenty `Rf_error` sites longjmp out of `evalRirCode` and skip the decrement,
-which would leave `liveDepth` permanently high and silently degrade the Code to
-always-arming. `Code::depthAnchor` repairs it: at entry, every *live* activation
-of this Code is an outer one and therefore at a **higher** stack address, so an
-anchor below us belongs to a frame that is gone and the count it left is stale —
-reset to 0. Same stack-direction argument that makes frame-address reuse benign.
+`liveDepth` is restored in exactly one place, `evalRirCode`'s epilogue
+(`eval_done`). Any other way out leaks one level. This was originally assumed
+to mean R errors only. It does not: **ordinary, error-free code leaks**, through
+three routes.
+
+| route | opcode | how it leaves |
+|---|---|---|
+| `return()` inside a **loop** or a **promise** | `return_` | longjmp to the function's context (`Rf_findcontext`) |
+| `break` / `next` inside a **promise** | loop compiled via `beginloop_` → `loopTrampoline` | R's builtin longjmps into the trampoline's `SETJMP` |
+| normal end of such a trampolined loop | `endloop_` | returns the marker directly, never reaches `eval_done` |
+
+The first route is set by the compiler, not the programmer:
+
+```cpp
+if (ctx.inLoop() || ctx.isInPromise())   // Compiler.cpp, compiling return()
+    cs << BC::return_();                 // longjmp
+else
+    cs << BC::ret();                     // through eval_done
+```
+
+Either condition alone is enough. A tail `return(x)`, or one inside an `if`,
+compiles to `ret_` and was never affected.
+
+**No recursion is needed.** The failure is on plain sequential calls. Each call
+enters at `liveDepth + 1` and leaves via `return_` without decrementing. The
+next call starts from the leaked value, at the **same** stack address, so the
+anchor test (`depthAnchor < act`, strictly below) does not fire. The counter
+climbs by one per call and reads as if calls were nested inside each other.
+
+Up to depth 30 this is harmless: each call reads a `lastSigDepth` written by
+the previous call at a lower depth, `<=` holds, and the early-out is taken. At
+**31** it saturates. Writes store `kDepthUnknown`, reads compare as 0, and
+`lastSigDepth <= depth` can never hold again. From then on every leaf in that
+Code records and re-arms its parent and every inner node records, for the rest
+of the process. Feedback stays correct (this is over-recording). Recordless is
+simply off for that function.
+
+Measured on HEAD `b6ef9156` with one witness per route, 200 calls each,
+reporting the maximum `liveDepth` reached:
+
+| route | before | after |
+|---|---|---|
+| control (tail `return`, local `break`) | 1 | 1 |
+| `return()` in a loop | **200** | 1 |
+| `return()` in a promise | **200** | 1 |
+| `break` in a promise | **200** | body 2, promise **200** |
+| `next` in a promise | **600** (one per `next`) | body 2, promise **600** |
+| trampolined loop, normal exit | 2 | 2 |
+| `return()` in a trampolined loop | 2 | 2 |
+
+A body depth of 2 is correct: the loop body is a genuinely live activation of
+the same Code, nested in the function body. The last two rows were already
+bounded before the fix, but only by accident (the enclosing frame's own
+`eval_done`, and the anchor reset, respectively).
+
+**Why the restore lives at the landing context, not at the raise site.** A
+longjmp abandons *every* frame between raiser and target, and several can
+belong to one Code: `return()` inside a trampolined loop abandons both the
+loop-body frame and the function-body frame. A restore at `return_` sees only
+its own frame. Worse, it moves `depthAnchor` up to the outer frame's address,
+which turns a case the anchor used to reclaim into one it cannot. So the fix
+snapshots `(liveDepth, depthAnchor)` where the context is **opened** and puts it
+back when control leaves, undoing all of that Code's frames at once
+(`LiveDepthGuard`, `interp.cpp`). It is installed in `rirCallTrampoline`
+(closure body) and `loopTrampoline` (loop body), and covers both ways R leaves
+a context on unwind:
+
+- **landing**: the context is the jump target, or an intermediate one with
+  `on.exit` code. Control returns from its `SETJMP` and the guard restores.
+  `loopTrampoline` also restores after a normal `endloop_` return.
+- **pass-through**: every other context strictly between raiser and target. R
+  never returns into it, but `R_run_onexits` calls its `cend` hook, and the
+  guard registers itself there. `endcontext` never calls `cend`, so normal
+  exits are unaffected. RIR used `cend` nowhere before this.
+
+Restoring twice is harmless (both write the same snapshot). It is deliberately
+not an RAII destructor, since longjmp runs no destructors. A promise has no
+context of its own, so `return_` raised *inside a promise* also undoes its own
+frame at the raise site.
+
+**The anchor stays, as a fallback, and stays strict (`<`).** At entry every live
+activation of the Code is an outer one, at a higher address, so an anchor below
+us is dead. `<=` would also reclaim the exact-reuse case above. But the repair
+resets to 0, which discards any *live* outer activations still counted, and two
+live activations at one depth break the ordering the signature test relies on
+(a nested writer must compare strictly greater than its reader). Eager resets
+widen that window. With the exits covered it is not needed.
+
+**Still not covered**, all of which only inflate the counter (over-record, never
+skip):
+- **Promise Codes** abandoned by a longjmp raised inside them: `break`/`next`
+  inside a promise (the promise rows above) and errors raised inside a promise.
+  Closing this needs a context per promise force (too expensive on a hot path)
+  or a global undo log.
+- **Deopt landing** (`deoptFramesWithContext`): a `return()` in a deoptimized
+  frame leaks once per deopt, so it is bounded. Attaching `cend` there would be
+  unsafe, because that context outlives the lambda frame that would hold the
+  guard.
+- **OSR returns**: OSR is unimplemented.
+
+The only known route to a *wrong* early-out is the anchor reset: if a nested
+activation of a Code dies to a caught error and the still-live outer one calls
+it again, the new frame can land above the dead anchor, reset to 0, and take the
+outer activation's depth. This is argued from the code, not demonstrated.
+
+**Suite impact** (static scan of all 169 benchmark files with R's parser; every
+hit is `return()` inside a loop, none are in promises):
+
+| benchmark | site | effect before the fix |
+|---|---|---|
+| `prg/gcd.R` | `gcd3`, `gcd4` (`return` in `repeat`) | saturated after 31 of `size²` calls |
+| `prg/primes.R` | `isPrime` (`return(FALSE)` in `while`) | saturated (fires on every composite) |
+| `shootout/pidigits` (both) | `cmp_mag`, `strip_leading_zeros` | saturated (`cmp_mag` backs every bigint compare) |
+| `shootout/fannkuch` (both) | `return(max_flip_count)` in `while (TRUE)` | once per harness iteration; saturates only past ~31 iterations |
+| `prg/matmult` (sumprd, triplp) | `return(FALSE)` in the check loop | none (fires only on a wrong result) |
+
+Nothing else in the suite is affected, including nbody, binarytrees, fasta and
+mandelbrot. **Recordless numbers for gcd, primes and pidigits measured before
+`69c05f03` were taken with recordless effectively disabled for those
+functions.** This table is a static prediction; it has not yet been confirmed
+with a depth probe or re-measured.
+
+Cost, deterministic instruction counts against `b6ef9156` (none of these four
+trigger the leak, so this is pure overhead, about 6 instructions per closure
+call):
+
+| nbody | binarytrees | fasta | mandelbrot |
+|---|---|---|---|
+| +0.052% | +0.158% | +0.108% | +0.013% |
 
 #### Cost
 
@@ -1607,11 +1730,31 @@ The single mechanism that serves *both* "leaf/inner notifies its parent" and
 void markRelatedDirty(ObservedValues& slot, uint32_t idx) {
     if (slot.hasParent())                          // leaf-with-parent / non-root inner
         types_[slot.parentSlot()].dirty = true;
-    for (uint32_t d : noRecordSourceToDeps_[idx])  // source → dependents' parents
-        if (types_[d].hasParent())
-            types_[types_[d].parentSlot()].dirty = true;
+    if (slot.hasDeps)                              // almost never
+        for (uint32_t d : noRecordSourceToDeps_[idx])  // source → dependents' parents
+            if (types_[d].hasParent())
+                types_[types_[d].parentSlot()].dirty = true;
 }
 ```
+
+(Simplified: the real code arms through the ownership protocol of §2B.5.1.)
+
+**`hasDeps`** (`b6ef9156`). `noRecordSourceToDeps_` is one `std::vector` per
+slot, 24 bytes each (~36 KB for a 1,500-slot function), and almost every entry
+is empty: nbody has 37 dependents across ~1,500 slots. A one-bit
+`ObservedValues::hasDeps`, set by `buildNoRecordReverseMap`, lets the walk skip
+the map for the ~97% of slots that have no dependents. It lives in the spare bit
+of the `dirty` byte, so `sizeof(ObservedValues)` is unchanged. Measured in
+isolation on nbody (7 interleaved reps): instructions −0.001%, cycles and L1d
+misses within noise. The walk is reached only on a signature change, which is
+already rare in hot loops, so the bit gates a path that was cold to begin with.
+It is kept because it is free and bounds the worst case.
+
+It also narrows a latent bug: `serialize` never writes `typeDeps_`, so a
+deserialized `TypeFeedback` has an empty `noRecordSourceToDeps_`, which the old
+unconditional walk indexed out of bounds. `deserialize` now clears `hasDeps`
+along with `dirty` and the owner stamp. That is the accurate value, since the
+deserialized feedback genuinely has no dependents.
 
 Design points:
 
@@ -2606,9 +2749,9 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-09-24)
+## 7. Current implementation status (snapshot, 2026-09-29)
 
-Working branch: `recordLessNew2-expressionsNewSchema`, at commit `b8076079`.
+Working branch: `recordLessNew2-expressionsNewSchema`, at commit `69c05f03`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
 
@@ -2823,9 +2966,35 @@ by direct inspection, not recalled:
     `ObservedValues` drops **24 → 16 bytes** (the depth reuses spare bits in
     the `dirty` byte). Versus the address stamp: binarytrees **−4.23%**,
     storage **−0.91%**, mandelbrot −0.17%, nbody +0.00%, fasta +0.27%. All
-    three witnesses and the full benchmark suite pass. **Open:** the
-    `depthAnchor` self-correction for longjmp'd decrements is implemented but
-    untested against an actual error unwind.
+    three witnesses and the full benchmark suite pass. **Superseded:** the
+    `depthAnchor` self-correction assumed only errors skip the decrement;
+    ordinary `return()` inside a loop does too, see entry 18.
+
+**Changes landed since (2026-09-24 → 2026-09-29).**
+
+17. **`hasDeps` bit** (`b6ef9156`, §2C.2). Gates `markRelatedDirty`'s walk of
+    the reverse-dependency map, which is empty for ~97% of slots. Free (spare
+    bit, no size change), measured at −0.001% instructions on nbody, i.e. no
+    measurable effect. Also stops deserialized feedback from indexing an empty
+    `noRecordSourceToDeps_`.
+
+18. **`liveDepth` leak on non-local exits fixed** (`69c05f03`, §2B.5.2). The
+    depth was restored only at `eval_done`, so `return()` inside a loop or a
+    promise (`return_`), `break`/`next` inside a promise, and the trampolined
+    `endloop_` all leaked one level per exit. No recursion needed: a flat loop
+    of calls climbed by one per call (200 calls → depth 200) because each call
+    reuses the same frame address and the anchor test did not fire. Past 31 the
+    Code saturates and recordless is off for it permanently: over-recording,
+    feedback still correct. A static scan finds this saturating `gcd`,
+    `primes` and `pidigits` in the suite (`fannkuch` marginally); earlier
+    recordless numbers for those three were measured in that state. Fixed by
+    snapshotting the depth where the closure and loop contexts are opened
+    (`LiveDepthGuard`) and restoring on landing, after `endloop_`, and via R's
+    `cend` hook for pass-through, plus a raise-site restore in `return_` for
+    promises. Anchor test left strict. Costs +0.01% to +0.16% instructions.
+    **Open:** promise Codes abandoned by a longjmp raised inside them (and
+    deopt, once per deopt) still leak; over-records only. Suite impact not yet
+    confirmed dynamically.
 
 All build clean and every checked benchmark produces correct results.
 
