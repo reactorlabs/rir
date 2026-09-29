@@ -245,7 +245,7 @@ struct ObservedValues {
     // "shouldNotRecord": nothing reads them at runtime (PirType::merge, the
     // JIT-side consumer, never looks at them) and the opcode already says
     // whether a slot is a leaf or an elidable inner node.
-    // 1 bit spare.
+    // Byte 1 is now full: dirty(1) + lastSigDepth(6) + hasDeps(1).
     uint8_t dirty : 1;
     // Reentrancy identity for the per-execution signature: the value of
     // Code::liveDepth when `lastSig` was written. Sharing `lastSig` across
@@ -261,6 +261,18 @@ struct ObservedValues {
     // itself, so recursion deeper than it degrades to always-recording rather
     // than to a wrong skip.
     uint8_t lastSigDepth : 6;
+    // Does this slot have NoRecord dependents? Compile-time, set by
+    // buildNoRecordReverseMap.
+    //
+    // markRelatedDirty must arm the parents of a source's NoRecord
+    // dependents, and the reverse map that answers that is one std::vector
+    // PER SLOT - 24 bytes each, so ~36 KB for a 1,500-slot function,
+    // several times the `types_` array and larger than L1d. Almost every
+    // access finds it empty: nbody has 37 dependents across ~1,500 slots.
+    // Consulting this bit first turns that random 36 KB touch into a field
+    // already loaded with the slot, for the ~97% of sources with no
+    // dependents at all. Free: it is the spare bit of byte 1.
+    uint8_t hasDeps : 1;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
     // byte 5: signature of the value seen on the PREVIOUS execution.
@@ -958,21 +970,26 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     markRelatedDirty(ObservedValues& slot, uint32_t idx, uintptr_t act) {
         if (slot.hasParent()) // this node's own parent (leaf-with-parent case)
             types_[slot.parentSlot()].armIfClean(act);
-        for (uint32_t d : noRecordSourceToDeps_[idx]) { // dependents' parents
-            if (types_[d].hasParent())
-                types_[types_[d].parentSlot()].armIfClean(act);
+        if (slot.hasDeps) { // almost never: see ObservedValues::hasDeps
+            for (uint32_t d : noRecordSourceToDeps_[idx]) { // deps' parents
+                if (types_[d].hasParent())
+                    types_[types_[d].parentSlot()].armIfClean(act);
+            }
         }
     }
 
     // Build noRecordSourceToDeps_ (source slot -> its NoRecord dependent slots)
-    // from typeDeps_, once at compile time. Always sized to types_size_ so the
-    // _dep methods can index it unconditionally.
+    // from typeDeps_, once at compile time. Sized to types_size_ here, but a
+    // deserialized TypeFeedback never runs this and keeps it empty, so readers
+    // must gate on the hasDeps bit rather than index unconditionally.
     void buildNoRecordReverseMap() {
         noRecordSourceToDeps_.assign(types_size_, {});
         for (size_t d = 0; d < types_size_; d++) {
             uint32_t s = typeDeps_[d];
-            if (s != NoDep && s < types_size_)
+            if (s != NoDep && s < types_size_) {
                 noRecordSourceToDeps_[s].push_back((uint32_t)d);
+                types_[s].hasDeps = 1;
+            }
         }
     }
 

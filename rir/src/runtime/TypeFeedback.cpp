@@ -184,6 +184,13 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         // comparisons fail and we arm conservatively.)
         tmp.dirty = 0;
         tmp.activationStamp = 0;
+        // `hasDeps` describes noRecordSourceToDeps_, which is in-memory state
+        // rebuilt locally (buildNoRecordReverseMap) and never transported. We
+        // do not serialize typeDeps_ either, so create() below refills it with
+        // NoDep: after deserialization this feedback genuinely has no
+        // dependents and 0 is the accurate value, not merely the safe one.
+        // Leaving a 1 here would send markRelatedDirty into an empty vector.
+        tmp.hasDeps = 0;
         types.push_back(std::move(tmp));
     }
 
