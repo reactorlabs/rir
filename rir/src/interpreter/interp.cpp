@@ -468,6 +468,59 @@ SEXP createEnvironmentFrameFromStackValues(CallContext& call) {
                                nullptr, false, false);
 }
 
+// Undoes one Code's liveDepth bookkeeping when control leaves a context
+// without running evalRirCode's epilogue (eval_done), which is the only place
+// that restores the counter on a normal exit.
+//
+// A non-local exit abandons EVERY evalRirCode frame between the raiser and the
+// landing context, and several of them can belong to the same Code: return()
+// inside a trampolined loop abandons both the loop-body frame and the
+// function-body frame. Restoring per frame at the raise site cannot see the
+// outer ones, so the counter is snapshotted where the context is opened and put
+// back when it is left, which undoes all of that Code's frames at once.
+//
+// R reaches a context in one of two ways on unwind, and both are covered:
+//   landing      - the context is the jump target, or an intermediate one with
+//                  on.exit code: control returns from its SETJMP, and the
+//                  caller calls restore().
+//   pass-through - any other context strictly between raiser and target: R
+//                  never returns into it, but R_run_onexits calls its cend.
+//                  attach() registers onUnwind there. (endcontext never calls
+//                  cend, so a normal exit is unaffected.)
+// Restoring twice is harmless: both write the same snapshot.
+//
+// Deliberately NOT an RAII destructor: longjmp does not run destructors.
+//
+// NOT covered: promise Codes. A promise is forced without a context of its
+// own, so a longjmp raised inside one (an error, or break/next inside a
+// promise) abandons its frame with nothing to undo it. return_ raised inside a
+// promise is handled at the raise site instead. What remains only inflates the
+// counter, which over-records and never skips (see Code::depthAnchor).
+struct LiveDepthGuard {
+    Code* const code;
+    const uint16_t depth;
+    const uintptr_t anchor;
+
+    explicit LiveDepthGuard(Code* c)
+        : code(c), depth(c->liveDepth), anchor(c->depthAnchor) {}
+
+    void restore() const {
+        code->liveDepth = depth;
+        code->depthAnchor = anchor;
+    }
+
+    // The guard must outlive every unwind of `cntxt`, so it has to live in the
+    // same frame that opens and ends the context.
+    void attach(RCNTXT* cntxt) {
+        cntxt->cend = &LiveDepthGuard::onUnwind;
+        cntxt->cenddata = this;
+    }
+
+    static void onUnwind(void* self) {
+        static_cast<LiveDepthGuard*>(self)->restore();
+    }
+};
+
 static SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
                               SEXP arglist) {
     assert(TYPEOF(env) == ENVSXP ||
@@ -490,10 +543,16 @@ static SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     // result in broken stack on non-local returns.
 
     Code* code = fun->body();
+    // return() longjmps to this context, and any other unwind passes through
+    // it; either way every frame of `code` opened below is abandoned. See
+    // LiveDepthGuard.
+    LiveDepthGuard depthGuard(code);
+    depthGuard.attach(&cntxt);
     // Pass &cntxt.cloenv, to let evalRirCode update the env of the current
     // context
     SEXP result;
     if ((SETJMP(cntxt.cjmpbuf))) {
+        depthGuard.restore();
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
@@ -539,8 +598,14 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     RCNTXT cntxt;
     Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv, R_NilValue,
                     R_NilValue);
+    // The loop body runs as a nested activation of the SAME Code `c`, and
+    // leaves either by endloop_ (which returns without reaching eval_done) or
+    // by a break/next longjmp into the SETJMP below. See LiveDepthGuard.
+    LiveDepthGuard depthGuard(c);
+    depthGuard.attach(&cntxt);
 
     if (int s = SETJMP(cntxt.cjmpbuf)) {
+        depthGuard.restore();
         // incoming non-local break/continue:
         if (s == CTXT_BREAK) {
             Rf_endcontext(&cntxt);
@@ -552,6 +617,7 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     // execute the loop body
     SEXP res = evalRirCode(c, env, callCtxt, pc, cache);
     assert(res == loopTrampolineMarker);
+    depthGuard.restore(); // endloop_ does not run eval_done
     Rf_endcontext(&cntxt);
 }
 
@@ -4155,6 +4221,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         INSTRUCTION(return_) {
             SEXP res = ostack_pop();
+            // Rf_findcontext longjmps past eval_done. The enclosing closure's
+            // LiveDepthGuard undoes the body Code's frames, but return_ is also
+            // emitted inside promises, and a promise has no context of its own
+            // to do that - so undo this frame here.
+            c->liveDepth = savedDepth;
+            c->depthAnchor = savedAnchor;
             // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
             // not reached

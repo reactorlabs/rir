@@ -161,11 +161,20 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     /// reentrancy of this Code, which is exactly the condition that can
     /// invalidate a shared signature.
     ///
-    /// `depthAnchor` makes the counter self-correcting. A non-local exit (R
-    /// error) skips the decrement and would leave it permanently high. At
-    /// entry, any *live* activation of this Code is necessarily an outer one
-    /// and therefore at a HIGHER stack address; so an anchor below us belongs
-    /// to a frame that is already gone, and the count it left is stale.
+    /// Non-local exits skip evalRirCode's epilogue, so they are undone where
+    /// the context they leave through was opened (LiveDepthGuard in
+    /// interp.cpp: closure calls and trampolined loops) and at the return_ that
+    /// raises them. The one gap is a promise Code, which is forced without a
+    /// context of its own.
+    ///
+    /// `depthAnchor` is the fallback for that gap. At entry, any *live*
+    /// activation of this Code is necessarily an outer one and therefore at a
+    /// HIGHER stack address; so an anchor below us belongs to a frame that is
+    /// already gone, and the count it left is stale. Strictly below, not
+    /// at-or-below: resetting also discards any live outer activations still
+    /// counted, and two activations at one depth break the ordering the
+    /// signature check relies on. A leak it misses only inflates the count,
+    /// which over-records and never skips.
     uint16_t liveDepth;
     uintptr_t depthAnchor;
 
