@@ -5,6 +5,14 @@
 
 #define V_SIMPLE_INSTRUCTION_IN_BC_NOARGS(V, name, Name) V(_, name, name)
 
+// Opcodes that exist only in stats builds (see insns.h). A separate list
+// because an #ifdef cannot sit inside the backslash-continued BC_NOARGS.
+#ifdef RIR_RECORD_STATS
+#define BC_NOARGS_STATS(V, NESTED) V(NESTED, statNoRecord, stat_norecord)
+#else
+#define BC_NOARGS_STATS(V, NESTED)
+#endif
+
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
     V(NESTED, as_switch_idx, as_switch_idx)                                    \
@@ -49,6 +57,7 @@
     V(NESTED, colon, colon)                                                    \
     V(NESTED, identicalNoforce, identical_noforce)                             \
     V(NESTED, setShared, set_shared)                                           \
+    BC_NOARGS_STATS(V, NESTED)                                                 \
     V(NESTED, ensureNamed, ensure_named)                                       \
     V(NESTED, aslogical, aslogical)                                            \
     V(NESTED, checkFunction, check_function)                                   \

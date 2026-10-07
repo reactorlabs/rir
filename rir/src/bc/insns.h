@@ -492,6 +492,13 @@ DEF_INSTR(record_type_inner_notify_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)
+// Stats only: marks a NoRecord (elided) leaf so the interpreter can count its
+// executions. Exists only when RIR_RECORD_STATS is defined, so non-stats
+// builds are byte-identical. Deliberately outside the record_type_ ..
+// record_type_inner_notify_ range: it records nothing.
+#ifdef RIR_RECORD_STATS
+DEF_INSTR(stat_norecord_, 0, 0, 0)
+#endif
 
 DEF_INSTR(int3_, 0, 0, 0)
 

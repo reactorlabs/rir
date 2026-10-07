@@ -86,10 +86,16 @@ class CodeStream {
     // only touch visibility or NAMED. They must not count as "something
     // happened after the record", because e.g. `v[i]` and `(e)` emit a
     // visible_ after their record_type_ while the recorded value is still the
-    // one on top of the stack.
+    // one on top of the stack. stat_norecord_ (stats builds only) must be here
+    // too, or the stats build would compile differently from the one it
+    // measures: it follows a NoRecord load whose position is the value record.
     static bool isValueNeutral(Opcode op) {
         return op == Opcode::visible_ || op == Opcode::invisible_ ||
-               op == Opcode::ensure_named_ || op == Opcode::nop_;
+               op == Opcode::ensure_named_ || op == Opcode::nop_
+#ifdef RIR_RECORD_STATS
+               || op == Opcode::stat_norecord_
+#endif
+            ;
     }
 
     CodeStream& operator<<(const BC& b) {

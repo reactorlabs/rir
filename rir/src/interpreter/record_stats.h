@@ -13,11 +13,15 @@
 //   * record_type_once_  — RecordOnce: records on the first execution only,
 //                          later executions are gated (SKIPPED)
 //   * <nothing>          — NoRecord: the type is inferable from a source load,
-//                          so no record instruction is emitted at all. There is
-//                          no opcode to instrument, so we detect it in the load
-//                          handler: if the next opcode is not a record
-//                          instruction, this load's record was elided
-//                          (SKIPPED).
+//                          so no record instruction is emitted at all. In stats
+//                          builds only, the compiler emits a stat_norecord_
+//                          marker at exactly that spot, and its handler counts
+//                          the skip (SKIPPED). It records nothing, is value-
+//                          neutral to the compiler, and does not exist in
+//                          non-stats builds.
+//                          (This replaced inferring NoRecord from "the opcode
+//                          after a load is not a record", which miscounted the
+//                          unrecorded `x[i] <- f(x)` pre-load as a skip.)
 //
 // Inner nodes (the expression-tree elision) are a second, independent axis and
 // have their own table: an operator whose result is a function of its operands'
@@ -25,10 +29,12 @@
 // signature changed. Baseline has no such notion — it records every operator
 // result — so the "should" column for those is simply every execution.
 //
-// Compile-time toggle: define RIR_RECORD_STATS to enable (counters + an at-exit
-// summary printed to stderr on every process exit). Leave it undefined for
-// perf/production builds so evalRirCode stays byte-identical and the hot loop
-// pays zero overhead.
+// Compile-time toggle: the CMake option RECORD_STATS (`cmake -DRECORD_STATS=ON
+// .` in the build dir; OFF to undo), which defines RIR_RECORD_STATS everywhere
+// and writes a RECORD_STATS_ENABLED marker file into the build dir. Enables the
+// counters and an at-exit summary printed to stderr on every process exit.
+// Leave it off for perf/production builds so evalRirCode stays byte-identical
+// and the hot loop pays zero overhead.
 //
 // Runtime toggle: if RIR_RECORD_STATS_CSV=1, the same numbers are written to
 // stdout as CSV instead of the pretty table — one row per table row, columns
@@ -52,7 +58,8 @@ struct RecordSkipStats {
     uint64_t leafAlwaysRec = 0; // RecordAlways leaf — recorded every execution
     uint64_t leafOnceRec = 0;   // RecordOnce leaf — first-hit recorded
     uint64_t leafOnceSkip = 0;  // RecordOnce leaf — gated (SKIPPED)
-    uint64_t noRecordSkip = 0;  // NoRecord leaf — elided, no opcode (SKIPPED)
+    uint64_t noRecordSkip = 0; // NoRecord leaf — elided (SKIPPED); counted by
+                               // the stat_norecord_ marker
     // Subset of the "recorded" counts above: a record opcode that ran but
     // updated nothing, because the value's per-execution signature matched the
     // previous one — so every flag update and the seen scan were provably

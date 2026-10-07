@@ -2207,25 +2207,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         REC_STAT(g_recStats.fbRecordOnceRec++);
     };
 
-        // REC_STAT_LDVAR_CLASSIFY: at this point `pc` references the opcode
-        // that follows a value load. The leaf record opcodes count themselves
-        // (in their handlers), so here we only detect the NoRecord case: a load
-        // whose next opcode is NOT a value-type record opcode had its record
-        // elided. No-op unless RIR_RECORD_STATS is enabled.
-#ifdef RIR_RECORD_STATS
-        // record_type_ .. record_type_inner_notify_ are the contiguous value-
-        // type record opcodes (record_call_/record_test_ sit just outside the
-        // range).
-#define REC_STAT_IS_RECORD(op)                                                 \
-    ((op) >= Opcode::record_type_ && (op) <= Opcode::record_type_inner_notify_)
-#define REC_STAT_LDVAR_CLASSIFY()                                              \
-    do {                                                                       \
-        if (!REC_STAT_IS_RECORD(*pc))                                          \
-            ::rir::g_recStats.noRecordSkip++;                                  \
-    } while (0)
-#else
-#define REC_STAT_LDVAR_CLASSIFY() ((void)0)
-#endif
 
     // main loop
     BEGIN_MACHINE {
@@ -2233,6 +2214,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(invalid_) assert(false && "wrong or unimplemented opcode");
 
         INSTRUCTION(nop_) NEXT();
+
+#ifdef RIR_RECORD_STATS
+        // Emitted by the compiler exactly where it classified a use as
+        // NoRecord (stats builds only), so this is the NoRecord count.
+        INSTRUCTION(stat_norecord_) {
+            g_recStats.noRecordSkip++;
+            NEXT();
+        }
+#endif
 
         INSTRUCTION(clear_binding_cache_) {
             size_t start = readImmediate();
@@ -2300,7 +2290,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
@@ -2343,7 +2332,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             }
 
             // if promise, evaluate & return
-            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
                 res = evaluatePromise(res);
@@ -2366,7 +2354,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP res = Rf_findVar(sym, env);
             R_Visible = TRUE;
 
-            REC_STAT_LDVAR_CLASSIFY();
             recordForceBehavior(res);
 
             if (res == R_UnboundValue) {
@@ -2431,7 +2418,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         Rf_error("argument \"%s\" is missing, with no default",                \
                  CHAR(PRINTNAME(sym)));                                        \
     }                                                                          \
-    REC_STAT_LDVAR_CLASSIFY();                                                 \
     record_fb_action;                                                          \
     if (TYPEOF(res) == PROMSXP)                                                \
         res = evaluatePromise(res);                                            \

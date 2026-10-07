@@ -2703,6 +2703,11 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
         // ldvar_cached_noRecordFB_ rewrites the opcode in place without moving
         // the instruction.
         ctx.noteValueRecordAt(uc.defSlot, cs.lastValueInstructionPos());
+#ifdef RIR_RECORD_STATS
+        // Mark the elided record so the interpreter can count it. Value-neutral
+        // (CodeStream::isValueNeutral), so the stamp above stays valid.
+        cs << BC::statNoRecord();
+#endif
         // record_type_once_promise_ / ldvar_cached_envRecordFB_ disabled:
         // } else if (ctx.code.top()->isPromiseContext() && ...) { EnvBit ... }
     } else {

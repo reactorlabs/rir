@@ -359,6 +359,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::nop_:
+#ifdef RIR_RECORD_STATS
+    case Opcode::stat_norecord_:
+#endif
     case Opcode::clear_record_type_once_bit_:
     case Opcode::clear_record_type_once_bits_range_:
         break;
