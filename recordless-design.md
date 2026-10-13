@@ -264,6 +264,18 @@ prose description:
   invisible to the main code's `stvar` sequence — so the def-use analysis cannot
   see it and its dominance conclusions would be wrong. This is the one place the
   analysis explicitly bails for R's lazy-evaluation semantics.
+  **Open gap — default arguments.** The rule-0 set is built per Code object from
+  that Code's own AST (`push` → `collectPromiseAssignedVars(ast, …)`). A default
+  argument is a promise evaluated in the function's frame, but it lives in the
+  formals list, outside the body's AST, so the body's rule-0 set never contains
+  what it assigns:
+  ```r
+  function(d = (a <- "x")) { a <- id(1L); d; a }   # last `a` NoRecord -> integer only, reads "x"
+  ```
+  Reproduced (found in external review). It needs a recorded right-hand side to
+  show: with `a <- 1L` the def has no slot and the read records anyway. The fix
+  is to merge the function-wide `promiseAssigned_` (§2A.1.4), which does scan
+  default arguments, into the body's rule-0 set. Not yet applied.
 - **Free variables that are not stable captures are always recorded.** Only
   formals, outer-*controlled* captures, and locals/params with a reaching def are
   even eligible; an arbitrary free variable from an enclosing scope falls through
@@ -325,7 +337,8 @@ down.
   a pre-scan, `collectInnerSuperAssigned`, which walks nested `function` bodies
   at any depth looking for `<<-`.
 - For a nested compilation, the enclosing function hands down two capture sets:
-  - **`controlled`** — "in our realm": carried-through outer captures, plus
+  - **`controlled`** — "in our realm": the outer captures $f$ itself inherited,
+    $O(f) = C(\mathit{enc}(f)) \setminus (F_f \cup P_f)$, plus
     $(F_f \cup L_f) \setminus (S_f \cup P_f)$, where $P_f$ is the set of names
     assigned inside a promise of $f$ (§2A.1.4). The inner function may rely on
     name lookup falling through to a controlled environment rather than to the
@@ -340,9 +353,17 @@ down.
     in `g`: a capture that `f` reassigns (`a <- "x"` after `g`'s definition)
     still cannot change *under `g`'s feet*. The only ways it could are
     excluded by the subtractions: a nested closure's `<<-` ($S_f$, §2A.1.3) and
-    a promise created by `f` that assigns in `f`'s frame ($P_f$, §2A.1.4). A
-    plain `<-` in another nested closure binds in that closure's own frame, and
-    a recursive call to `f` gets a fresh environment, so neither interferes.
+    a promise created by `f` — or by any function between `g` and the owner of
+    the capture — that assigns in its own frame ($P$, §2A.1.4). A plain `<-` in
+    another nested closure binds in that closure's own frame, and a recursive
+    call to `f` gets a fresh environment, so neither interferes.
+
+    In one sentence: *a capture is safe for `g` when no frame on its lookup
+    path, from `g` up to the frame that owns it, can gain or change that binding
+    during one activation of `g`.* The owner's frame is protected by its $S$
+    (a `<<-` at any depth below it) and its $P$; every frame in between by its
+    own $P$. Frames in between need no $S$: a `<<-` only ever updates an
+    existing binding further out, it never creates one in between.
     Reflection (`assign(…, envir=)`, `delayedAssign`, `environment(g)$a <-`) is
     out of scope, as it is for every local subsumption.
   - **`immutable`** — a strict subset whose *value* cannot change during the
@@ -359,6 +380,12 @@ down.
   a subtree is already in the `innerSuperAssigned_` of *every* ancestor whose
   subtree contains it. Filtering where a name **enters** the capture sets is
   therefore complete; carry-through only ever sees already-filtered names.
+  **This argument does not carry over to $P_f$.** $P_f$ is collected over $f$'s
+  own promises only — the scan stops at nested function bodies — so no
+  enclosing function's sets can contain it. A name $f$ inherits must therefore
+  be filtered by $f$'s own $P_f$ when $f$ stores it: that is the
+  $\setminus (F_f \cup P_f)$ in $O(f)$ above, and its absence was a real hole
+  (§2A.1.4, "The inherited route").
 - Both sets are shadowed correctly on the way down: a name that the inner
   function re-declares as its own formal (or, for `immutable`, body-assigns)
   is dropped from the inherited set.
@@ -591,17 +618,89 @@ body, plus each formal's default expression scanned as already inside a promise.
 loop and the body-locals loop, exactly where $S_f$ is excluded. It is a
 function-wide set rather than `code.top()->defUseAnalysis`'s on purpose: a
 closure literal compiled inside one of `f`'s promises would otherwise see only
-that promise's expression. As with $S_f$, carry-through needs no extra filter —
-a name enters the capture sets only through these two loops.
+that promise's expression.
 
-This changes nothing about how default arguments themselves are compiled (they
-remain unoptimized); the scan only removes the names they may *assign* from what
-inner closures may rely on.
+That covers names that enter the capture sets as **`f`'s own** formals and
+locals. It does *not* cover names `f` merely passes on from further out — see
+"The inherited route" below; an earlier version of this section wrongly said
+carry-through needed no filter.
 
-**Cost: none.** All 656 functions in the benchmark suite were compiled with the
-pre-fix and fixed builds and their load classifications diffed: **0 changes**.
-No benchmark captures a variable its enclosing function also assigns in a
-promise, so the generated bytecode is identical.
+How default arguments themselves are compiled is unchanged (they remain
+unoptimized): the scan only removes the names they may *assign* from what inner
+closures may rely on. It does not yet protect `f`'s **own** reads from those
+assignments — that is the separate rule-0 gap noted under §2A.1.1.
+
+#### The inherited route (found in external review, fixed 2026-10-13)
+
+The filter above sits where `f`'s own formals and locals enter the capture sets.
+A name `f` *inherits* from an enclosing function arrives by a different route —
+`f` stores the incoming sets in `finalize`, and `computeCapturesForInner` copies
+them to `g` unconditionally — and that route had no $P_f$ filter:
+
+```r
+h <- function() {
+  x <- 1L
+  f <- function() {
+    g <- function(q) { x; q; x }   # x reaches g as h's capture, via f
+    g(x <- "a")                    # promise of f
+  }
+  f()
+}
+```
+
+`g`'s first read finds `h`'s `x` (`1L`). Reading `q` forces the promise, which
+runs in **`f`'s frame** and creates a *new* `x` there; the second read stops at
+`f` and finds `"a"`. `h`'s binding never changed — a new binding appeared
+*between* `g` and `h` and shadowed it. The second read was NoRecord against the
+first: `g` returned `"a"` with only `integer` recorded.
+
+Why the $S$ argument does not transfer: a `<<-` anywhere below `h` is in `h`'s
+own scan, so `h` never offers the name. `f`'s promises are invisible to `h`
+(the promise scan stops at nested function bodies), so only `f` can drop the
+name, and it did not: `finalize` filtered inherited names by `f`'s formals
+alone. Note that `x <- "a"` *is* counted in `f`'s `bodyAssignedCount_`, which
+removed `x` from `f`'s **immutable** set — but leaf rules read the
+**controlled** set, which deliberately kept body-assigned names.
+
+**Fix.** In `finalize`, inherited names are also dropped if `f` assigns them in
+a promise: $O(f) = C(\mathit{enc}(f)) \setminus (F_f \cup P_f)$ for controlled;
+immutable keeps its body-assigned filter and gains $P_f$ too (default arguments
+are not in `bodyAssignedCount_`). Plain body assignments still do not drop the
+name, and need not: they cannot run while `g` does.
+
+**A stricter rule was tried and rejected.** Dropping an inherited name whenever
+`f` binds it *in any way* (plain assignment included) is also sound and slightly
+simpler to state, and inner closures lose nothing by it — a name `f` assigns
+reaches them as `f`'s own local anyway. But it removes the inherited flag from
+`f`'s **own** reads, and that flag was sometimes the only thing making them
+eligible. In `prg/cholesky.R` the inner `cholesky` assigns `U` while its
+enclosing `execute` also has a `U`; six reads of `U` within single statements
+of the `j` loop (lines 16–17: the second `U` of
+`sum(U[1:(i-1), i] * U[1:(i-1), j])` and the target load of each `U[i, j] <- …`,
+two loop copies) went from NoRecord to recorded. They were eligible only via the
+inherited flag because the analysis tracks the *most recent* def of `U` — a
+subassignment inside an `if`/`else`, which does not dominate — rather than
+`U <- matrix(…)` on line 8, which does. (That last point is a separate
+imprecision worth fixing on its own.) The promise-only rule keeps all six.
+
+**Cost: none — measured in context.** An earlier measurement here was invalid:
+it compiled every function literal *standalone*, where inner functions receive no
+captures at all, so it could not observe any capture change. The valid method
+enables the closure `rirDisassemble(what, R_TrueValue)` call in `rirCompile`
+(`api.cpp`; the expression one must stay off — it rejects non-closure code and
+halts R). Its verbose output includes a `== nested closures ==` section: inner
+functions compiled *inside* their enclosing function, with the captures it hands
+down. All 656 function literals in the suite (98 with nested closures) were
+compiled this way and their load classifications diffed:
+
+| comparison | loads changed |
+|---|---|
+| before §2A.1.4 → own-locals $P_f$ filter | 0 |
+| own-locals filter → + inherited-route filter | 0 |
+| stricter "any binding" rule → inherited-route filter | 6 (cholesky, restored) |
+
+No benchmark assigns a captured name inside a promise, so the generated bytecode
+is unchanged by either fix.
 
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
@@ -3081,8 +3180,22 @@ by direct inspection, not recalled:
     reproduced on both routes, losing the `character` observation. Fixed by a
     function-wide `promiseAssigned_` pre-scan (body promise arguments plus
     default expressions) subtracted from both capture sets in
-    `computeCapturesForInner`. Zero classification changes across all 656
-    benchmark functions.
+    `computeCapturesForInner` (`1bb94569`). The "zero changes across 656
+    functions" first reported for it was measured invalidly — standalone
+    compilation hands inner functions no captures — and has since been
+    re-measured in context: still zero (§2A.1.4).
+
+20. **Inherited route of the same hole closed** (§2A.1.4, from external
+    review). The fix in 19 filtered `f`'s *own* formals and locals but not the
+    captures `f` passes on from further out: `x` from `h` reached `g` through
+    `f`, and `f`'s promise `g(x <- "a")` created a shadowing `x` in `f`'s frame
+    between `g`'s two reads. Fixed in `finalize`:
+    $O(f) = C(\mathit{enc}(f)) \setminus (F_f \cup P_f)$. A stricter "drop on
+    any binding" rule was rejected after costing six NoRecords in
+    `prg/cholesky.R`. In-context suite diff against the previous commit: zero
+    changes. **Open, same review:** a function's *own* reads are not protected
+    from assignments in its default arguments (rule 0 is built from the body's
+    AST only; §2A.1.1).
 
 All build clean and every checked benchmark produces correct results.
 

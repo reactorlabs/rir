@@ -2967,18 +2967,37 @@ SEXP Compiler::finalize() {
                 ctx.formalNames_.insert(arg.tag());
 
         // outerImmutable_: incoming immutable captures, minus names shadowed by
-        // this function's own formals (formal completely hides the outer name)
-        // or body-assigned here (local assignment breaks immutability).
+        // this function's own formals (formal completely hides the outer name),
+        // body-assigned here (local assignment breaks immutability), or
+        // assigned in one of our promises (see below; default arguments are
+        // not in bodyAssignedCount_).
         for (SEXP s : outerImmutable)
-            if (!ctx.formalNames_.count(s) && !ctx.bodyAssignedCount_.count(s))
+            if (!ctx.formalNames_.count(s) &&
+                !ctx.bodyAssignedCount_.count(s) &&
+                !ctx.promiseAssigned_.count(s))
                 ctx.outerImmutable_.insert(s);
 
         // outerControlled_: incoming controlled captures (superset of
-        // immutable), minus names shadowed by this function's own formals.
-        // Body-assigned names stay: when the local def hasn't run, ldvar falls
-        // through to the controlled outer env, not to global.
+        // immutable), minus names shadowed by this function's own formals, or
+        // assigned inside one of our promises (promiseAssigned_: call-argument
+        // promises in the body and default arguments).
+        //
+        // Plain body-assigned names stay: when the local def hasn't run, ldvar
+        // falls through to the controlled outer env, not to global — and a
+        // plain assignment of ours cannot run while an inner closure executes
+        // (our code is suspended below it), so it can never make a binding
+        // appear between two of the closure's reads.
+        //
+        // A promise of ours can: it runs in OUR frame whenever forced, so the
+        // closure reads the outer `x`, forces it, and its next read finds a new
+        // `x` of ours shadowing the outer one
+        // (`g <- function(q) { x; q; x }; g(x <- "a")`). This is the inherited
+        // half of the promise exclusion; computeCapturesForInner applies the
+        // same exclusion to our own formals and locals. The enclosing
+        // function cannot do it for us: its promise scan stops at nested
+        // function bodies, so it never sees our promises.
         for (SEXP s : outerControlled)
-            if (!ctx.formalNames_.count(s))
+            if (!ctx.formalNames_.count(s) && !ctx.promiseAssigned_.count(s))
                 ctx.outerControlled_.insert(s);
 
         // functionLocalOrParam_: own formals + body-assigned, minus any var
