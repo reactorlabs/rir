@@ -266,14 +266,30 @@ class CompilerContext {
                 result.immutable.insert(f);
         }
 
-        // Own body-locals: live in the current function's local env →
-        // controlled. Immutable only if assigned exactly once, not a for-loop
-        // variable, not
-        // <<-escaped, and the single def dominates this compilation point.
+        // Own body-locals: controlled only if a def of ours DOMINATES this
+        // point, i.e. the binding already exists in our frame on every path
+        // to the creation of the inner closure. Otherwise the closure can run
+        // before we bind it, and its lookup falls through our frame to
+        // wherever we are nested — possibly the global env, which anything it
+        // calls can rebind:
+        //   f <- function() { g <- function() for (...) { y <- x; h() }
+        //                     g(); x <- 1L }          # h does `x <<- 2.5`
+        // read the global x, which h() retyped mid-loop, while RecordOnce kept
+        // only the first type. findDominatingDef, not the loop-vetoed
+        // hasDominatingDef: we need the binding to EXIST, and a later
+        // reassignment of it in an enclosing loop does not unbind it. A closure
+        // literal compiled inside one of our promises sees no body defs here
+        // and so drops the name — conservative. Formals need no such check:
+        // they are bound from entry. Inherited names compose: an ancestor
+        // admitted them under this same rule, so its frame is bound.
+        // Immutable only if assigned exactly once, not a for-loop variable,
+        // not <<-escaped, and the single def dominates this point (stricter,
+        // loop-vetoed query).
         for (auto& kv : bodyAssignedCount_) {
             if (promiseAssigned_.count(kv.first))
                 continue; // see the formals loop above
-            if (!innerSuperAssigned_.count(kv.first))
+            if (!innerSuperAssigned_.count(kv.first) &&
+                dua.findDominatingDef(kv.first))
                 result.controlled.insert(kv.first);
             if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
                 !innerSuperAssigned_.count(kv.first) &&
