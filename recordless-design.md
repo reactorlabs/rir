@@ -264,18 +264,24 @@ prose description:
   invisible to the main code's `stvar` sequence — so the def-use analysis cannot
   see it and its dominance conclusions would be wrong. This is the one place the
   analysis explicitly bails for R's lazy-evaluation semantics.
-  **Open gap — default arguments.** The rule-0 set is built per Code object from
-  that Code's own AST (`push` → `collectPromiseAssignedVars(ast, …)`). A default
-  argument is a promise evaluated in the function's frame, but it lives in the
-  formals list, outside the body's AST, so the body's rule-0 set never contains
-  what it assigns:
+  **Default arguments count too (fixed 2026-10-13, found in external review).**
+  The rule-0 set is built per Code object from that Code's own AST
+  (`push` → `collectPromiseAssignedVars(ast, …)`). A default argument is a
+  promise evaluated in the function's frame, but it lives in the formals list,
+  outside the body's AST, so the body's set used to miss what it assigns:
   ```r
-  function(d = (a <- "x")) { a <- id(1L); d; a }   # last `a` NoRecord -> integer only, reads "x"
+  function(d = (a <- "x")) { a <- id(1L); d; a }   # last `a` was NoRecord: integer only, read "x"
   ```
-  Reproduced (found in external review). It needs a recorded right-hand side to
-  show: with `a <- 1L` the def has no slot and the read records anyway. The fix
-  is to merge the function-wide `promiseAssigned_` (§2A.1.4), which does scan
-  default arguments, into the body's rule-0 set. Not yet applied.
+  This is the same pattern as the already-handled call-argument case
+  `a <- id(1L); g(a <- "x"); a` — only the promise's origin differs. It needs a
+  recorded right-hand side to show: with `a <- 1L` the def has no slot and the
+  read records anyway. `push` now merges the function-wide `promiseAssigned_`
+  (§2A.1.4) — body promise arguments plus default expressions, filled by the
+  pre-scan in `finalize` before the body is pushed — into the body's rule-0 set,
+  so a name a default argument assigns is excluded from every leaf optimization
+  in the function, exactly like a call-argument one. Controls with a default
+  that assigns nothing, or assigns a *different* name, keep their NoRecord.
+  In-context suite diff: zero changes.
 - **Free variables that are not stable captures are always recorded.** Only
   formals, outer-*controlled* captures, and locals/params with a reaching def are
   even eligible; an arbitrary free variable from an enclosing scope falls through
@@ -627,8 +633,8 @@ carry-through needed no filter.
 
 How default arguments themselves are compiled is unchanged (they remain
 unoptimized): the scan only removes the names they may *assign* from what inner
-closures may rely on. It does not yet protect `f`'s **own** reads from those
-assignments — that is the separate rule-0 gap noted under §2A.1.1.
+closures may rely on. `f`'s **own** reads are protected separately, by adding
+the same set to `f`'s rule-0 set (§2A.1.1).
 
 #### The inherited route (found in external review, fixed 2026-10-13)
 
@@ -3193,9 +3199,15 @@ by direct inspection, not recalled:
     $O(f) = C(\mathit{enc}(f)) \setminus (F_f \cup P_f)$. A stricter "drop on
     any binding" rule was rejected after costing six NoRecords in
     `prg/cholesky.R`. In-context suite diff against the previous commit: zero
-    changes. **Open, same review:** a function's *own* reads are not protected
-    from assignments in its default arguments (rule 0 is built from the body's
-    AST only; §2A.1.1).
+    changes.
+
+21. **Rule 0 covers default arguments** (§2A.1.1, same review). The rule-0
+    set ("assigned in a promise → never optimize") was built from the body's
+    AST only, so a default argument assigning into the frame was invisible to
+    the function's own reads: `function(d = (a <- "x")) { a <- id(1L); d; a }`
+    subsumed the last `a` while it read `"x"`. `push` now merges the
+    function-wide `promiseAssigned_` into the body's set. Controls unaffected;
+    in-context suite diff: zero changes.
 
 All build clean and every checked benchmark produces correct results.
 

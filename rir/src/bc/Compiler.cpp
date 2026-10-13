@@ -178,8 +178,18 @@ class CompilerContext {
 
     void push(SEXP ast, SEXP env) {
         std::unordered_set<SEXP> promiseAssigned;
-        if (Compiler::recordLess_Leaf_Enabled)
+        if (Compiler::recordLess_Leaf_Enabled) {
             DefUseAnalysis::collectPromiseAssignedVars(ast, promiseAssigned);
+            // The body's rule-0 set must also cover assignments in DEFAULT
+            // ARGUMENTS: they are promises evaluated in this frame, but live in
+            // the formals list, outside the body's AST. Without them
+            // `function(d = (x <- "a")) { x <- id(1L); d; x }` subsumes the
+            // last `x` against the def while it reads "x". promiseAssigned_ is
+            // the function-wide set (body promise arguments + defaults), filled
+            // by the pre-scan in finalize before the body is pushed.
+            promiseAssigned.insert(promiseAssigned_.begin(),
+                                   promiseAssigned_.end());
+        }
         DefUseAnalysis dua(&functionLocalOrParam_, &outerControlled_,
                            &outerImmutable_, &formalNames_,
                            std::move(promiseAssigned));
