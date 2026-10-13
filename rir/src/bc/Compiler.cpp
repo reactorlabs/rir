@@ -112,6 +112,12 @@ class CompilerContext {
     std::unordered_set<SEXP> formalNames_;
     std::unordered_map<SEXP, int> bodyAssignedCount_;
     std::unordered_set<SEXP> innerSuperAssigned_;
+    // Names assigned inside a promise of THIS function: a promise-argument
+    // position of a call, or a default-argument expression. The assignment
+    // runs in our frame whenever the promise is forced — possibly while an
+    // inner closure is executing, between two of its reads, with no bytecode
+    // of ours running. See computeCapturesForInner.
+    std::unordered_set<SEXP> promiseAssigned_;
     std::unordered_set<SEXP> forLoopVars_;
 
     // // Variables that appear in pure-read (value) position in the function
@@ -235,8 +241,15 @@ class CompilerContext {
         // below; together they give (formals + body-locals) minus
         // innerSuperAssigned. Immutable additionally requires the binding
         // never be body-assigned.
+        //
+        // promiseAssigned_ is excluded for the same reason by a different
+        // route: `run(a <- "x", g)` hands `g` a promise that assigns in OUR
+        // frame. If `g` forces it between two reads of `a` (via anything it
+        // calls), `a` is retyped mid-`g` although none of our bytecode runs —
+        // the "control never returns to the outer function" argument holds
+        // for our code stream, not for promises we created.
         for (SEXP f : formalNames_) {
-            if (innerSuperAssigned_.count(f))
+            if (innerSuperAssigned_.count(f) || promiseAssigned_.count(f))
                 continue;
             result.controlled.insert(f);
             if (!bodyAssignedCount_.count(f))
@@ -248,6 +261,8 @@ class CompilerContext {
         // variable, not
         // <<-escaped, and the single def dominates this compilation point.
         for (auto& kv : bodyAssignedCount_) {
+            if (promiseAssigned_.count(kv.first))
+                continue; // see the formals loop above
             if (!innerSuperAssigned_.count(kv.first))
                 result.controlled.insert(kv.first);
             if (kv.second == 1 && !forLoopVars_.count(kv.first) &&
@@ -2938,6 +2953,12 @@ SEXP Compiler::finalize() {
         // function call sites when computing safe captures to hand off.
         DefUseAnalysis::collectAssignedVars(exp, ctx.bodyAssignedCount_);
         DefUseAnalysis::collectInnerSuperAssigned(exp, ctx.innerSuperAssigned_);
+        DefUseAnalysis::collectPromiseAssignedVars(exp, ctx.promiseAssigned_);
+        // Default arguments are promises evaluated in this frame too.
+        for (RListIter arg = RList(formals).begin(); arg != RList::end(); ++arg)
+            if (*arg != R_MissingArg)
+                DefUseAnalysis::collectPromiseAssignedVars(
+                    *arg, ctx.promiseAssigned_, /*inPromise=*/true);
         DefUseAnalysis::collectForLoopVars(exp, ctx.forLoopVars_);
         // DefUseAnalysis::collectPureReadVars(exp, ctx.readVars_);
 

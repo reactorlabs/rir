@@ -326,16 +326,33 @@ down.
   at any depth looking for `<<-`.
 - For a nested compilation, the enclosing function hands down two capture sets:
   - **`controlled`** — "in our realm": carried-through outer captures, plus
-    $(F_f \cup L_f) \setminus S_f$. The inner function may rely on name lookup
-    falling through to a controlled environment rather than to the global env.
-    This is what enables **RecordOnce** on such captures, and — via
+    $(F_f \cup L_f) \setminus (S_f \cup P_f)$, where $P_f$ is the set of names
+    assigned inside a promise of $f$ (§2A.1.4). The inner function may rely on
+    name lookup falling through to a controlled environment rather than to the
+    global env. This is what enables **RecordOnce** on such captures, and — via
     `isOuterControlled` in `classifyUse` — **NoRecord** subsumption too.
+
+    **Controlled is enough; immutability is not required.** Every leaf rule
+    reasons within *one activation* of the inner function `g` (useDefs dedup
+    within its body, RecordOnce bits per call). While `g` runs, the activation
+    of `f` that created it is either suspended below it on the stack or has
+    already returned, so none of `f`'s own bytecode executes between two reads
+    in `g`: a capture that `f` reassigns (`a <- "x"` after `g`'s definition)
+    still cannot change *under `g`'s feet*. The only ways it could are
+    excluded by the subtractions: a nested closure's `<<-` ($S_f$, §2A.1.3) and
+    a promise created by `f` that assigns in `f`'s frame ($P_f$, §2A.1.4). A
+    plain `<-` in another nested closure binds in that closure's own frame, and
+    a recursive call to `f` gets a fresh environment, so neither interferes.
+    Reflection (`assign(…, envir=)`, `delayedAssign`, `environment(g)$a <-`) is
+    out of scope, as it is for every local subsumption.
   - **`immutable`** — a strict subset whose *value* cannot change during the
     inner function's lifetime: formals never body-assigned, and body-locals
     assigned exactly once, not for-loop variables, with a dominating def at the
-    point the closure is created. (Both start from the $\setminus S_f$ set, so
-    `<<-`-escaped names are already gone.) Reserved for future cross-invocation
-    optimizations; not yet exploited.
+    point the closure is created. (Both start from the
+    $\setminus (S_f \cup P_f)$ set, so `<<-`-escaped and promise-assigned names
+    are already gone.) Reserved for future cross-invocation optimizations; not
+    yet exploited — immutability only matters for facts carried *across*
+    activations of `g`, which no current rule does.
 - The carry-through of an *outer* function's `controlled`/`immutable` needs no
   `S_f` filter of its own. `collectInnerSuperAssigned` → `scanForSuperAssigns`
   recurses through **all** nested functions at any depth, so a `<<-` anywhere in
@@ -529,6 +546,62 @@ like it could change behaviour when the flag is off, since `localOrParam_` would
 then be empty. It cannot: `Compiler::finalize` populates `formalNames_`,
 `outerControlled_` **and** `functionLocalOrParam_` only under that flag, so with
 it off all three are empty and the old predicate was already false everywhere.
+
+### 2A.1.4 A third capture hole: promises of the outer function (found and fixed 2026-10-13)
+
+The "controlled is enough" argument of §2A.1.2 says none of `f`'s bytecode runs
+while an inner closure `g` executes. That holds for `f`'s instruction stream —
+but not for **promises `f` created**. A promise is code of `f`, evaluated in
+`f`'s frame, at whatever moment it is first forced, which can be in the middle
+of `g`:
+
+```r
+run <- function(p, g) g(function() p)
+f <- function() {
+  a <- 1L
+  g <- function(q) { a; q(); a }   # 2nd read subsumed against the 1st
+  run(a <- "x", g)                 # `a <- "x"` is a promise bound to f's frame
+}                                  # g's q() forces it: `a` is retyped mid-g
+```
+
+Before the fix, `g`'s second read compiled to `ldvar_cached_noRecordFB_` with
+`NoRecord Type#1 (dep: #0)` while `g` returned `"x"`: the `character`
+observation was lost, and the read reported only the `integer` of the first.
+A **default argument** is the same hole by another route — it is a promise
+evaluated in `f`'s frame:
+
+```r
+f <- function(d = (a <- "x")) { a <- 1L; g <- function(q) { a; q(); a }; g(function() d) }
+```
+
+Both reproduced on the pre-fix build. The control — `f` reassigning `a` with
+its own bytecode *after* `g` returns — was, and remains, correctly NoRecord.
+
+**Why nothing caught it.** Rule 0 of `classifyUse` (`isAssignedInPromise`)
+handles promise-assigned names for **`f`'s own uses** only; the per-Code
+`promiseAssignedVars_` set it reads was never consulted when building the
+captures handed to `g`. And `collectAssignedVars` counts `a <- "x"` inside
+`run(...)` as an ordinary body assignment, so `a` entered `controlled`. Default
+arguments were not scanned at all: they live in the formals list, not the body.
+
+**Fix.** `Compiler.cpp` gains a function-wide pre-scan, `promiseAssigned_`
+($P_f$), alongside `innerSuperAssigned_`: `collectPromiseAssignedVars` over the
+body, plus each formal's default expression scanned as already inside a promise.
+`computeCapturesForInner` excludes $P_f$ from both capture sets, in the formals
+loop and the body-locals loop, exactly where $S_f$ is excluded. It is a
+function-wide set rather than `code.top()->defUseAnalysis`'s on purpose: a
+closure literal compiled inside one of `f`'s promises would otherwise see only
+that promise's expression. As with $S_f$, carry-through needs no extra filter —
+a name enters the capture sets only through these two loops.
+
+This changes nothing about how default arguments themselves are compiled (they
+remain unoptimized); the scan only removes the names they may *assign* from what
+inner closures may rely on.
+
+**Cost: none.** All 656 functions in the benchmark suite were compiled with the
+pre-fix and fixed builds and their load classifications diffed: **0 changes**.
+No benchmark captures a variable its enclosing function also assigns in a
+promise, so the generated bytecode is identical.
 
 ### 2A.2 Record-once: the per-invocation `fired` bitmap
 
@@ -2749,7 +2822,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-09-29)
+## 7. Current implementation status (snapshot, 2026-10-13)
 
 Working branch: `recordLessNew2-expressionsNewSchema`, at commit `69c05f03`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
@@ -2995,6 +3068,21 @@ by direct inspection, not recalled:
     **Open:** promise Codes abandoned by a longjmp raised inside them (and
     deopt, once per deopt) still leak; over-records only. Suite impact not yet
     confirmed dynamically.
+
+**Changes landed since (2026-09-29 → 2026-10-13).**
+
+19. **Third capture hole closed: promises of the outer function** (§2A.1.4).
+    Captures handed to an inner closure only need to be *controlled*, not
+    immutable, because none of the enclosing function's bytecode runs while
+    the closure executes (§2A.1.2). Promises the enclosing function created
+    break that: `run(a <- "x", g)` or a default argument `d = (a <- "x")`
+    assigns in its frame whenever forced, possibly between two reads of `a`
+    inside `g`, and `g`'s second read was NoRecord against the first —
+    reproduced on both routes, losing the `character` observation. Fixed by a
+    function-wide `promiseAssigned_` pre-scan (body promise arguments plus
+    default expressions) subtracted from both capture sets in
+    `computeCapturesForInner`. Zero classification changes across all 656
+    benchmark functions.
 
 All build clean and every checked benchmark produces correct results.
 
