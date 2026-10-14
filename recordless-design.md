@@ -282,6 +282,44 @@ prose description:
   in the function, exactly like a call-argument one. Controls with a default
   that assigns nothing, or assigns a *different* name, keep their NoRecord.
   In-context suite diff: zero changes.
+
+  **What the scan treats as inline, and conditional definitions.**
+  `collectPromiseAssignedVars` treats the arguments of `<-`/`=`/`<<-`, `if`,
+  `while`, `for`, `repeat`, `{` and `switch` as compiled inline; the arguments
+  of every other call are treated as promises, so a name assigned there falls
+  under rule 0. Two questions follow from this, both checked against the
+  compiler (external review asked whether the right operand of `&&`/`||` and the
+  arms of `switch` are treated as branches, since they run conditionally — if
+  not, `c && (x <- g()); y <- x` would pass the dominance test):
+  - **`&&`, `||` and inline `switch` arms are branches.** The compiler wraps the
+    right operand of `&&`/`||` and each inline `switch` arm in
+    `enterBranch`/`exitBranch`, so a definition there does not dominate a later
+    use. Verified: `x <- id(1L); switch(k, a = x <- id("s"), b = 0); x` keeps
+    an early read NoRecord (rule 0 is not involved) and the final read records
+    `integer, character`. For `&&`/`||` the scan is in fact *more* conservative
+    than needed — see the last point.
+  - **`switch` with a `...` alternative was a hole (fixed 2026-10-14).** With a
+    `...` arm the compiler does not inline `switch` at all
+    (`if (*arg == R_DotsSymbol) return false` in `compileSpecialCall`) but
+    emits a call to the `switch` special, which evaluates `EXPR` and the chosen
+    arm itself, in our frame, with no `stvar_` of ours. The scan still listed it
+    as inline, so in
+    `function(k, ...) { x <- id(1L); switch(k, a = x <- id("s"), ...); x }`
+    the last `x` was NoRecord against `x <- id(1L)` while it read `"s"`. The
+    scan now treats a `switch` with a `...` argument as non-inline, so names
+    assigned in its arguments fall under rule 0, matching what the compiler
+    does. The other inline forms never fall back without also compiling the
+    code inline (a `for` over a non-fast sequence still compiles its fast-path
+    body inline, so the analysis sees its definitions). In-context suite diff:
+    zero changes.
+  - **Over-conservative: `(`, `&&` and `||`.** These are *not* on the inline
+    list although the compiler inlines all three, so a name assigned inside
+    parentheses or a logical operand is excluded from **every** leaf
+    optimization in the function. Sound, but blunt — e.g. fannkuch's
+    `while ((kk <- perm[[k]]) > 1L)` puts `kk` under rule 0, which is why all
+    its reads record. Adding them to the list would let branch scopes
+    (`&&`/`||`) and plain dominance (`(`) do the work instead. Not done; it
+    needs its own suite measurement.
 - **Free variables that are not stable captures are always recorded.** Only
   formals, outer-*controlled* captures, and locals/params with a reaching def are
   even eligible; an arbitrary free variable from an enclosing scope falls through
@@ -3281,6 +3319,18 @@ by direct inspection, not recalled:
     its definition dominates the closure's creation point. Costs 7 loads: one
     `n.states` read in Qlearn (inherent to the rule) and cholesky's six `U`
     reads (recoverable by fixing the "most recent def only" imprecision).
+
+23. **`switch` with a `...` arm handled by rule 0** (§2A.1.1, found while
+    checking an external-review question). With a `...` alternative the
+    compiler calls the `switch` special instead of inlining it, so an
+    assignment in an arm ran in our frame with no `stvar_`, while the promise
+    scan still treated `switch` as inline: `switch(k, a = x <- id("s"), ...); x`
+    subsumed the last `x` against an earlier def. The scan now treats such a
+    `switch` as non-inline. The review's actual question — are `&&`/`||`
+    operands and inline `switch` arms branches? — checked out: both are
+    wrapped in `enterBranch`/`exitBranch`. Noted as open precision work: `(`,
+    `&&`, `||` are scanned as promises although compiled inline (costs e.g.
+    fannkuch's `kk`). In-context suite diff: zero changes.
 
 All build clean and every checked benchmark produces correct results.
 

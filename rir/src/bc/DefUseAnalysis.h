@@ -704,11 +704,24 @@ class DefUseAnalysis {
             TYPEOF(fun) == SYMSXP &&
             (fun == symbol::Assign || fun == symbol::Assign2 ||
              fun == symbol::SuperAssign);
+        // A `switch` with a `...` alternative is NOT compiled inline: the
+        // compiler gives up (compileSpecialCall, `*arg == R_DotsSymbol`) and
+        // emits a call to the `switch` special, which evaluates EXPR and the
+        // chosen arm itself, in our frame, with no stvar_ of ours — exactly
+        // the invisibility of a promise argument. Treat its arguments as such,
+        // or `switch(k, a = x <- id("s"), ...); x` subsumes the last `x`
+        // against an earlier def while it reads "s".
+        bool switchFallsBack = false;
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::Switch)
+            for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+                if (CAR(s) == R_DotsSymbol)
+                    switchFallsBack = true;
         const bool isInline =
-            isAssign || (TYPEOF(fun) == SYMSXP &&
-                         (fun == symbol::If || fun == symbol::While ||
-                          fun == symbol::For || fun == symbol::Repeat ||
-                          fun == symbol::Block || fun == symbol::Switch));
+            isAssign ||
+            (TYPEOF(fun) == SYMSXP &&
+             (fun == symbol::If || fun == symbol::While || fun == symbol::For ||
+              fun == symbol::Repeat || fun == symbol::Block ||
+              (fun == symbol::Switch && !switchFallsBack)));
         if (inPromise && isAssign) {
             SEXP lhs = CADR(ast);
             while (TYPEOF(lhs) == LANGSXP)
