@@ -711,13 +711,33 @@ class DefUseAnalysis {
         // the invisibility of a promise argument. Treat its arguments as such,
         // or `switch(k, a = x <- id("s"), ...); x` subsumes the last `x`
         // against an earlier def while it reads "s".
-        bool switchFallsBack = false;
-        if (TYPEOF(fun) == SYMSXP && fun == symbol::Switch)
-            for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
-                if (CAR(s) == R_DotsSymbol)
-                    switchFallsBack = true;
+        bool hasDots = false;
+        int nArgs = 0;
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s)) {
+            ++nArgs;
+            if (CAR(s) == R_DotsSymbol)
+                hasDots = true;
+        }
+        const bool switchFallsBack =
+            TYPEOF(fun) == SYMSXP && fun == symbol::Switch && hasDots;
+        // `(`, `&&` and `||` are compiled inline too, but only in exactly the
+        // shapes compileSpecialCall accepts — `(` with one non-`...` argument,
+        // `&&`/`||` with two (a `...` operand is treated as a fall-back here,
+        // conservatively). Any other shape is an ordinary call whose arguments
+        // are promises. Inline, an assignment inside them is a plain stvar_ the
+        // analysis sees: unconditional for `(` and for the left operand, and
+        // inside a branch scope (enterBranch) for the right operand of
+        // `&&`/`||`. Leaving them off this list was sound but put the name
+        // under rule 0 for the whole function — e.g. `while ((kk <- perm[[k]])
+        // > 1L)` made every read of `kk` record.
+        const bool parenInline = TYPEOF(fun) == SYMSXP &&
+                                 fun == symbol::Parenthesis && nArgs == 1 &&
+                                 !hasDots;
+        const bool logicalInline = TYPEOF(fun) == SYMSXP &&
+                                   (fun == symbol::And || fun == symbol::Or) &&
+                                   nArgs == 2 && !hasDots;
         const bool isInline =
-            isAssign ||
+            isAssign || parenInline || logicalInline ||
             (TYPEOF(fun) == SYMSXP &&
              (fun == symbol::If || fun == symbol::While || fun == symbol::For ||
               fun == symbol::Repeat || fun == symbol::Block ||
