@@ -719,7 +719,7 @@ static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, SEXP bodyAst,
-                  bool peelLoop = false) {
+                  bool peelLoop = false, SEXP condAst = R_NilValue) {
     CodeStream& cs = ctx.cs();
 
     BC::Label nextBranch = cs.mkLabel();
@@ -732,6 +732,16 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     if (Compiler::isRecordlessLeafEnabled()) {
         std::unordered_map<SEXP, int> bodyDefs;
         DefUseAnalysis::collectAssignedVars(bodyAst, bodyDefs);
+        // The condition runs every iteration too, so its stores are just as
+        // loop-carried as the body's: a read in the condition that precedes a
+        // store in the condition sees, from the 2nd check on, the value the
+        // previous check stored. Without this,
+        //   k <- id(5L); while ({ k <- k - 1.5; k > 0 }) ...
+        // subsumed the condition's read of `k` against `k <- id(5L)` (integer)
+        // while it read the doubles. collectAssignedVars counts the same
+        // stores trackDef bumps when the condition is compiled, so `seen`
+        // still catches up with `expected`.
+        DefUseAnalysis::collectAssignedVars(condAst, bodyDefs);
         ctx.defUseAnalysis().setLoopBodyDefs(std::move(bodyDefs));
         // enterLoopContext: track that we're in a loop (for RecordOnce) but
         // keep the scope stack at the outer scope — so the condition can be
@@ -1928,7 +1938,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::asbool();
             },
             [&ctx, &body]() { compileExpr(ctx, body, true); }, body,
-            !containsLoop(body));
+            !containsLoop(body), cond);
         clearScope.finish();
 
         if (!voidContext)

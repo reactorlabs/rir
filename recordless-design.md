@@ -312,14 +312,29 @@ prose description:
     code inline (a `for` over a non-fast sequence still compiles its fast-path
     body inline, so the analysis sees its definitions). In-context suite diff:
     zero changes.
-  - **Over-conservative: `(`, `&&` and `||`.** These are *not* on the inline
-    list although the compiler inlines all three, so a name assigned inside
-    parentheses or a logical operand is excluded from **every** leaf
-    optimization in the function. Sound, but blunt — e.g. fannkuch's
-    `while ((kk <- perm[[k]]) > 1L)` puts `kk` under rule 0, which is why all
-    its reads record. Adding them to the list would let branch scopes
-    (`&&`/`||`) and plain dominance (`(`) do the work instead. Not done; it
-    needs its own suite measurement.
+  - **`(`, `&&` and `||` are now on the inline list (`6f5cfda8`)** — but
+    only in exactly the shapes `compileSpecialCall` inlines: `(` with one
+    non-`...` argument, `&&`/`||` with two (a `...` operand is treated as a
+    fall-back, conservatively). Previously all three were scanned as promises
+    although compiled inline, so a name assigned inside parentheses or a
+    logical operand was excluded from **every** leaf optimization in the
+    function. Inline, an assignment there is a plain `stvar_` the analysis
+    sees: unconditional for `(` and the left operand, inside a branch scope
+    for the right operand of `&&`/`||`. Witnesses: `x <- id(1L); x;
+    (x <- id("s")); x` now keeps both reads NoRecord; `c && (x <- …)` still
+    records both types for the final read; the fall-back shapes (3-argument
+    `&&`, 2-argument `(`) stay under rule 0.
+
+    **No effect on the suite (in-context diff: zero changes).** In every
+    benchmark the assignment also sits inside a *comparison or arithmetic
+    operator* — `(kk <- perm[[k]]) > 1L`, `(x <- …) == …` — and those are not
+    on the inline list either, so the name stays under rule 0 because of the
+    outer operator. Freeing e.g. fannkuch's `kk` would need the operators the
+    compiler inlines on the list too. That must be checked operator by
+    operator: some calls compile a guarded fast path *plus* a slow-path call
+    whose arguments are promises (`length(x <- 1)` stores in both), and those
+    must stay off the list. Not done. Prerequisite: the while-condition fix
+    of §2A.4.1, without which `kk` would become exposed.
 - **Free variables that are not stable captures are always recorded.** Only
   formals, outer-*controlled* captures, and locals/params with a reaching def are
   even eligible; an arbitrary free variable from an enclosing scope falls through
@@ -1251,6 +1266,29 @@ currently-open loop body still has `seen < expected` assignments to `name`, a
 store *later in the body* has not been compiled yet, but from iteration 2 onward
 it has already *executed* via the back edge. So "most recent def in source order"
 is not the def that reaches here.
+
+**The pre-scan must cover the `while` condition too (fixed 2026-10-14).** The
+`expected` counts are collected before anything of the loop is compiled —
+including the condition, so in `x <- f(); while (x > 0) x <- g()` the
+condition's read already sees the body's store as pending and is not subsumed
+against `x <- f()` (an external-review question; verified, with and without
+peeling). But `compileWhile` scanned only the **body**, and the condition also
+runs every iteration:
+
+```r
+k <- id(5L); while ({ k <- k - 1.5; k > 0 }) n <- n + 1L
+```
+
+The read of `k` in `k - 1.5` precedes the condition's own store, so from the
+second check on it sees the double the previous check stored — but with the
+store unregistered it was NoRecord against `k <- id(5L)` (`integer` only).
+`compileWhile` now also scans the condition's AST (`for` desugaring passes none:
+its condition is compiler-generated). The condition's stores are tracked when
+compiled, so `seen` still catches up. With peeling, the peeled first check now
+records where only the pre-loop value can reach it — a small, deliberate
+over-approximation. Fannkuch's `while ((kk <- perm[[k]]) > 1L)` was never
+exposed, only because the `>` puts `kk` under rule 0 (§2A.1.1). In-context suite
+diff: zero changes.
 
 **Rule 1 (use-to-use) does not care.** Its gate is:
 
@@ -3331,6 +3369,20 @@ by direct inspection, not recalled:
     wrapped in `enterBranch`/`exitBranch`. Noted as open precision work: `(`,
     `&&`, `||` are scanned as promises although compiled inline (costs e.g.
     fannkuch's `kk`). In-context suite diff: zero changes.
+
+24. **`(`, `&&`, `||` treated as inline by the promise scan** (`6f5cfda8`,
+    §2A.1.1), in exactly the shapes the compiler inlines. Sound by witnesses;
+    no suite effect, because the remaining assignments also sit inside
+    comparison/arithmetic operators that are still scanned as promises.
+    Widening to those operators needs a per-operator check for slow-path
+    promise fallbacks.
+
+25. **`while` condition scanned for loop-carried stores** (§2A.4.1, found
+    while checking an external-review question). Only the body was pre-scanned,
+    so a condition that re-assigns its variable (`while ({ k <- k - 1.5;
+    k > 0 })`) had its read subsumed against the pre-loop def while it saw the
+    condition's own stores. `compileWhile` now scans the condition too.
+    Controls unaffected; in-context suite diff: zero changes.
 
 All build clean and every checked benchmark produces correct results.
 
