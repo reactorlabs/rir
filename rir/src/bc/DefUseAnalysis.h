@@ -582,9 +582,23 @@ class DefUseAnalysis {
             }
         }
 
-        if (d && isLocalOrParam(name) && postDominates(*d) &&
-            d->feedbackSlot != kNoSlot)
-            return {UseKind::NoRecord, d->feedbackSlot,
+        // Def-site subsumption. Uses the DOMINATING def, not the reaching one:
+        // postDominates requires the def and this use to share the innermost
+        // scope with no return/break/next in between, so every path into the
+        // use — around a loop back edge included — passes through the def
+        // first. A later def of the same name further down an enclosing loop
+        // body (what hasUnseenLoopDef guards against) therefore cannot reach
+        // the use and must not block it:
+        //   while (…) { a <- f(); a; a <- g() }
+        // The case that guard exists for — the def outside the loop, the use
+        // inside it — never gets here: different scopes fail postDominates.
+        // defs_ keeps only the most recent def, so nothing rebinds the name
+        // between the two, and a complex-assignment barrier shows up as
+        // kNoSlot.
+        const Def* dd = findDominatingDef(name);
+        if (dd && isLocalOrParam(name) && postDominates(*dd) &&
+            dd->feedbackSlot != kNoSlot)
+            return {UseKind::NoRecord, dd->feedbackSlot,
                     ForceBehaviorKind::FBValue};
 
         // Unique dominating def from an enclosing loop (doesn't post-dominate):
