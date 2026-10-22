@@ -234,7 +234,7 @@ matching rule wins:
 |---|---|---|---|
 | 0 | `isAssignedInPromise(name)` — assigned in a **promise-argument position** | `RecordAlways` | `Always` |
 | 1 | *(eligible)* ∧ ∃ recorded use `ud` with `dominates(ud) ∧ postDominates(ud)` | `NoRecord` → `ud.feedbackSlot` | `FBValue` if local-stvar-reach or for-loop var, else `Infer` |
-| 2 | reaching def `d` ∧ `isLocalOrParam` ∧ `postDominates(*d)` ∧ `d` has a slot | `NoRecord` → `d.feedbackSlot` | `FBValue` |
+| 2 | dominating def `dd` (`findDominatingDef`) ∧ `isLocalOrParam` ∧ `postDominates(*dd)` ∧ `dd` has a slot | `NoRecord` → `dd.feedbackSlot` | `FBValue` |
 | 3 | `d` ∧ local/param ∧ `loopDepth_>0` ∧ `!assignedInInnermostLoop` ∧ `assignedInEnclosingLoop` | `RecordOnce` *(dynamic — bit gets cleared)* | `FBValue` |
 | 4 | *optimizable* ∧ `loopDepth_>0` ∧ `!assignedInEnclosingLoop` | `RecordOnce` *(stable — bit excluded from clear range)* | `FBValue` if local-stvar-reach, else `RecordOnce` |
 | 5 | `isRangeBasedForLoopVar` ∧ `loopDepth_>0` | `RecordOnce` | `FBValue` |
@@ -246,9 +246,10 @@ a dominating def), and ***optimizable*** = `isOuterControlled(name) ∨
 
 Note `isLocalOrParam` is a **conjunct**, not an alternative beside `isFormal` —
 §2A.1.2 for why that is a soundness requirement and §2A.1.3 for what broke when
-it was not. **eligible** simplifies; see §2A.4.1, which also explains why rule 1
-takes `findDominatingDef` while rule 2 takes the back-edge-vetoed
-`findReachingDef`.
+it was not. **eligible** simplifies; see §2A.4.1, which also explains why
+rules 1 and 2 both take `findDominatingDef`, while the RecordOnce rules and
+*optimizable* keep the back-edge-vetoed `findReachingDef` (rule 2 used the
+vetoed one until `524907e2`).
 
 Three consequences worth stating explicitly, none of which were obvious from the
 prose description:
@@ -1245,7 +1246,7 @@ This is the same family of guard as the `isAssignedInPromise` carve-out (rule 0,
 §2A.1.1): both are points where a write happens that the naive `stvar` sequence
 would otherwise misrepresent.
 
-### 2A.4.1 Why the two subsumption rules disagree about loops
+### 2A.4.1 How the subsumption rules treat later in-loop definitions
 
 Rules 1 and 2 both ask "is this read's value already described by an existing
 slot?", and both are gated on dominance — but they take **different** queries for
@@ -1320,18 +1321,58 @@ immune to the back edge:
 - a def **after** here in the body executes before `ud` on the next iteration,
   never in the gap between them.
 
-**Rule 2 (def-to-use) very much cares**, and uses the vetoed `d`:
+**Rule 2 (def-to-use) does not care either — once post-dominance is required.**
+It used to take the vetoed `d`, on the reasoning that its claim — *this read's
+value is the one **that store** wrote* — is broken if a later in-loop store
+reaches the read around the back edge. That is true only when the store is
+*outside* the loop:
 
-```cpp
-if (d && isLocalOrParam(name) && postDominates(*d) && d->feedbackSlot != kNoSlot)
+```r
+a <- f(); while (…) { y <- a; a <- g() }    # 2nd iteration: y sees g()'s value
 ```
 
-The asymmetry is not an inconsistency — the two rules make different claims:
+But rule 2 also requires `postDominates(def)`, i.e. the def and the read in the
+**same innermost scope** with no `return`/`break`/`next` between them. In that
+case the def is inside the loop body before the read, so every path into the
+read — the back edge included — passes through the def first and overwrites
+whatever a later store left:
+
+```r
+while (…) { a <- f(); y <- a; a <- g() }    # y always sees f()'s value
+```
+
+The shape the veto exists for never satisfies `postDominates` (different
+scopes), so the veto added nothing to rule 2 and only refused the safe shape.
+Since `524907e2` rule 2 takes `findDominatingDef` as rule 1 does:
+
+```cpp
+const Def* dd = findDominatingDef(name);
+if (dd && isLocalOrParam(name) && postDominates(*dd) && dd->feedbackSlot != kNoSlot)
+```
+
+`defs_` keeps only the most recent def, so nothing rebinds the name between
+`dd` and the read; a def in a `while` condition is outside the body scope and
+cannot pair with a body read; a complex-assignment barrier leaves `dd` with no
+slot. The **RecordOnce** rules (3, 4) and the *optimizable* gate keep the vetoed
+`findReachingDef`: they reason about values across iterations, where a pending
+in-loop store does matter.
 
 | | claim | effect of a later in-loop def |
 |---|---|---|
 | rule 1, use-to-use | *these two **reads** see the same value as each other* | none — both re-execute each iteration and see whatever is live |
-| rule 2, def-to-use | *this read's value is the one **that store** wrote* | fatal — from iteration 2 the live value comes from the back edge |
+| rule 2, def-to-use | *this read's value is the one **that store** wrote* | none, given post-dominance — the def re-executes before the read every iteration |
+| rules 3–4, RecordOnce | *the value is invariant across iterations of this loop* | decisive — hence the veto |
+
+**Measured** on the paper corpus (43 programs, stats builds, `02c05117` →
+`524907e2`): the NoRecord share of leaf records rose in 13 programs and fell in
+none; mean 8.94% → 9.81%, mean leaf skip 31.77% → 32.65%. Almost all of it is
+four programs: `sieve1` +14.2 pp (13.5% → 27.6%; the `while (j <= n)` test after
+`j <- …`), `fasta_naive_2` +10.0 pp (0.1% → 10.2%), `fannkuchredux_naive`
++7.9 pp (21.6% → 29.5%; the swap's `t`), `fannkuchredux` +4.2 pp. The idiom is
+usually *update, then test, with a reset later in the loop*:
+`pos <- next_pos; if (pos > len) pos <- pos - len`. Every gained skip was
+previously RecordAlways; no other class moved. In-context classification diff:
+78 loads, all record → NoRecord.
 
 **What rule 1's third disjunct buys, measured.** Removing
 `(isLocalOrParam(name) && findDominatingDef(name))` and recompiling turns three
@@ -3383,6 +3424,16 @@ by direct inspection, not recalled:
     k > 0 })`) had its read subsumed against the pre-loop def while it saw the
     condition's own stores. `compileWhile` now scans the condition too.
     Controls unaffected; in-context suite diff: zero changes.
+
+26. **Rule 2 uses the dominating def** (`524907e2`, §2A.4.1). It took the
+    loop-vetoed `findReachingDef`, so `while (…) { a <- f(); a; a <- g() }`
+    recorded the read every iteration because of the later `a <- g()` — which
+    cannot reach it: post-dominance already confines rule 2 to a def in the
+    read's own scope, executed before it on every iteration. Paper corpus:
+    NoRecord share up in 13 of 43 programs, down in none (mean 8.94% →
+    9.81%); `sieve1` +14.2 pp, `fasta_naive_2` +10.0 pp,
+    `fannkuchredux_naive` +7.9 pp, `fannkuchredux` +4.2 pp — three of them in
+    the paper's list of blocked programs. All 86 runs correct.
 
 All build clean and every checked benchmark produces correct results.
 
