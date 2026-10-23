@@ -754,7 +754,11 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
         auto savedDefs = (Compiler::isRecordlessLeafEnabled())
                              ? ctx.defUseAnalysis().saveState()
                              : DefUseAnalysis::DefsSnapshot{};
+        if (Compiler::isRecordlessLeafEnabled())
+            ctx.defUseAnalysis().enterWhileCondition();
         compileCond();
+        if (Compiler::isRecordlessLeafEnabled())
+            ctx.defUseAnalysis().exitWhileCondition();
         cs << ctx.recordTest() << BC::brfalse(breakBranch);
         if (Compiler::isRecordlessLeafEnabled())
             ctx.defUseAnalysis().enterLoopScope();
@@ -766,7 +770,13 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     }
 
     cs << nextBranch;
+    // The condition is compiled in the enclosing scope; rule 2 needs to know
+    // it is in one (see classifyUse).
+    if (Compiler::isRecordlessLeafEnabled())
+        ctx.defUseAnalysis().enterWhileCondition();
     compileCond();
+    if (Compiler::isRecordlessLeafEnabled())
+        ctx.defUseAnalysis().exitWhileCondition();
     cs << BC::brfalse(breakBranch);
 
     if (Compiler::isRecordlessLeafEnabled())

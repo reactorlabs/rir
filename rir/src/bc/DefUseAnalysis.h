@@ -82,6 +82,9 @@ class DefUseAnalysis {
         int scopeId;
         std::unordered_map<SEXP, int> expected;
         std::unordered_map<SEXP, int> seen;
+        // True while this loop's `while` CONDITION is being compiled. See
+        // rule 2 in classifyUse.
+        bool inCondition = false;
     };
 
     struct DefsSnapshot {
@@ -442,6 +445,15 @@ class DefUseAnalysis {
     void setLoopBodyDefs(std::unordered_map<SEXP, int> expected) {
         loopBodyDefs_.push_back({currentScopeId(), std::move(expected), {}});
     }
+    // Bracket the compilation of the innermost loop's `while` condition.
+    void enterWhileCondition() {
+        if (!loopBodyDefs_.empty())
+            loopBodyDefs_.back().inCondition = true;
+    }
+    void exitWhileCondition() {
+        if (!loopBodyDefs_.empty())
+            loopBodyDefs_.back().inCondition = false;
+    }
     void clearLoopBodyDefs() { loopBodyDefs_.pop_back(); }
 
     void pushForLoopVar(SEXP sym) { ++forLoopVarDepth_[sym]; }
@@ -563,8 +575,44 @@ class DefUseAnalysis {
         // promise. Used to pick FBValue vs Infer.
         const bool hasLocalStvarReach = d != nullptr && isLocalOrParam(name);
 
-        if (optimizable || isForLoopVar(name) ||
-            (isLocalOrParam(name) && findDominatingDef(name))) {
+        // A `while` condition is compiled in the scope ENCLOSING its loop L
+        // (compileWhile: enterLoopContext, no loop scope), so dominance and
+        // post-dominance cannot see that it re-runs every iteration: a source
+        // before the loop — a def (rule 2) or a recorded read (rule 1) — looks
+        // like it reaches the condition, while from the 2nd check on the
+        // condition reads whatever L stored:
+        //   x <- n;   while (x > 0) x <- x - 1.5
+        //   y <- x;   while (x > 0) x <- x - 1.5     (x a formal: rule 1)
+        // So both subsumption rules refuse a use in L's condition when the name
+        // is assigned anywhere in L (condition, body, nested loops — the
+        // pre-scan counts them all). If L never assigns it, every check sees
+        // the source's value and subsumption stays valid:
+        //   x <- f(); while (x > i) i <- i + 1L
+        // This also refuses a use following an assignment earlier in the SAME
+        // condition (`while ({ k <- k - 1.5; k > 0 })`, the `k` in `k > 0`),
+        // which would be safe; such conditions are rare.
+        //
+        // Walk outward while each loop is in its condition, not just the
+        // innermost one: a loop nested inside another loop's condition has its
+        // own condition compiled in the same (enclosing) scope too, so the
+        // outer loop's stores reach it just the same —
+        //   x <- id(1L); while ({ while (x > 100) NULL; x < 5 }) x <- x + 2.5
+        // (the inner condition never assigns x; the outer loop does). Stop at
+        // the first loop that is in its BODY: that body has its own scope,
+        // which already separates the use from any source outside it.
+        bool vetoedInCondition = false;
+        for (auto L = loopBodyDefs_.rbegin();
+             L != loopBodyDefs_.rend() && L->inCondition; ++L) {
+            auto it = L->expected.find(name);
+            if (it != L->expected.end() && it->second > 0) {
+                vetoedInCondition = true;
+                break;
+            }
+        }
+
+        if (!vetoedInCondition &&
+            (optimizable || isForLoopVar(name) ||
+             (isLocalOrParam(name) && findDominatingDef(name)))) {
             // useDefs dedup: a previously recorded use that dominates and
             // post-dominates this point has the same value — skip re-recording.
             // For-loop iter vars and locals with a dominating def (even when
@@ -582,22 +630,20 @@ class DefUseAnalysis {
             }
         }
 
-        // Def-site subsumption. Uses the DOMINATING def, not the reaching one:
-        // postDominates requires the def and this use to share the innermost
-        // scope with no return/break/next in between, so every path into the
-        // use — around a loop back edge included — passes through the def
-        // first. A later def of the same name further down an enclosing loop
-        // body (what hasUnseenLoopDef guards against) therefore cannot reach
-        // the use and must not block it:
-        //   while (…) { a <- f(); a; a <- g() }
-        // The case that guard exists for — the def outside the loop, the use
-        // inside it — never gets here: different scopes fail postDominates.
+        // Def-site subsumption against the dominating def `dd`. A store can
+        // reach this use without passing through dd only around the back edge
+        // of a loop that contains the use but not dd. Scope rules out almost
+        // all of them: postDominates needs dd and the use in the same scope,
+        // and a loop body has its own scope, so a body use pairs only with a
+        // def inside that loop, whose back edge re-runs the def first:
+        //   while (…) { a <- f(); a; a <- g() }      // NoRecord, correct
+        // The exception is a `while` condition — vetoedInCondition above.
         // defs_ keeps only the most recent def, so nothing rebinds the name
-        // between the two, and a complex-assignment barrier shows up as
+        // between dd and the use; a complex-assignment barrier shows up as
         // kNoSlot.
         const Def* dd = findDominatingDef(name);
-        if (dd && isLocalOrParam(name) && postDominates(*dd) &&
-            dd->feedbackSlot != kNoSlot)
+        if (dd && !vetoedInCondition && isLocalOrParam(name) &&
+            postDominates(*dd) && dd->feedbackSlot != kNoSlot)
             return {UseKind::NoRecord, dd->feedbackSlot,
                     ForceBehaviorKind::FBValue};
 
