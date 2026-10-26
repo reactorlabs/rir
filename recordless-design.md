@@ -233,8 +233,8 @@ matching rule wins:
 | # | condition | result | FB kind |
 |---|---|---|---|
 | 0 | `isAssignedInPromise(name)` — assigned in a **promise-argument position** | `RecordAlways` | `Always` |
-| 1 | *(eligible)* ∧ ∃ recorded use `ud` with `dominates(ud) ∧ postDominates(ud)` | `NoRecord` → `ud.feedbackSlot` | `FBValue` if local-stvar-reach or for-loop var, else `Infer` |
-| 2 | dominating def `dd` (`findDominatingDef`) ∧ `isLocalOrParam` ∧ `postDominates(*dd)` ∧ `dd` has a slot | `NoRecord` → `dd.feedbackSlot` | `FBValue` |
+| 1 | *(eligible)* ∧ `¬vetoedInCondition` ∧ ∃ recorded use `ud` with `dominates(ud) ∧ postDominates(ud)` | `NoRecord` → `ud.feedbackSlot` | `FBValue` if local-stvar-reach or for-loop var, else `Infer` |
+| 2 | dominating def `dd` (`findDominatingDef`) ∧ `¬vetoedInCondition` ∧ `isLocalOrParam` ∧ `postDominates(*dd)` ∧ `dd` has a slot | `NoRecord` → `dd.feedbackSlot` | `FBValue` |
 | 3 | `d` ∧ local/param ∧ `loopDepth_>0` ∧ `!assignedInInnermostLoop` ∧ `assignedInEnclosingLoop` | `RecordOnce` *(dynamic — bit gets cleared)* | `FBValue` |
 | 4 | *optimizable* ∧ `loopDepth_>0` ∧ `!assignedInEnclosingLoop` | `RecordOnce` *(stable — bit excluded from clear range)* | `FBValue` if local-stvar-reach, else `RecordOnce` |
 | 5 | `isRangeBasedForLoopVar` ∧ `loopDepth_>0` | `RecordOnce` | `FBValue` |
@@ -249,7 +249,9 @@ Note `isLocalOrParam` is a **conjunct**, not an alternative beside `isFormal` �
 it was not. **eligible** simplifies; see §2A.4.1, which also explains why
 rules 1 and 2 both take `findDominatingDef`, while the RecordOnce rules and
 *optimizable* keep the back-edge-vetoed `findReachingDef` (rule 2 used the
-vetoed one until `524907e2`).
+vetoed one until `524907e2`). `vetoedInCondition` — the read is in a `while`
+condition whose loop assigns the name — is also defined there (§2A.4.1, "The
+`while` condition veto").
 
 Three consequences worth stating explicitly, none of which were obvious from the
 prose description:
@@ -1341,38 +1343,131 @@ whatever a later store left:
 while (…) { a <- f(); y <- a; a <- g() }    # y always sees f()'s value
 ```
 
-The shape the veto exists for never satisfies `postDominates` (different
-scopes), so the veto added nothing to rule 2 and only refused the safe shape.
-Since `524907e2` rule 2 takes `findDominatingDef` as rule 1 does:
+Inside a loop **body** the shape the back-edge veto exists for never satisfies
+`postDominates` (different scopes), so there the veto added nothing to rule 2
+and only refused the safe shape. Since `524907e2` rule 2 takes
+`findDominatingDef` as rule 1 does — but gated by the condition veto below,
+which `524907e2` lacked:
 
 ```cpp
 const Def* dd = findDominatingDef(name);
-if (dd && isLocalOrParam(name) && postDominates(*dd) && dd->feedbackSlot != kNoSlot)
+if (dd && !vetoedInCondition && isLocalOrParam(name) &&
+    postDominates(*dd) && dd->feedbackSlot != kNoSlot)
 ```
 
 `defs_` keeps only the most recent def, so nothing rebinds the name between
-`dd` and the read; a def in a `while` condition is outside the body scope and
-cannot pair with a body read; a complex-assignment barrier leaves `dd` with no
-slot. The **RecordOnce** rules (3, 4) and the *optimizable* gate keep the vetoed
+`dd` and the read; a complex-assignment barrier leaves `dd` with no slot. The
+**RecordOnce** rules (3, 4) and the *optimizable* gate keep the vetoed
 `findReachingDef`: they reason about values across iterations, where a pending
 in-loop store does matter.
 
 | | claim | effect of a later in-loop def |
 |---|---|---|
-| rule 1, use-to-use | *these two **reads** see the same value as each other* | none — both re-execute each iteration and see whatever is live |
-| rule 2, def-to-use | *this read's value is the one **that store** wrote* | none, given post-dominance — the def re-executes before the read every iteration |
-| rules 3–4, RecordOnce | *the value is invariant across iterations of this loop* | decisive — hence the veto |
+| rule 1, use-to-use | *these two **reads** see the same value as each other* | none in a body — both re-execute each iteration and see whatever is live; in a `while` condition see the veto below |
+| rule 2, def-to-use | *this read's value is the one **that store** wrote* | none in a body, given post-dominance — the def re-executes before the read every iteration; in a `while` condition see the veto below |
+| rules 3–4, RecordOnce | *the value is invariant across iterations of this loop* | decisive — hence the back-edge veto |
 
-**Measured** on the paper corpus (43 programs, stats builds, `02c05117` →
-`524907e2`): the NoRecord share of leaf records rose in 13 programs and fell in
-none; mean 8.94% → 9.81%, mean leaf skip 31.77% → 32.65%. Almost all of it is
-four programs: `sieve1` +14.2 pp (13.5% → 27.6%; the `while (j <= n)` test after
-`j <- …`), `fasta_naive_2` +10.0 pp (0.1% → 10.2%), `fannkuchredux_naive`
-+7.9 pp (21.6% → 29.5%; the swap's `t`), `fannkuchredux` +4.2 pp. The idiom is
-usually *update, then test, with a reset later in the loop*:
-`pos <- next_pos; if (pos > len) pos <- pos - len`. Every gained skip was
-previously RecordAlways; no other class moved. In-context classification diff:
-78 loads, all record → NoRecord.
+#### The `while` condition veto (found in external review, 2026-10-23)
+
+The argument above — "post-dominance confines the def to the read's own scope,
+so it runs before the read on every iteration" — holds for a loop **body**,
+which has its own scope. It fails for a `while` **condition**: `compileWhile`
+compiles the condition in the *enclosing* scope (`enterLoopContext`, not
+`enterLoopScope`), the same scope as a def before the loop. So `524907e2` was
+unsound:
+
+```r
+f <- function() {
+  x <- id(1L)        # integer
+  while (x < 5) {    # read of x: same scope as the def, post-dominates it
+    x <- x + 2.5     # double
+  }
+  x
+}
+```
+
+The read in `x < 5` was NoRecord against `x <- id(1L)` and its feedback said
+`integer` only, while from the second check on it reads a double. This also
+undid the condition pre-scan above (#25): `while ({ k <- k - 1.5; k > 0 })`
+was again subsumed against the pre-loop `k`. Rule 1 had the **same hole before
+`524907e2`**: a condition read could be subsumed against an earlier recorded
+read of the same name before the loop (`x; while (x < 5) x <- x + 2.5`), for
+the same reason.
+
+**Fix.** `LoopBodyInfo` carries an `inCondition` flag, set by
+`enterWhileCondition`/`exitWhileCondition` around both `compileCond()` calls
+in `compileWhile` (peeled copy and loop copy). `classifyUse` computes, before
+rule 1:
+
+```cpp
+bool vetoedInCondition = false;
+for (auto L = loopBodyDefs_.rbegin();
+     L != loopBodyDefs_.rend() && L->inCondition; ++L) {
+    auto it = L->expected.find(name);
+    if (it != L->expected.end() && it->second > 0) { vetoedInCondition = true; break; }
+}
+```
+
+and both rule 1 and rule 2 require `!vetoedInCondition`. The read then falls to
+rules 3–4 and records. The veto fires only if the loop **assigns the name**
+(`expected` comes from the pre-scan of body *and* condition), so a condition
+read of a name the loop never writes stays NoRecord.
+
+**Why walk the stack, not just `back()`.** Two loops can be in their condition
+at once only if a loop is written *inside* another loop's `while (…)` — in
+practice a `{ }` condition block, e.g. do-while emulation containing a loop:
+
+```r
+x <- id(1L)
+while ({
+  while (x > 100) NULL   # inner condition: inner loop does not assign x
+  x <- x + 2.5           # the outer loop does
+  x < 5
+}) NULL
+```
+
+Both conditions compile in the function's scope, so `x > 100` post-dominates
+`x <- id(1L)`; checking only the innermost loop finds no def of `x` and
+subsumes it. The walk continues outward while each loop is in its condition and
+reaches the outer loop. It stops at the first loop in its **body**: that body
+has its own scope, which already separates the read from defs outside it. For
+ordinary nested loops, `while (c) { while (c2) … }`, the walk therefore never
+gets past the innermost entry. A simpler alternative — keep `back()` only and
+veto every read whenever more than one condition is open — is equally sound but
+needs its own counter, so it is not actually simpler.
+
+Why a flag and not something on `Def`: the question is not *where the def was
+made* but *whether this read re-executes after the body*, and that is a
+property of the read's position. Earlier attempts stamped defs with the loop
+depth at creation (broken: sequential loops reuse stack positions) and then
+with a per-loop entry timestamp (sound, same results as the flag, more state);
+both were removed.
+
+**Cost.** A name read in a condition after being assigned earlier in the
+*same* condition now records: in `while ({ k <- k - 1.5; k > 0 })` the `k` in
+`k > 0` would be safe to subsume against the store just before it, but the veto
+does not distinguish it. With peeling, the peeled first check is vetoed too,
+although only the pre-loop value reaches it.
+
+**Witnesses** (current build, peeling on and off): the example above records
+`integer, double`; #25's `k` reads record; the rule-1 case records; the
+do-while-with-inner-loop case records `integer, double` at `x > 100`. Controls
+stay NoRecord: a condition reading a name the loop does not assign; `while (…)
+{ a <- f(); a; a <- g() }` (the motivating case of `524907e2`); a def in an
+outer body read in an inner loop's condition; the swap's `t`. Rewriting f7-style
+code as `repeat { …; if (!c) break; … }` puts the inner loop in a body scope,
+where neither the problem nor the walk arises.
+
+**Measured** on the paper corpus (43 programs, stats builds, `02c05117` → the
+fixed version): mean NoRecord share 8.94% → 9.07%, mean leaf skip 31.77% →
+31.91%. The gain is mostly `fannkuchredux_naive` (+5.27 pp, the swap's `t`),
+with small gains in `fasta*`, `fastaredux*`, `Mandelbrot` and
+`reversecomplement_naive`. In-context classification diff: 61 loads record →
+NoRecord vs `02c05117`; 17 NoRecord → record vs `524907e2`. Zero changes between
+the `back()`-only and walking versions. **The `524907e2` numbers (8.94% →
+9.81%; `sieve1` +14.2 pp, `fasta_naive_2` +10.0 pp, `fannkuchredux` +4.2 pp,
+`pidigits`) were the unsound condition reads and are withdrawn** — e.g.
+`sieve1`'s `while (j <= n)` after `j <- …`, with `j` assigned in the body.
 
 **What rule 1's third disjunct buys, measured.** Removing
 `(isLocalOrParam(name) && findDominatingDef(name))` and recompiling turns three
@@ -3429,11 +3524,21 @@ by direct inspection, not recalled:
     loop-vetoed `findReachingDef`, so `while (…) { a <- f(); a; a <- g() }`
     recorded the read every iteration because of the later `a <- g()` — which
     cannot reach it: post-dominance already confines rule 2 to a def in the
-    read's own scope, executed before it on every iteration. Paper corpus:
-    NoRecord share up in 13 of 43 programs, down in none (mean 8.94% →
-    9.81%); `sieve1` +14.2 pp, `fasta_naive_2` +10.0 pp,
-    `fannkuchredux_naive` +7.9 pp, `fannkuchredux` +4.2 pp — three of them in
-    the paper's list of blocked programs. All 86 runs correct.
+    read's own scope, executed before it on every iteration. **That argument
+    holds for loop bodies only; `524907e2` was unsound for `while`-condition
+    reads** — see entry 27. Its reported gains (mean 8.94% → 9.81%, `sieve1`
+    +14.2 pp, …) are withdrawn.
+
+27. **`while` condition veto** (§2A.4.1, external review, uncommitted on top of
+    `4862cbc7`). A `while` condition compiles in the enclosing scope, so a
+    condition read post-dominated a pre-loop def: `x <- id(1L); while (x < 5)
+    x <- x + 2.5` was NoRecord with `integer`-only feedback (and #25's case
+    regressed). Rule 1 had the same hole even before `524907e2`. Now both rules
+    are skipped when the read is in a `while` condition whose loop assigns the
+    name; the check walks outward through every loop currently in its
+    condition, which matters only for a loop written inside a condition block.
+    Corrected corpus effect of `524907e2` + veto vs `02c05117`: mean NoRecord
+    8.94% → 9.07%, `fannkuchredux_naive` +5.27 pp; 61 loads record → NoRecord.
 
 All build clean and every checked benchmark produces correct results.
 
