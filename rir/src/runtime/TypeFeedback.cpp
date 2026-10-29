@@ -434,8 +434,14 @@ void TypeFeedback::reconstructFeedback() {
 
         case ForceBehaviorKind::FBValue:
             // Statically a value: the binding was last written by stvar_,
-            // which stores an evaluated value off the stack.
-            types_[i].stateBeforeLastForce = ObservedValues::value;
+            // which stores an evaluated value off the stack. Only for a site
+            // that ran, though: a site that never executed (a branch not
+            // taken, a loop run zero times) stays `unknown`, as it would in a
+            // record-everything build. Every execution records at least one
+            // type, so an empty type record (after the copy above, for a
+            // dependent) is exactly "never ran".
+            if (types_[i].numTypes > 0)
+                types_[i].stateBeforeLastForce = ObservedValues::value;
             break;
 
         case ForceBehaviorKind::Infer: {
