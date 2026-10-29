@@ -418,21 +418,22 @@ namespace {
 void printTF(ObservedValues& tf, std::ostream& out) {
     if (!tf.numTypes) {
         out << "<?>";
-        return;
-    }
-
-    if (tf.numTypes == ObservedValues::MaxTypes) {
-        out << "any";
     } else {
-        for (size_t i = 0; i < tf.numTypes; ++i) {
-            out << Rf_type2char(tf.seen[i]);
-            if (i != (unsigned)tf.numTypes - 1)
-                out << ", ";
+        if (tf.numTypes == ObservedValues::MaxTypes) {
+            out << "any";
+        } else {
+            for (size_t i = 0; i < tf.numTypes; ++i) {
+                out << Rf_type2char(tf.seen[i]);
+                if (i != (unsigned)tf.numTypes - 1)
+                    out << ", ";
+            }
         }
+
+        out << " (" << (tf.object ? "o" : "") << (tf.attribs ? "a" : "")
+            << (tf.notFastVecelt ? "v" : "") << (!tf.notScalar ? "s" : "")
+            << ")";
     }
 
-    out << " (" << (tf.object ? "o" : "") << (tf.attribs ? "a" : "")
-        << (tf.notFastVecelt ? "v" : "") << (!tf.notScalar ? "s" : "") << ")";
     if (tf.stateBeforeLastForce !=
         ObservedValues::StateBeforeLastForce::unknown) {
         out << " | "
