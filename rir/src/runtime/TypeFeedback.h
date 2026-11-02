@@ -649,6 +649,24 @@ struct ObservedValues {
         }
     }
 
+    // A third state outside the pair: dirty with an owner that never consumes.
+    // kPinned is not the address of any frame-local, so disarmIfOwner never
+    // matches it and the slot records on every execution from here on.
+    //
+    // For the parent of a NoRecord dependent whose source just saw a value
+    // outside the signature domain. The dependent emits nothing, and its
+    // source may run less often than it does (a pre-loop def read in a
+    // `while` condition), so no later execution would re-arm the parent, while
+    // `+` on an object may dispatch to a method whose result type changes.
+    // Permanent because nothing ever observes the dependent's value to say it
+    // is back in the domain. Overriding a live owner's stamp is safe: it can
+    // only make that owner record more, never skip.
+    static constexpr uintptr_t kPinned = 1;
+    __attribute__((__always_inline__)) void pin() {
+        dirty = true;
+        activationStamp = kPinned;
+    }
+
   public:
     // Inner-node record for a node the caller has ALREADY established is dirty.
     // The interpreter tests `dirty` inline before calling, so that the common
@@ -971,9 +989,17 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         if (slot.hasParent()) // this node's own parent (leaf-with-parent case)
             types_[slot.parentSlot()].armIfClean(act);
         if (slot.hasDeps) { // almost never: see ObservedValues::hasDeps
+            // Outside the domain the dependents' parents are pinned rather
+            // than armed: see ObservedValues::pin.
+            const bool pin = slot.lastSig == ObservedValues::SigAlwaysDirty;
             for (uint32_t d : noRecordSourceToDeps_[idx]) { // deps' parents
-                if (types_[d].hasParent())
-                    types_[types_[d].parentSlot()].armIfClean(act);
+                if (types_[d].hasParent()) {
+                    ObservedValues& parent = types_[types_[d].parentSlot()];
+                    if (pin)
+                        parent.pin();
+                    else
+                        parent.armIfClean(act);
+                }
             }
         }
     }

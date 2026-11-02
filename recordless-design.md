@@ -2340,6 +2340,90 @@ set, consulted only under `RIR_RECORD_STATS`).
   feedback slot* does **not** require tracking: `trackDef` records whatever slot
   the value-record stamp names, regardless of whether that slot was ever
   registered in the tree (§2A.4).
+- **Outside the signature domain, the operand's producer must notify on *every*
+  execution of the consumer (found in external review, fixed 2026-10-29).** An
+  inner node records only when armed, and a value outside the domain (an
+  object, attributes richer than a lone `dim`, S4, length 0) gets
+  `SigAlwaysDirty`, which never compares equal — so the parent is re-armed
+  *each time the child records*. That gives "outside the domain, the parent
+  records on every execution" only while the child records every time the
+  parent runs. The two leaf optimizations break exactly that:
+
+  ```r
+  `+.ctr` <- function(e1, e2) { e1$n <- e1$n + 1L; if (e1$n > 2L) 2.5 else 1L }
+  f1 <- function(x, n) { y <- 0; for (i in 1:n) { y <- x + 1L }; y }            # RecordOnce leaf
+  f2 <- function() { x <- mk(); i <- 0L; while ((x + 1L) < 2) i <- i + 1L; i }   # NoRecord leaf
+  ```
+
+  `x` is an environment-backed S3 object whose `+` method changes its state,
+  so the result type changes although `x` is never reassigned. In `f1` the
+  RecordOnce gate skips the leaf from the second iteration on; in `f2` the
+  NoRecord read emits nothing and its source (`mk()`'s result) ran once,
+  before the loop. Either way nothing re-arms `+`, which recorded `integer`
+  only while it returned `2.5`. The loss needs a dispatched method whose
+  result type changes for an unchanged binding (reference-semantics state,
+  globals, randomness) — or, for a non-object outside the domain, another
+  operand that changes *within* its signature (`c(a=1,b=2) + y` keeps or drops
+  `names` as `y`'s length goes 2 → 4). It is lost feedback, not a miscompile:
+  PIR guards its speculation, so the cost is a deopt.
+
+  A NoRecord use can run more often than its source only when the source is a
+  pre-loop def read in a `while` condition (the condition compiles in the
+  enclosing scope, §2A.4.1), or when the source is itself RecordOnce — rules
+  1 and 2 otherwise keep source and use in the same scope.
+
+  **Fix A — a RecordOnce leaf stays armed outside the domain.** In
+  `record_type_leaf_notify_once_` the once-bit is set only if the value just
+  recorded has a real signature:
+
+  ```cpp
+  if (typeFeedback->types(RECORD_TYPE_ONCE_SLOT_IDX(raw)).lastSig !=
+      ObservedValues::SigAlwaysDirty)
+      RECORD_TYPE_ONCE_SET(fired, raw);
+  ```
+
+  `lastSig` holds this execution's signature on every path out of
+  `doRecordAndSign`, including the early-out. While the value is
+  unsummarisable the leaf behaves as RecordAlways; the next invocation starts
+  with cleared bits, so it is not permanent. The skip path is untouched — the
+  compare runs only on executions that already passed the gate. This also
+  covers a NoRecord use whose source is RecordOnce.
+
+  **Fix B1 — pin the dependents' parents.** For a pre-loop source the source
+  really does run once, so only the consumer can carry the state. When a
+  source with `SigAlwaysDirty` reaches `markRelatedDirty`'s dependents loop,
+  each dependent's parent is **pinned** instead of armed:
+  `ObservedValues::pin()` sets `dirty` with `activationStamp = kPinned` (1,
+  never the address of a frame-local), so `disarmIfOwner` never clears it and
+  the parent records on every execution from then on. Overriding a live
+  owner's stamp is safe — it can only make that owner record more. Pinning is
+  **permanent** (until the feedback is reset) because nothing ever observes
+  the dependent's value again to say it is back in the domain; this is why
+  the review's "sticky until the operand re-enters the domain" cannot be
+  implemented for NoRecord. It is a narrow return of the permanent latch of
+  §2B.2.1, limited to NoRecord dependents of unsummarisable values. The
+  alternative, B2 — never make a `while`-condition read NoRecord against a
+  pre-loop source, so it becomes RecordOnce and Fix A applies — needs no
+  runtime state but gives up rule 2's condition-read gains; not taken.
+
+  **The test is `SigAlwaysDirty`, not objectness**, in both fixes. The
+  non-object cases above need it too, and `markRelatedDirty` has only the
+  slot, whose `object` bit is cumulative ("ever saw an object"), not the
+  current value. The price is that a named-vector or length-0 source also pins.
+
+  Nested inner nodes need nothing more: a child whose operands are all in the
+  domain and unchanged yields a deterministic in-domain result, and a child
+  with an operand outside it is now armed on every execution, records, gets
+  `SigAlwaysDirty` itself and passes it on.
+
+  | witness | `+` before | after |
+  |---|---|---|
+  | `f1`, RecordOnce leaf | `integer` | `integer, double` (A) |
+  | `f3`: `for (…) { z <- x; y <- x + 1L }`, RecordOnce source | `integer` | `integer, double` (A; B1 also pins) |
+  | `f2`, `while` condition, pre-loop source | `integer` | `integer, double` (B1, `dirty: 1`) |
+  | `f4`, `f1` with `x <- 1L` | `integer` | `integer`, still once-gated, nothing pinned |
+
+  Both fixes are runtime-only; bytecode is unchanged.
 - **The `tracked` vs `untracked` distinction is the bridge.**
   `recordTypeTracked(isParent)` registers a slot in the expression-tree structure
   (parent/leaf role) so the post-pass can specialize it and an enclosing inner
@@ -2929,9 +3013,25 @@ source, shared with the type dimension).
 ```
 Always     → the recorded value
 RecordOnce → the recorded value
-FBValue    → value
+FBValue    → value, if the slot's type record is non-empty; else unknown
 Infer      → min(FB(typeDeps_[i]), evaluatedPromise)     // resolve source first
 ```
+
+**Unexecuted sites stay `unknown` (`8fccf0af`, external review).** `FBValue`
+used to be written unconditionally, so a def-to-use NoRecord in a branch never
+taken, or a RecordOnce use in a loop run zero times, became `value` where the
+baseline leaves `unknown` — a formal break of losslessness, though harmless in
+practice (an empty type record gives the compiler nothing to speculate on). Every
+execution records at least one type, so after the type copy an empty record
+(`numTypes == 0`) is exactly "never ran" (for a dependent: its source never
+ran). `Infer` needed no change: an unexecuted source is `unknown` (0), and
+`min(unknown, evaluatedPromise)` stays `unknown`.
+
+One gap remains, shared with the type copy: post-dominance excludes
+`return`/`break`/`next` between a source and its NoRecord use, but not an R
+error. If the source ran and an error aborted the function before the use, the
+baseline leaves the use's slot empty while reconstruction copies the source's
+types (and now `value`). Losslessness holds on error-free paths.
 
 `Infer` needs its source resolved before itself. The forward iteration order
 already guarantees this — a dep always references a lower-numbered slot — and
@@ -3539,6 +3639,25 @@ by direct inspection, not recalled:
     condition, which matters only for a loop written inside a condition block.
     Corrected corpus effect of `524907e2` + veto vs `02c05117`: mean NoRecord
     8.94% → 9.07%, `fannkuchredux_naive` +5.27 pp; 61 loads record → NoRecord.
+    Committed as `9fb4e4d4`. On areWeFast mandelbrot, bytecode and record
+    stats (1 and 15 iterations) are byte-identical to `4862cbc7`, as are
+    instructions per steady-state iteration; the wall-time gap seen there
+    flipped sign between runs (shared machine), i.e. noise.
+
+28. **Reconstruction leaves unexecuted `FBValue` sites `unknown`** (`8fccf0af`,
+    §4.6, external review). `value` is now written only when the slot's type
+    record is non-empty.
+
+29. **Operands outside the signature domain keep re-arming their parent**
+    (§2C.4, external review, uncommitted). A RecordOnce leaf, or a NoRecord
+    use whose source ran less often, stopped notifying, so `x + 1L` on an
+    object whose `+` method changes its result type recorded `integer` only.
+    Fix A: a RecordOnce leaf does not set its once-bit while its value has
+    `SigAlwaysDirty`. Fix B1: a `SigAlwaysDirty` source pins its NoRecord
+    dependents' parents permanently. Runtime-only. Paper corpus (43
+    programs, stats builds, before vs after): every CSV byte-identical, all
+    runs correct — no corpus site hits either case, so the fixes cost no
+    recording there; any timing difference is code layout.
 
 All build clean and every checked benchmark produces correct results.
 
