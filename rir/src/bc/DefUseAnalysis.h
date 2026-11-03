@@ -456,6 +456,32 @@ class DefUseAnalysis {
     }
     void clearLoopBodyDefs() { loopBodyDefs_.pop_back(); }
 
+    // exitLoop + clearLoopBodyDefs for a loop compiled by compileWhile. The
+    // condition is compiled in the enclosing scope, so a store in it, or a
+    // recorded read of a name the loop assigns, keeps that scope's id and
+    // still dominates and post-dominates a use after the loop, although it ran
+    // on every check while the use runs once:
+    //   while (x <- f()) NULL; x            (rule 2, from the store)
+    //   while ({ x <- f(); x > 0 }) NULL; x  (rule 1, from the read)
+    // Its summary holds the values of every check, the use only the last. So
+    // each name the loop assigns loses its sources here: its def stays (a
+    // store in the condition still dominates, the condition always runs), but
+    // as a barrier like a complex assignment, and its recorded reads are
+    // dropped. A name only the body assigns already has its def in the closed
+    // body scope, and that def dropped the reads before it.
+    void exitWhileLoop() {
+        exitLoop();
+        for (const auto& e : loopBodyDefs_.back().expected) {
+            if (e.second == 0)
+                continue;
+            auto it = defs_.find(e.first);
+            if (it != defs_.end())
+                it->second.feedbackSlot = kNoSlot;
+            useDefs_.erase(e.first);
+        }
+        clearLoopBodyDefs();
+    }
+
     void pushForLoopVar(SEXP sym) { ++forLoopVarDepth_[sym]; }
     void popForLoopVar(SEXP sym) {
         auto it = forLoopVarDepth_.find(sym);
@@ -584,30 +610,21 @@ class DefUseAnalysis {
         //   x <- n;   while (x > 0) x <- x - 1.5
         //   y <- x;   while (x > 0) x <- x - 1.5     (x a formal: rule 1)
         // So both subsumption rules refuse a use in L's condition when the name
-        // is assigned anywhere in L (condition, body, nested loops — the
-        // pre-scan counts them all). If L never assigns it, every check sees
-        // the source's value and subsumption stays valid:
+        // is assigned anywhere in L (condition or body — the pre-scan counts
+        // both). If L never assigns it, every check sees the source's value
+        // and subsumption stays valid:
         //   x <- f(); while (x > i) i <- i + 1L
         // This also refuses a use following an assignment earlier in the SAME
         // condition (`while ({ k <- k - 1.5; k > 0 })`, the `k` in `k > 0`),
-        // which would be safe; such conditions are rare.
-        //
-        // Walk outward while each loop is in its condition, not just the
-        // innermost one: a loop nested inside another loop's condition has its
-        // own condition compiled in the same (enclosing) scope too, so the
-        // outer loop's stores reach it just the same —
-        //   x <- id(1L); while ({ while (x > 100) NULL; x < 5 }) x <- x + 2.5
-        // (the inner condition never assigns x; the outer loop does). Stop at
-        // the first loop that is in its BODY: that body has its own scope,
-        // which already separates the use from any source outside it.
+        // which would be safe; such conditions are rare. Only the innermost
+        // loop is checked: every name of a loop whose condition holds a loop is
+        // under rule 0 (collectPromiseAssignedVars). Uses after the loop:
+        // exitWhileLoop.
         bool vetoedInCondition = false;
-        for (auto L = loopBodyDefs_.rbegin();
-             L != loopBodyDefs_.rend() && L->inCondition; ++L) {
-            auto it = L->expected.find(name);
-            if (it != L->expected.end() && it->second > 0) {
-                vetoedInCondition = true;
-                break;
-            }
+        if (!loopBodyDefs_.empty() && loopBodyDefs_.back().inCondition) {
+            const auto& expected = loopBodyDefs_.back().expected;
+            auto it = expected.find(name);
+            vetoedInCondition = it != expected.end() && it->second > 0;
         }
 
         if (!vetoedInCondition &&
@@ -788,8 +805,7 @@ class DefUseAnalysis {
         // analysis sees: unconditional for `(` and for the left operand, and
         // inside a branch scope (enterBranch) for the right operand of
         // `&&`/`||`. Leaving them off this list was sound but put the name
-        // under rule 0 for the whole function — e.g. `while ((kk <- perm[[k]])
-        // > 1L)` made every read of `kk` record.
+        // under rule 0 for the whole function.
         const bool parenInline = TYPEOF(fun) == SYMSXP &&
                                  fun == symbol::Parenthesis && nArgs == 1 &&
                                  !hasDots;
@@ -809,8 +825,40 @@ class DefUseAnalysis {
             if (TYPEOF(lhs) == SYMSXP)
                 out.insert(lhs);
         }
+        // A loop in a `while` condition has its own condition compiled in the
+        // scope around the outer loop too, where the outer loop's stores reach
+        // it but the innermost-loop veto of classifyUse does not see them:
+        //   x <- id(1L); while ({ while (x > 100) NULL; x < 5 }) x <- x + 2.5
+        // Such conditions are rare; every name the outer loop assigns goes
+        // under rule 0 instead.
+        if (TYPEOF(fun) == SYMSXP && fun == symbol::While &&
+            containsLoop(CADR(ast))) {
+            std::unordered_map<SEXP, int> assigned;
+            collectAssignedVars(ast, assigned);
+            for (const auto& e : assigned)
+                out.insert(e.first);
+        }
         for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
             collectPromiseAssignedVars(CAR(s), out, inPromise || !isInline);
+    }
+
+    // True when `ast` contains a loop (not counting inner function
+    // definitions).
+    static bool containsLoop(SEXP ast) {
+        if (TYPEOF(ast) != LANGSXP)
+            return false;
+        SEXP fun = CAR(ast);
+        if (TYPEOF(fun) == SYMSXP) {
+            if (fun == symbol::Function)
+                return false;
+            if (fun == symbol::For || fun == symbol::While ||
+                fun == symbol::Repeat)
+                return true;
+        }
+        for (SEXP s = CDR(ast); s != R_NilValue; s = CDR(s))
+            if (containsLoop(CAR(s)))
+                return true;
+        return false;
     }
 
     // True when a scope captured earlier (by currentScopeId()) is still open,

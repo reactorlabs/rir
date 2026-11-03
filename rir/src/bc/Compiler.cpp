@@ -782,10 +782,8 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     if (Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().enterLoopScope();
     compileBody();
-    if (Compiler::isRecordlessLeafEnabled()) {
-        ctx.defUseAnalysis().exitLoop();
-        ctx.defUseAnalysis().clearLoopBodyDefs();
-    }
+    if (Compiler::isRecordlessLeafEnabled())
+        ctx.defUseAnalysis().exitWhileLoop();
     cs << BC::br(nextBranch) << breakBranch;
 
     if (ctx.loopNeedsContext()) {
