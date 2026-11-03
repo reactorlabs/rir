@@ -814,6 +814,17 @@ static bool isRangeBasedSeq(SEXP seq) {
            fun == symbol::seq_along;
 }
 
+// The range rule (classifyUse) takes the iter var's type to be invariant
+// because only the header stores it. A store in the body can reach a later read
+// without passing the header,
+//   for (i in 1:n) { if (i == 2L) i <- "a"; y <- i }
+// so a loop whose body assigns its iter var is not range-based.
+static bool bodyAssigns(SEXP body, SEXP sym) {
+    std::unordered_map<SEXP, int> defs;
+    DefUseAnalysis::collectAssignedVars(body, defs);
+    return defs.count(sym) > 0;
+}
+
 // RAII-style helper for range-based for-loop iter-var instrumentation.
 // Construction does the "before loop body" work (emit clear placeholder if
 // nested, push range-based var, push dynamic-bit tracking entry); finish()
@@ -958,10 +969,12 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
 
     if (Compiler::isRecordlessLeafEnabled())
         ctx.defUseAnalysis().pushForLoopVar(sym);
-    // compileSimpleFor always handles `:` — always range-based.
+    // compileSimpleFor always handles `:` — range-based unless the body
+    // assigns the iter var.
     RangeBasedIterVarScope rangeScope(
         ctx.code.top(), sym,
-        /*active=*/Compiler::isRecordlessLeafEnabled());
+        /*active=*/Compiler::isRecordlessLeafEnabled() &&
+            !bodyAssigns(body, sym));
     ClearableScopeGuard clearScope(ctx.code.top(),
                                    Compiler::isRecordlessLeafEnabled());
 
@@ -2059,8 +2072,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::stvar(sym);
         };
 
-        bool rangeBased =
-            Compiler::isRecordlessLeafEnabled() && isRangeBasedSeq(seq);
+        bool rangeBased = Compiler::isRecordlessLeafEnabled() &&
+                          isRangeBasedSeq(seq) && !bodyAssigns(body, sym);
         RangeBasedIterVarScope rangeScope(ctx.code.top(), sym,
                                           /*active=*/rangeBased);
         ClearableScopeGuard clearScope(ctx.code.top(),
