@@ -150,33 +150,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     uint16_t
         recordTypeOnceCount; /// Number of record_type_once_ bit indices used
 
-    /// How many activations of THIS Code are currently live, and the frame
-    /// address of the most recent one. Runtime-only; never serialized.
-    ///
-    /// Used as the identity for the per-execution signature check (§2B.5.2).
-    /// A frame address is the wrong identity there: it distinguishes every
-    /// activation, including *sequential* ones, so calling the same function
-    /// from two different call sites in a loop defeats the early-out even
-    /// though nothing interleaved. This counter changes only under genuine
-    /// reentrancy of this Code, which is exactly the condition that can
-    /// invalidate a shared signature.
-    ///
-    /// Non-local exits skip evalRirCode's epilogue, so they are undone where
-    /// the context they leave through was opened (LiveDepthGuard in
-    /// interp.cpp: closure calls and trampolined loops) and at the return_ that
-    /// raises them. The one gap is a promise Code, which is forced without a
-    /// context of its own.
-    ///
-    /// `depthAnchor` is the fallback for that gap. At entry, any *live*
-    /// activation of this Code is necessarily an outer one and therefore at a
-    /// HIGHER stack address; so an anchor below us belongs to a frame that is
-    /// already gone, and the count it left is stale. Strictly below, not
-    /// at-or-below: resetting also discards any live outer activations still
-    /// counted, and two activations at one depth break the ordering the
-    /// signature check relies on. A leak it misses only inflates the count,
-    /// which over-records and never skips.
-    uint16_t liveDepth;
-    uintptr_t depthAnchor;
+    /// Number of inner-node operand positions in this Code: the size of the
+    /// per-activation scratch array that operands publish their signatures to
+    /// and inner nodes read them back from (ObservedValues::tuple). Assigned
+    /// by the compiler's setTypeFeedbackParents.
+    uint16_t innerScratchSize;
 
     uint8_t data[]; /// the instructions
 

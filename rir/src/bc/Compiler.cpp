@@ -347,6 +347,31 @@ class CompilerContext {
 
     void pushNewNodeForSlots() { slotsStack().push(std::vector<uint32_t>()); }
 
+    // A pending "operand" that stands for a value whose type is not a
+    // function of operand signatures: an `if` or `switch` used as a value,
+    // whose result depends on which branch ran. An inner node with it among
+    // its operands is not made one (registerSlot links nothing), so it stays
+    // a leaf and always records.
+    //
+    // Needed because an inner node may only skip if every operand that
+    // reaches its result was evaluated in this execution: a branch that did
+    // not run leaves its operand position holding an older value, and the
+    // branch choice itself has no signature at all. In `(if (c) a else b) + d`
+    // the stale positions of a and b can form a recorded tuple while the
+    // other branch's result type was never seen.
+    enum : uint32_t { kOpaqueOperand = UINT32_MAX };
+
+    // The current LANGSXP's pending operands do not reach the value it
+    // leaves: it is in void context, or its result's signature is fixed
+    // whatever its operands (`&&`, `||`: a logical scalar; loops: NULL).
+    // Its operands then publish nothing, which also keeps conditionally
+    // evaluated ones (the right of `&&`) out of an operand tuple.
+    void dropPendingSlots() { slotsStack().top().clear(); }
+    void makePendingSlotsOpaque() {
+        slotsStack().top().clear();
+        slotsStack().top().push_back(kOpaqueOperand);
+    }
+
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
 #ifdef RECORDLESS_EXPTREE_DEBUG
@@ -361,103 +386,99 @@ class CompilerContext {
             // Link all current children to this parent slot, then replace the
             // current level with just this slot. Do NOT pop — popNodeForSlots()
             // in compileExpr is the single owner of the push/pop balance.
-            for (auto child : currentSlots) {
-                parents[child] = slotIdx;
-            }
+            bool opaque = false;
+            for (auto child : currentSlots)
+                opaque = opaque || child == kOpaqueOperand;
+            if (!opaque)
+                for (auto child : currentSlots)
+                    parents[child] = slotIdx;
             currentSlots.clear();
             currentSlots.push_back(slotIdx);
         }
     }
 
     void setTypeFeedbackParents(TypeFeedback& tf) {
-        // An edge is only usable if the parent's index fits the biased 16-bit
-        // parentPlus1. An unrepresentable edge must be DROPPED, not truncated:
-        // the parent would otherwise be classified as an inner node (starts
-        // clean, records only once a child marks it dirty) with no child able
-        // to reach it, so it would never record at all. Dropping the edge
-        // leaves it a leaf, which always records — conservative and sound.
-        // Needs >65534 type slots in one function, so effectively unreachable.
-        std::map<uint32_t, uint32_t> usable;
-        for (const auto& kv : parents)
-            if (ObservedValues::canReference(kv.second))
-                usable.emplace(kv.first, kv.second);
-
-        for (const auto& kv : usable)
-            tf.types(kv.first).setParent(kv.second);
-
-        // parentSlots: slots that have children (not leaves).
-        // childSlots:  slots that have a parent (not roots).
-        // Leaf-vs-inner is not stored on the slot — it is carried by the
-        // opcode the loop below patches in. An inner node starts clean and
-        // records nothing until a child signals a changed value; the first
-        // execution always signals, since a child's initial signature is 0 and
-        // 0 never compares equal.
-        std::set<uint32_t> parentSlots;
-        std::set<uint32_t> childSlots;
-        for (const auto& kv : usable) {
-            childSlots.insert(kv.first);
-            parentSlots.insert(kv.second);
-        }
-
-        // Source slots: those a NoRecord (elided) use depends on AND whose
-        // dependent has a parent to un-suppress. When such a slot records an
-        // object it must propagate to its dependents' parents (via
-        // record_type_leaf_notify_'s notifyRelatedNodes). A source whose
-        // dependents are all parentless leaves (e.g. `a <- f(); a`, where the
-        // elided read of `a` is a standalone leaf) has nothing to propagate to,
-        // so it stays a plain record_type_ rather than a specialized opcode.
-        std::set<uint32_t> sourceSlots;
-        for (size_t d = 0; d < tf.types_size(); d++)
-            if (tf.hasTypeDep(d) && childSlots.find(d) != childSlots.end())
-                sourceSlots.insert(tf.typeDep(d));
-
-        // Specialize each record_type_ / record_type_once_ by (isLeaf, isRoot,
-        // isSource). Inner nodes come only from record_type_ (RecordOnce only
-        // classifies leaves). Leaf-with-parent + no source keeps the original
-        // opcode (record_type_ / record_type_once_). The packed immediate is
-        // preserved; only the opcode byte changes.
+        // Which Code each recorded slot is emitted in: an inner node's operand
+        // positions live in the scratch array of its own Code's activations.
+        // An expression tree never crosses a Code boundary (slotsStack is per
+        // CodeContext), so its operands are in the same Code.
+        std::unordered_map<uint32_t, Code*> codeOf;
         for (Code* code : allCodes_) {
-            Opcode* pc = code->code();
-            Opcode* end = code->endCode();
-            while (pc < end) {
-                Opcode op = *pc;
-                bool once = op == Opcode::record_type_once_;
-                if (op == Opcode::record_type_ || once) {
+            for (Opcode* pc = code->code(); pc < code->endCode();
+                 pc = BC::next(pc)) {
+                bool once = *pc == Opcode::record_type_once_;
+                if (*pc == Opcode::record_type_ || once) {
                     uint32_t imm;
                     memcpy(&imm, pc + 1, sizeof(imm));
-                    uint32_t slot = once ? RECORD_TYPE_ONCE_SLOT_IDX(imm) : imm;
-                    bool isLeaf = parentSlots.find(slot) == parentSlots.end();
-                    bool isRoot = childSlots.find(slot) == childSlots.end();
-                    bool isSrc = sourceSlots.find(slot) != sourceSlots.end();
-                    if (!once && !isLeaf) {
-                        // Split inner nodes on whether they notify anything: a
-                        // standalone inner node (root, no deps) notifies
-                        // nothing; a non-root notifies its parent and a root
-                        // source
-                        // notifies its dependents — both via record_type_
-                        // inner_notify_. Notification is one-time (latched), so
-                        // the shared notifier's usually-empty branch is free.
-                        bool notifies = !isRoot || isSrc;
-                        *pc = notifies ? Opcode::record_type_inner_notify_
-                                       : Opcode::record_type_inner_;
-                    } else if (isRoot && !isSrc) {
-                        // Non-source simple leaf (root + leaf) — and every
-                        // untracked record, which is also isLeaf && isRoot &&
-                        // !isSrc — stays plain record_type_ / record_type_once_
-                        // (doRecord only, no notification).
-                    } else {
-                        // A leaf that must notify related nodes: a source
-                        // (propagate to its NoRecord dependents' parents), a
-                        // leaf with a parent (un-suppress its own parent), or
-                        // both. record_type_leaf_notify_ handles all three —
-                        // notifyRelatedNodes does own-parent + any deps
-                        // together (the usually-empty branch is a no-op) — so
-                        // there is no separate _dep_ opcode.
-                        *pc = once ? Opcode::record_type_leaf_notify_once_
-                                   : Opcode::record_type_leaf_notify_;
-                    }
+                    codeOf[once ? RECORD_TYPE_ONCE_SLOT_IDX(imm) : imm] = code;
                 }
-                pc = BC::next(pc);
+            }
+        }
+
+        // An inner node's operands, in slot order.
+        std::map<uint32_t, std::vector<uint32_t>> operands;
+        for (const auto& kv : parents)
+            operands[kv.second].push_back(kv.first);
+
+        // Give each inner node `arity` consecutive positions in its Code, and
+        // each operand its position. An operand set that does not fit (more
+        // than MaxArity operands, or past the 16-bit position range) is not
+        // made an inner node: it stays a leaf, which always records, and its
+        // operands publish nothing. Conservative and sound.
+        std::unordered_map<Code*, uint32_t> nextPos;
+        for (const auto& kv : operands) {
+            auto c = codeOf.find(kv.first);
+            if (c == codeOf.end())
+                continue;
+            uint32_t base = nextPos[c->second];
+            unsigned n = kv.second.size();
+            if (n > ObservedValues::MaxArity ||
+                !ObservedValues::canReference(base + n))
+                continue;
+            tf.types(kv.first).setInner(base, n);
+            for (unsigned i = 0; i < n; i++)
+                tf.types(kv.second[i]).setPos(base + i);
+            nextPos[c->second] = base + n;
+        }
+        for (const auto& kv : nextPos)
+            kv.first->innerScratchSize = (uint16_t)kv.second;
+
+        // Source slots: those a NoRecord (elided) use depends on AND whose
+        // dependent is an operand of an inner node. Such a source publishes
+        // into its dependents' positions, which emit no opcode of their own.
+        // A source whose dependents are all parentless (e.g. `a <- f(); a`,
+        // where the elided read of `a` is a standalone leaf) has nothing to
+        // publish to, so it stays a plain record_type_.
+        std::set<uint32_t> sourceSlots;
+        for (size_t d = 0; d < tf.types_size(); d++)
+            if (tf.hasTypeDep(d) && tf.types(d).publishes())
+                sourceSlots.insert(tf.typeDep(d));
+
+        // Specialize each record_type_ / record_type_once_ by (isInner,
+        // publishes). Inner nodes come only from record_type_ (RecordOnce only
+        // classifies leaves). The packed immediate is preserved; only the
+        // opcode byte changes.
+        for (Code* code : allCodes_) {
+            for (Opcode* pc = code->code(); pc < code->endCode();
+                 pc = BC::next(pc)) {
+                bool once = *pc == Opcode::record_type_once_;
+                if (*pc != Opcode::record_type_ && !once)
+                    continue;
+                uint32_t imm;
+                memcpy(&imm, pc + 1, sizeof(imm));
+                uint32_t slot = once ? RECORD_TYPE_ONCE_SLOT_IDX(imm) : imm;
+                const ObservedValues& v = tf.types(slot);
+                bool isInner = v.arity > 0;
+                bool publishes = v.publishes() || sourceSlots.count(slot);
+                assert(!(once && isInner));
+                if (isInner)
+                    *pc = publishes ? Opcode::record_type_inner_notify_
+                                    : Opcode::record_type_inner_;
+                else if (publishes)
+                    *pc = once ? Opcode::record_type_leaf_notify_once_
+                               : Opcode::record_type_leaf_notify_;
+                // Otherwise a simple leaf — and every untracked record — stays
+                // plain record_type_ / record_type_once_.
             }
         }
     }
@@ -2933,6 +2954,11 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
 
+        if (voidContext || fun == symbol::And || fun == symbol::Or ||
+            fun == symbol::While || fun == symbol::Repeat)
+            ctx.dropPendingSlots();
+        else if (fun == symbol::If || fun == symbol::Switch)
+            ctx.makePendingSlotsOpaque();
         ctx.popNodeForSlots();
 
     } break;

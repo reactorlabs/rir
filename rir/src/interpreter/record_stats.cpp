@@ -222,9 +222,9 @@ RecordSkipStats::~RecordSkipStats() {
     fprintf(stderr, "    (only the _notify_ paths can early-out; plain "
                     "record_type_ always does the work)\n");
 
-    // Table 3: inner nodes by opcode. "skipped" = suppressed because the slot's
-    // `dirty` bit was clear, i.e. no operand's per-execution signature changed
-    // and the result is the one already absorbed. Share is of all inner-node
+    // Table 3: inner nodes by opcode. "skipped" = suppressed because the
+    // operands' signatures equal the tuple last recorded, so the result is
+    // one already absorbed. Share is of all inner-node
     // executions.
     auto innerShouldCol = [&](uint64_t v) {
         return commafy(v) + " (" + pctStr(v, allInnerShould) + ")";

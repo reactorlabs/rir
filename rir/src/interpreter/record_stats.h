@@ -69,12 +69,11 @@ struct RecordSkipStats {
     // extra line, not a table row, since it overlaps the rows above.
     uint64_t sigUnchangedNoOp = 0;
     // inner nodes (counted at the inner record_type_* handlers; exptree only).
-    // "skip" here = suppressed, i.e. the slot's `dirty` bit was clear: every
-    // operand had the same per-execution signature as last time, so the result
-    // is the one already absorbed. (This used to be a permanent
-    // shouldNotRecord latch that only an object operand could clear; it is now
-    // per-execution and re-armable, so a node can go back to being suppressed
-    // once its operands settle.)
+    // "skip" here = suppressed, i.e. the operands' signatures equal the tuple
+    // the node last recorded, so the result is one already absorbed. (This used
+    // to be a permanent shouldNotRecord latch that only an object operand could
+    // clear; it is now per-execution and re-armable, so a node can go back to
+    // being suppressed once its operands settle.)
     uint64_t innerRec = 0;        // record_type_inner_         — recorded
     uint64_t innerSkip = 0;       // record_type_inner_         — suppressed
     uint64_t innerNotifyRec = 0;  // record_type_inner_notify_  — recorded

@@ -212,26 +212,14 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
-    // Saturation for lastSigDepth (6 bits). Deliberately never compares equal
-    // to a real depth, so recursion past it over-records instead of skipping.
-    static constexpr uint8_t kDepthUnknown = 63;
-    // Asymmetric clamps, so the saturation guard costs nothing at the test.
-    //
-    // A writer past the saturation point stores kDepthUnknown, which is
-    // greater than any real depth and so fails `lastSigDepth <= depth` for
-    // every shallower reader — it arms, which is what we want.
-    //
-    // A reader past it compares as 0, and `lastSigDepth <= 0` can only hold
-    // for lastSigDepth == 0, which means "never written" — and that case is
-    // already rejected because lastSig is then SigAlwaysDirty. So a very deep
-    // reader never early-outs, with no explicit check on the hot path.
-    __attribute__((always_inline)) static uint8_t clampDepthStore(unsigned d) {
-        return d < kDepthUnknown ? (uint8_t)d : kDepthUnknown;
-    }
-    __attribute__((always_inline)) static uint8_t
-    clampDepthCompare(unsigned d) {
-        return d < kDepthUnknown ? (uint8_t)d : 0;
-    }
+    // Inner nodes with more operand positions than fit in `tuple` are not
+    // elided (setTypeFeedbackParents leaves them plain leaves).
+    static constexpr unsigned MaxArity = 6;
+    // A `tuple` that no current tuple can equal: no signature is 0xFF (the
+    // widest is 131, see signatureOf). Set in tuple[0] while nothing complete
+    // has been recorded, so a never-written operand (0) cannot match a zero.
+    static constexpr uint8_t kNoTuple = 0xFF;
+
     // byte 0: existing flags
     uint8_t numTypes : 2;
     uint8_t stateBeforeLastForce : 2;
@@ -239,99 +227,57 @@ struct ObservedValues {
     uint8_t attribs : 1;
     uint8_t object : 1;
     uint8_t notFastVecelt : 1;
-    // byte 1: runtime gate for inner nodes. Set by a child whose
-    // per-execution signature changed, cleared by this node when it records.
-    // See doRecordAndSign / markRelatedDirty. There is no stored "isLeaf" /
-    // "shouldNotRecord": nothing reads them at runtime (PirType::merge, the
-    // JIT-side consumer, never looks at them) and the opcode already says
-    // whether a slot is a leaf or an elidable inner node.
-    // Byte 1 is now full: dirty(1) + lastSigDepth(6) + hasDeps(1).
-    uint8_t dirty : 1;
-    // Reentrancy identity for the per-execution signature: the value of
-    // Code::liveDepth when `lastSig` was written. Sharing `lastSig` across
-    // activations is what makes a hot loop collapse to a compare, and that must
-    // be kept; what must NOT be shared is a signature an *interleaved*
-    // activation rewrote, because then two operands can each compare
-    // "unchanged" against writes that never co-occurred (§2B.5.2).
-    //
-    // liveDepth changes only under genuine reentrancy of this Code, so
-    // sequential calls — from any call site, at any stack address — compare
-    // equal and keep the early-out, while a nested activation always differs.
-    // kDepthUnknown is the saturation value and never compares equal to
-    // itself, so recursion deeper than it degrades to always-recording rather
-    // than to a wrong skip.
-    uint8_t lastSigDepth : 6;
+    // byte 1
+    // Inner node: the number of its operand positions, 0 for any other slot.
+    // Compile-time (setTypeFeedbackParents).
+    uint8_t arity : 3;
     // Does this slot have NoRecord dependents? Compile-time, set by
     // buildNoRecordReverseMap.
     //
-    // markRelatedDirty must arm the parents of a source's NoRecord
-    // dependents, and the reverse map that answers that is one std::vector
-    // PER SLOT - 24 bytes each, so ~36 KB for a 1,500-slot function,
-    // several times the `types_` array and larger than L1d. Almost every
-    // access finds it empty: nbody has 37 dependents across ~1,500 slots.
-    // Consulting this bit first turns that random 36 KB touch into a field
-    // already loaded with the slot, for the ~97% of sources with no
-    // dependents at all. Free: it is the spare bit of byte 1.
+    // A source must publish its signature into the operand positions of its
+    // dependents (publish), and the reverse map that answers that is one
+    // std::vector PER SLOT - 24 bytes each, so ~36 KB for a 1,500-slot
+    // function, several times the `types_` array and larger than L1d. Almost
+    // every access finds it empty: nbody has 37 dependents across ~1,500
+    // slots. Consulting this bit first turns that random 36 KB touch into a
+    // field already loaded with the slot.
     uint8_t hasDeps : 1;
+    uint8_t unused : 4;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
-    // byte 5: signature of the value seen on the PREVIOUS execution.
-    // See signatureOf() below for the layout; SigAlwaysDirty (0) means "no
-    // signature", i.e. a value that must re-record on every execution.
+    // byte 5: signature of the value this site last recorded in full (see
+    // signatureOf for the layout). For an inner node, the signature of the
+    // result it recorded for `tuple`. SigAlwaysDirty (0) means "no signature",
+    // i.e. a value that must re-record on every execution.
     //
-    // A whole byte rather than 7 bits packed alongside `dirty`, which costs
-    // one byte per slot and buys three things:
-    //  * no read-modify-write. Sharing a byte with `dirty` meant every update
-    //    had to load, mask, or and store just to preserve a neighbouring bit.
-    //  * no range guard. TYPEOF reads a 5-bit field (TYPE_BITS), so it is
-    //    always 0..31, and the widest encoding fits a byte — every
-    //    representable type encodes injectively. At 7 bits the encoding
-    //    saturated, so the admission test needed an extra `type <= 30`
-    //    comparison to stop a wrapped signature aliasing a different type's,
-    //    which would make two distinct types compare equal and so wrongly
-    //    suppress a parent.
-    //  * sizeof becomes 8, so `types_[idx]` is a scaled load rather than a
-    //    multiply by 7 — and that indexing happens on every record, plus
-    //    again per parent/dependent in markRelatedDirty.
+    // Written only at the end of a complete record, so `sig == lastSig` proves
+    // that recording the value again would change nothing, whichever
+    // activation wrote it.
+    //
+    // A whole byte rather than 7 bits packed into a bitfield: no
+    // read-modify-write, and no range guard. TYPEOF reads a 5-bit field, so
+    // type is 0..31 and the widest encoding fits a byte — every representable
+    // type encodes injectively.
     uint8_t lastSig;
-    // Expression-tree parent, as an index into the owning TypeFeedback's
-    // types_ rather than a pointer: every edge is within one array, and 2
-    // bytes instead of 8 is most of the difference between a 13- and an
-    // 8-byte slot. BIASED BY ONE so that an all-zero slot means "no parent" —
-    // the array is memcpy'd from a vector and there is a memset in the
-    // constructor, so a 0xFFFF sentinel would be one forgotten initializer
-    // away from silently designating slot 0 as everyone's parent.
-    uint16_t parentPlus1;
-    // bytes 8-15: which ACTIVATION set `dirty`, as the address of a frame-local
-    // in that activation of evalRirCode. 0 = unowned.
+    // bytes 6-7: the operand position this site publishes its signature to,
+    // in the scratch array of the running activation, BIASED BY ONE so that an
+    // all-zero slot publishes nothing. Set for an operand of an inner node,
+    // including a NoRecord use (its source publishes for it).
+    uint16_t posPlus1;
+    // bytes 8-9: inner node: the first of its `arity` operand positions.
+    uint16_t tupleBase;
+    // bytes 10-15: inner node: the operand signatures of the execution it last
+    // recorded (§2B.5). Written together with lastSig, by the record itself,
+    // so it is always a tuple whose result this slot has absorbed.
     //
-    // `dirty` is a notification in flight between a child's record and its
-    // parent's, but it lives here, shared by every activation of the Code. A
-    // nested activation landing in that window used to consume the flag and
-    // silently cost the outer activation its record — `a + f(...)` inside `f`
-    // lost the outer type (§2B.5). The stamp names the owner so only the owner
-    // clears:
-    //
-    //   set     — FIRST setter wins (only stamp when !dirty). The outer
-    //             activation always sets before it calls inward, so the first
-    //             setter is the OUTERMOST pending one — which is also the last
-    //             to consume, exactly the owner we want. Overwriting here is
-    //             what reintroduces the bug: one stamp cannot name two owners.
-    //   consume — record either way; clear only when the stamp is ours,
-    //             otherwise leave the flag standing for its owner.
-    //   skip    — `!dirty` alone, NEVER consulting the stamp. Since nobody
-    //             clears a flag they do not own, a flag I set survives until I
-    //             consume it, so `!dirty` proves no operand of mine changed.
-    //             Testing the stamp here instead would make the bail fail on
-    //             every iteration after the first clear and delete the whole
-    //             inner-node optimization.
-    //
-    // Addresses are unique among *simultaneously live* frames, which is the
-    // only set that matters. Reuse by a later activation of a dead frame's
-    // address can only cause a spurious record, never a skip.
-    uintptr_t activationStamp;
-
-    // total (packed): 1+1+3+1+2+8 = 16 bytes
+    // This is the only reentrancy-sensitive state, and it needs no protection:
+    // the CURRENT operand signatures live in the activation's own scratch
+    // array, so no other activation can touch them, and a nested activation
+    // can only replace `tuple` by another recorded one. An inner node skips
+    // iff its current tuple equals `tuple`, i.e. iff a record would add
+    // nothing.
+    std::array<uint8_t, MaxArity> tuple;
+    // total (packed): 1+1+3+1+2+2+6 = 16 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -370,28 +316,31 @@ struct ObservedValues {
                          (isScalar ? SigScalar : 0) | (hasDim ? SigHasDim : 0));
     }
 
-    // always_inline + SLOWASSERT: markRelatedDirty calls these once per
-    // dependent on a hot path, and a plain assert would be live here — this
-    // release build compiles without -DNDEBUG.
-    __attribute__((always_inline)) bool hasParent() const {
-        return parentPlus1 != 0;
+    __attribute__((always_inline)) bool publishes() const {
+        return posPlus1 != 0;
     }
-    __attribute__((always_inline)) uint32_t parentSlot() const {
-        SLOWASSERT(hasParent());
-        return (uint32_t)parentPlus1 - 1;
+    __attribute__((always_inline)) uint32_t pos() const {
+        SLOWASSERT(publishes());
+        return (uint32_t)posPlus1 - 1;
     }
-    // Callers must check canReference() first; an unrepresentable edge has to
-    // be dropped at compile time (see setTypeFeedbackParents), not truncated.
-    void setParent(uint32_t idx) {
-        assert(canReference(idx));
-        parentPlus1 = (uint16_t)(idx + 1);
+    // Callers must check canReference() first; an unrepresentable position
+    // has to be dropped at compile time (see setTypeFeedbackParents).
+    void setPos(uint32_t p) {
+        assert(canReference(p));
+        posPlus1 = (uint16_t)(p + 1);
     }
-    static bool canReference(uint32_t idx) { return idx + 1 <= UINT16_MAX; }
+    void setInner(uint32_t base, unsigned n) {
+        assert(canReference(base + n) && n > 0 && n <= MaxArity);
+        tupleBase = (uint16_t)base;
+        arity = n;
+        tuple[0] = kNoTuple;
+    }
+    static bool canReference(uint32_t p) { return p + 1 <= UINT16_MAX; }
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
         // All-zero is the correct initial state throughout: no types seen, no
-        // signature, not dirty, and (thanks to the bias) no parent.
+        // signature, and (thanks to the bias) no operand position.
         memset(this, 0, sizeof(ObservedValues));
     }
 
@@ -407,10 +356,11 @@ struct ObservedValues {
     //    a property of how this binding was reached at THIS site, not of the
     //    value. Copying it is wrong for both kinds a dependent can carry —
     //    see reconstructFeedback and recordless-design.md §4.6.
-    //  * parentPlus1 is this slot's own edge in the expression tree. Taking the
-    //    source's would re-point our notifications at the source's parent.
-    //  * lastSig / dirty describe a per-execution recording history this slot
-    //    does not have (it never records — that is what NoRecord means).
+    //  * posPlus1 / arity / tupleBase / tuple are this slot's own place in
+    //    the expression tree. Taking the source's would publish to, or read,
+    //    the source's operand positions.
+    //  * lastSig describes a recording history this slot does not have (it
+    //    never records — that is what NoRecord means).
     void copyTypeObservationsFrom(const ObservedValues& src) {
         numTypes = src.numTypes;
         notScalar = src.notScalar;
@@ -463,9 +413,8 @@ struct ObservedValues {
     }
 
     // doRecord + the per-execution signature, from a SINGLE inspection of e.
-    // Returns true when the signature differs from the previous execution's,
-    // i.e. when a parent consuming this value may now produce a different
-    // result and must re-record.
+    // Returns the signature, for the caller to publish to the operand
+    // positions that consume this value (TypeFeedback::publish).
     //
     // This deliberately duplicates doRecord's flag updates rather than calling
     // it. Doing both from one pass is the entire point: e is read once, into
@@ -489,11 +438,9 @@ struct ObservedValues {
     // operands' signatures — never on what that function is. Operators for
     // which it is not (`:` and `[`, whose result length comes from operand
     // *values*) are not inner nodes at all.
-    // `depth` is clampDepth(Code::liveDepth) for the running activation.
-    // `depth` is clampDepthCompare(liveDepth); `depthStore` is
-    // clampDepthStore(liveDepth). Both are computed once per activation.
-    __attribute__((always_inline)) bool doRecordAndSign(SEXP e, uint8_t depth,
-                                                        uint8_t depthStore) {
+    //
+    // lastSig is the signature of e on return.
+    __attribute__((always_inline)) uint8_t doRecordAndSign(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         const int type = TYPEOF(e);
@@ -548,30 +495,10 @@ struct ObservedValues {
         // The sentinel is excluded deliberately: it says the value could not
         // be summarised, so nothing can be concluded from two consecutive
         // occurrences of it.
-        // `sigStamp == act` is the correctness half: an unchanged signature
-        // only licenses skipping the notify when THIS activation is the one
-        // that last wrote it. If a nested activation wrote it in between, our
-        // operand has changed relative to what *we* last recorded even though
-        // the bytes compare equal, and our parent must be armed.
-        // `<=`, not `==`: the write must not have been made INSIDE my window,
-        // and anything that could write inside my window is nested within me
-        // and therefore at a strictly GREATER depth. A write at my own depth is
-        // a previous, finished activation at my level; a write at a shallower
-        // depth is an activation enclosing me. Neither ran between two of my
-        // own children, so the pair I am about to produce is the state that was
-        // current at my entry — one in which the parent had already recorded.
-        //
-        // With `==` this cost the whole recursive case: every new depth
-        // re-armed even when nothing changed (recursion to depth 20 recorded
-        // 20,501 of 30,500 executions; with `<=`, 22).
-        //
-        // kDepthUnknown must be rejected on BOTH sides: it satisfies `<=`
-        // against itself, so without this, recursion past the saturation point
-        // would silently start skipping instead of over-recording.
-        if (sig != SigAlwaysDirty && sig == lastSig && lastSigDepth <= depth) {
+        if (sig != SigAlwaysDirty && sig == lastSig) {
             REC_HOOK(recording::recordSCChanged(0));
             REC_STAT(g_recStats.sigUnchangedNoOp++);
-            return false;
+            return sig;
         }
 
         // Same updates as doRecord, from the locals above. See the comment
@@ -596,11 +523,7 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
 
         lastSig = sig;
-        lastSigDepth = depthStore;
-        // Reaching here means the early-out did not fire: the signature is the
-        // sentinel, or differs from last time, or was last written by another
-        // activation — in every case our parent must be armed.
-        return true;
+        return sig;
     }
 
     // Used by record_type_ / record_type_once_: plain leaves (no parent, no
@@ -609,93 +532,59 @@ struct ObservedValues {
     // check, no signature to maintain, and nothing to notify — just doRecord.
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
-    // ---- the dirty-gate ownership protocol -------------------------------
-    //
-    // These two are a MATCHED PAIR and only work together; the guard in each
-    // name is the load-bearing part. Keep them adjacent and change neither
-    // alone. Full rationale on ObservedValues::activationStamp.
-    //
-    //   armIfClean    guard !dirty     — first setter wins, so the stamp names
-    //                                    the OUTERMOST pending activation,
-    //                                    which is also the last to consume.
-    //                                    Overwriting instead lets a nested
-    //                                    activation seize ownership, which is
-    //                                    the original lost-observation bug.
-    //   disarmIfOwner guard stamp==act — only the owner clears. A non-owner
-    //                                    here is a nested activation running
-    //                                    inside the owner's window: it still
-    //                                    records, but clearing would leave the
-    //                                    owner to find a clean slot and skip.
-    //
-    // Together they give the property the skip path relies on: a flag I armed
-    // is never cleared by anyone else, so `!dirty` proves no operand of mine
-    // changed — which is why the skip path must NOT consult the stamp.
-    //
-    // always_inline so each call site keeps the compare-and-stores it had when
-    // these were written out longhand.
-    __attribute__((__always_inline__)) void armIfClean(uintptr_t act) {
-        if (!dirty) {
-            dirty = true;
-            activationStamp = act;
-        }
-        // Already dirty: an activation further out owns it and clears after us.
-        // Leave the stamp alone.
-    }
-
-    __attribute__((__always_inline__)) void disarmIfOwner(uintptr_t act) {
-        if (activationStamp == act) {
-            dirty = false;
-            activationStamp = 0;
-        }
-    }
-
-    // A third state outside the pair: dirty with an owner that never consumes.
-    // kPinned is not the address of any frame-local, so disarmIfOwner never
-    // matches it and the slot records on every execution from here on.
-    //
-    // For the parent of a NoRecord dependent whose source just saw a value
-    // outside the signature domain. The dependent emits nothing, and its
-    // source may run less often than it does (a pre-loop def read in a
-    // `while` condition), so no later execution would re-arm the parent, while
-    // `+` on an object may dispatch to a method whose result type changes.
-    // Permanent because nothing ever observes the dependent's value to say it
-    // is back in the domain. Overriding a live owner's stamp is safe: it can
-    // only make that owner record more, never skip.
-    static constexpr uintptr_t kPinned = 1;
-    __attribute__((__always_inline__)) void pin() {
-        dirty = true;
-        activationStamp = kPinned;
-    }
-
   public:
-    // Inner-node record for a node the caller has ALREADY established is dirty.
-    // The interpreter tests `dirty` inline before calling, so that the common
-    // suppressed case never reaches these (noinline) handlers at all;
-    // re-testing it here would be dead weight on the path that does call in.
-    // The name says so — do not call unless dirty is set.
+    // ---- inner nodes -----------------------------------------------------
     //
-    // Being dirty means some operand's per-execution signature changed, so the
-    // result may differ from the one already absorbed. Records and re-arms.
+    // `scratch` is the running activation's operand-position array (one byte
+    // per position of its Code, zeroed at entry): each operand publishes its
+    // signature there when it executes, and its inner node reads its own
+    // positions back. Per activation, so no other activation can interleave
+    // with it. A position nobody wrote in this activation reads 0, the
+    // sentinel, which never matches.
+
+    // Would a record add nothing? True iff the current operand signatures
+    // equal the tuple last recorded here.
+    __attribute__((always_inline)) bool
+    operandsUnchanged(const uint8_t* scratch) const {
+        const uint8_t* cur = scratch + tupleBase;
+        for (unsigned i = 0; i < arity; i++)
+            if (cur[i] != tuple[i])
+                return false;
+        return true;
+    }
+
+    // Caller-guarded on !operandsUnchanged: the interpreter tests it inline,
+    // so the common suppressed case never reaches the (noinline) handlers.
     //
     // For a standalone inner node (record_type_inner_): a root with no
-    // NoRecord dependents, so nothing to notify and no signature to keep.
+    // NoRecord dependents, so nothing to publish and no signature to keep.
     __attribute__((__always_inline__)) void
-    recordInnerWhenDirty(SEXP e, uintptr_t act) {
-        SLOWASSERT(dirty && "recordInnerWhenDirty called on a clean slot");
-        disarmIfOwner(act);
+    recordInner(SEXP e, const uint8_t* scratch) {
         doRecord(e);
+        storeTuple(scratch);
     }
 
-    // Same, for an inner node that must propagate (record_type_inner_notify_).
-    // Also caller-guarded on dirty. Returns whether its own signature changed,
-    // i.e. whether there is anything to tell its parent.
-    __attribute__((__always_inline__)) bool
-    recordInnerAndSignWhenDirty(SEXP e, uintptr_t act, uint8_t depth,
-                                uint8_t depthStore) {
-        SLOWASSERT(dirty &&
-                   "recordInnerAndSignWhenDirty called on a clean slot");
-        disarmIfOwner(act);
-        return doRecordAndSign(e, depth, depthStore);
+    // Same, for an inner node that publishes (record_type_inner_notify_).
+    // lastSig is the result's signature afterwards.
+    __attribute__((__always_inline__)) void
+    recordInnerAndSign(SEXP e, const uint8_t* scratch) {
+        doRecordAndSign(e);
+        storeTuple(scratch);
+    }
+
+  private:
+    // After the record: `tuple` now names what was absorbed. A tuple with an
+    // unwritten or unsummarisable operand (0) is stored unmatchable, since 0
+    // must never compare equal.
+    __attribute__((__always_inline__)) void storeTuple(const uint8_t* scratch) {
+        const uint8_t* cur = scratch + tupleBase;
+        bool complete = true;
+        for (unsigned i = 0; i < arity; i++) {
+            tuple[i] = cur[i];
+            complete = complete && cur[i] != SigAlwaysDirty;
+        }
+        if (!complete)
+            tuple[0] = kNoTuple;
     }
 };
 
@@ -910,97 +799,72 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
-    // Standalone inner node: no parent (it is a root) and no NoRecord
-    // dependents (not a source). Nothing to notify, so it skips the notify
-    // machinery entirely — just doRecord.
+    // Standalone inner node: no operand position of its own (it is a root)
+    // and no NoRecord dependents (not a source). Nothing to publish, so it
+    // skips the signature entirely — just doRecord.
     //
-    // `_when_dirty`: the interpreter tests `dirty` inline before calling, so
-    // reaching here already means the node must record. Do not call otherwise.
-    // Takes only `idx`, not the slot the caller already resolved for its dirty
-    // test: handing the reference over was measured 0.23% SLOWER on mandelbrot.
-    // It widens the call to three arguments and pins the reference in a
+    // `_when_changed`: the interpreter tests operandsUnchanged inline before
+    // calling, so reaching here already means the node must record. Do not
+    // call otherwise. Takes only `idx`, not the slot the caller already
+    // resolved for its test: handing the reference over was measured 0.23%
+    // SLOWER on mandelbrot. It widens the call and pins the reference in a
     // callee-saved register across the call, which costs more than redoing
     // types(idx) — a single scaled lea from a loop-invariant base and an index
     // that was just decoded.
     __attribute__((noinline)) void
-    record_type_inner_when_dirty(uint32_t idx, const SEXP e, uintptr_t act) {
-        types(idx).recordInnerWhenDirty(e, act);
+    record_type_inner_when_changed(uint32_t idx, const SEXP e,
+                                   const uint8_t* scratch) {
+        types(idx).recordInner(e, scratch);
         REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
-    // Inner node that must mark a related node dirty when its own value
-    // changes: a non-root inner node marks its own parent; a root inner node
-    // that is a NoRecord source marks its dependents' parents. (A non-root
-    // inner node is never a source — it always has a parent, so it is never a
-    // variable's def.) markRelatedDirty handles own-parent AND any dependents
-    // together — the branch that does not apply is a no-op — so one opcode
-    // covers both.
+    // Inner node that publishes its result's signature: a non-root inner node
+    // to its own operand position; a root inner node that is a NoRecord source
+    // to its dependents' positions. (A non-root inner node is never a source —
+    // it always has a parent, so it is never a variable's def.) publish
+    // handles both, so one opcode covers both.
     //
-    // `_when_dirty` as above: caller-guarded, so this always records.
-    // Takes only `idx`, as above — see record_type_inner_when_dirty.
+    // `_when_changed` as above: caller-guarded, so this always records.
     __attribute__((noinline)) void
-    record_type_inner_notify_when_dirty(uint32_t idx, const SEXP e,
-                                        uintptr_t act, uint8_t depth,
-                                        uint8_t depthStore) {
+    record_type_inner_notify_when_changed(uint32_t idx, const SEXP e,
+                                          uint8_t* scratch) {
         ObservedValues& slot = types(idx);
-        // Propagate only when our own value changed — recording does not imply
-        // that, since different operands can yield the same result.
-        if (slot.recordInnerAndSignWhenDirty(e, act, depth, depthStore))
-            markRelatedDirty(slot, idx, act);
+        slot.recordInnerAndSign(e, scratch);
+        publish(slot, idx, slot.lastSig, scratch);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
-    // A simple leaf that must mark related nodes dirty when its per-execution
-    // signature changes: either a *source* (a variable with forward NoRecord
-    // uses — propagate to its dependents' parents), a leaf *with a parent*
-    // (mark its own parent), or both. markRelatedDirty handles own-parent AND
-    // dependents together — so a single opcode family covers all cases; the
-    // usually-empty branch is a no-op. (This is why there is no separate _dep_
-    // opcode: a source with no parent is just this handler with an empty
-    // parent slot.)
-    // A simple leaf that is neither stays plain record_type_ /
-    // record_type_once_ and pays nothing.
+    // A simple leaf that publishes its signature: either a *source* (a
+    // variable with forward NoRecord uses — to its dependents' positions), an
+    // operand of an inner node (to its own position), or both. publish handles
+    // both, so a single opcode family covers all cases. A simple leaf that is
+    // neither stays plain record_type_ / record_type_once_ and pays nothing.
     __attribute__((noinline)) void
-    record_type_leaf_notify(uint32_t idx, const SEXP e, uintptr_t act,
-                            uint8_t depth, uint8_t depthStore) {
+    record_type_leaf_notify(uint32_t idx, const SEXP e, uint8_t* scratch) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
-        if (slot.doRecordAndSign(e, depth, depthStore))
-            markRelatedDirty(slot, idx, act); // own parent + any dependents
+        publish(slot, idx, slot.doRecordAndSign(e), scratch);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
 
-    // Mark everything that consumes this slot's value as needing to re-record:
-    // its own parent (if any) and the parents of all its NoRecord dependents
-    // (which emit no opcode of their own, so they cannot signal for
-    // themselves). Called only when the signature actually changed.
+    // Write `sig`, the signature of the value this site just produced, to the
+    // operand positions of the running activation that read it: its own
+    // position, if it is an operand of an inner node, and the positions of its
+    // NoRecord dependents, which emit no opcode and so cannot publish for
+    // themselves. On every execution, changed or not: a position holds this
+    // activation's value, not a delta.
     //
-    // Unlike the object-gated un-suppression this replaces, it is neither
-    // one-shot nor permanent: it fires on every signature change and the
-    // consumer clears it after recording. An object operand keeps signature 0,
-    // which always compares unequal, so its parent records on every execution
-    // for as long as the object keeps showing up — and stops once it does not,
-    // which the permanent latch could never do.
-    // `act` identifies the calling activation; see ObservedValues::
-    // activationStamp for why only the FIRST setter stamps.
-    // The graph walk lives here because it needs types_ and the reverse dep
-    // map; the per-slot mutation is ObservedValues::armIfClean, paired there
-    // with its disarm half.
-    __attribute__((__always_inline__)) void
-    markRelatedDirty(ObservedValues& slot, uint32_t idx, uintptr_t act) {
-        if (slot.hasParent()) // this node's own parent (leaf-with-parent case)
-            types_[slot.parentSlot()].armIfClean(act);
+    // An unsummarisable value publishes 0, which never matches, so its
+    // consumers record on every execution while it keeps showing up. For a
+    // dependent the 0 stays in place until the source runs again, however
+    // often the dependent's parent runs in between.
+    __attribute__((__always_inline__)) void publish(const ObservedValues& slot,
+                                                    uint32_t idx, uint8_t sig,
+                                                    uint8_t* scratch) {
+        if (slot.publishes())
+            scratch[slot.pos()] = sig;
         if (slot.hasDeps) { // almost never: see ObservedValues::hasDeps
-            // Outside the domain the dependents' parents are pinned rather
-            // than armed: see ObservedValues::pin.
-            const bool pin = slot.lastSig == ObservedValues::SigAlwaysDirty;
-            for (uint32_t d : noRecordSourceToDeps_[idx]) { // deps' parents
-                if (types_[d].hasParent()) {
-                    ObservedValues& parent = types_[types_[d].parentSlot()];
-                    if (pin)
-                        parent.pin();
-                    else
-                        parent.armIfClean(act);
-                }
-            }
+            for (uint32_t d : noRecordSourceToDeps_[idx])
+                if (types_[d].publishes())
+                    scratch[types_[d].pos()] = sig;
         }
     }
 

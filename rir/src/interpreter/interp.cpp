@@ -34,7 +34,8 @@ namespace rir {
 
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
-                        BindingCache* cache = nullptr);
+                        BindingCache* cache = nullptr,
+                        uint8_t* sharedScratch = nullptr);
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -468,59 +469,6 @@ SEXP createEnvironmentFrameFromStackValues(CallContext& call) {
                                nullptr, false, false);
 }
 
-// Undoes one Code's liveDepth bookkeeping when control leaves a context
-// without running evalRirCode's epilogue (eval_done), which is the only place
-// that restores the counter on a normal exit.
-//
-// A non-local exit abandons EVERY evalRirCode frame between the raiser and the
-// landing context, and several of them can belong to the same Code: return()
-// inside a trampolined loop abandons both the loop-body frame and the
-// function-body frame. Restoring per frame at the raise site cannot see the
-// outer ones, so the counter is snapshotted where the context is opened and put
-// back when it is left, which undoes all of that Code's frames at once.
-//
-// R reaches a context in one of two ways on unwind, and both are covered:
-//   landing      - the context is the jump target, or an intermediate one with
-//                  on.exit code: control returns from its SETJMP, and the
-//                  caller calls restore().
-//   pass-through - any other context strictly between raiser and target: R
-//                  never returns into it, but R_run_onexits calls its cend.
-//                  attach() registers onUnwind there. (endcontext never calls
-//                  cend, so a normal exit is unaffected.)
-// Restoring twice is harmless: both write the same snapshot.
-//
-// Deliberately NOT an RAII destructor: longjmp does not run destructors.
-//
-// NOT covered: promise Codes. A promise is forced without a context of its
-// own, so a longjmp raised inside one (an error, or break/next inside a
-// promise) abandons its frame with nothing to undo it. return_ raised inside a
-// promise is handled at the raise site instead. What remains only inflates the
-// counter, which over-records and never skips (see Code::depthAnchor).
-struct LiveDepthGuard {
-    Code* const code;
-    const uint16_t depth;
-    const uintptr_t anchor;
-
-    explicit LiveDepthGuard(Code* c)
-        : code(c), depth(c->liveDepth), anchor(c->depthAnchor) {}
-
-    void restore() const {
-        code->liveDepth = depth;
-        code->depthAnchor = anchor;
-    }
-
-    // The guard must outlive every unwind of `cntxt`, so it has to live in the
-    // same frame that opens and ends the context.
-    void attach(RCNTXT* cntxt) {
-        cntxt->cend = &LiveDepthGuard::onUnwind;
-        cntxt->cenddata = this;
-    }
-
-    static void onUnwind(void* self) {
-        static_cast<LiveDepthGuard*>(self)->restore();
-    }
-};
-
 static SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
                               SEXP arglist) {
     assert(TYPEOF(env) == ENVSXP ||
@@ -543,16 +491,10 @@ static SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     // result in broken stack on non-local returns.
 
     Code* code = fun->body();
-    // return() longjmps to this context, and any other unwind passes through
-    // it; either way every frame of `code` opened below is abandoned. See
-    // LiveDepthGuard.
-    LiveDepthGuard depthGuard(code);
-    depthGuard.attach(&cntxt);
     // Pass &cntxt.cloenv, to let evalRirCode update the env of the current
     // context
     SEXP result;
     if ((SETJMP(cntxt.cjmpbuf))) {
-        depthGuard.restore();
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
@@ -592,20 +534,14 @@ void checkUserInterrupt() {
 
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
-                           Opcode* pc, BindingCache* cache) {
+                           Opcode* pc, BindingCache* cache, uint8_t* scratch) {
     assert(env);
 
     RCNTXT cntxt;
     Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv, R_NilValue,
                     R_NilValue);
-    // The loop body runs as a nested activation of the SAME Code `c`, and
-    // leaves either by endloop_ (which returns without reaching eval_done) or
-    // by a break/next longjmp into the SETJMP below. See LiveDepthGuard.
-    LiveDepthGuard depthGuard(c);
-    depthGuard.attach(&cntxt);
 
     if (int s = SETJMP(cntxt.cjmpbuf)) {
-        depthGuard.restore();
         // incoming non-local break/continue:
         if (s == CTXT_BREAK) {
             Rf_endcontext(&cntxt);
@@ -615,9 +551,10 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
     // execute the loop body
-    SEXP res = evalRirCode(c, env, callCtxt, pc, cache);
+    // The loop body is the same activation as the code around it, so it
+    // shares its operand-position scratch array.
+    SEXP res = evalRirCode(c, env, callCtxt, pc, cache, scratch);
     assert(res == loopTrampolineMarker);
-    depthGuard.restore(); // endloop_ does not run eval_done
     Rf_endcontext(&cntxt);
 }
 
@@ -1989,7 +1926,8 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 }
 
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
-                 Opcode* initialPC, BindingCache* cache) {
+                 Opcode* initialPC, BindingCache* cache,
+                 uint8_t* sharedScratch) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     checkUserInterrupt();
@@ -2062,26 +2000,17 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         fired = (bool*)alloca(c->recordTypeOnceCount * sizeof(bool));
         memset(fired, 0, c->recordTypeOnceCount * sizeof(bool));
     }
-    // Identity of THIS activation, used to stamp inner-node dirty flags so a
-    // nested activation cannot disarm a flag it does not own (§2B.5). The
-    // address of a frame-local is unique among simultaneously live frames,
-    // which is the only set that matters, and costs nothing to produce.
-    char activationAnchor;
-    const uintptr_t act = (uintptr_t)&activationAnchor;
-
-    // Live-activation depth of THIS Code, used as the identity for the
-    // signature check (§2B.5.2). Self-correcting: at entry every live
-    // activation of this Code is an outer one and so sits at a HIGHER stack
-    // address, so an anchor below us belongs to a frame that is gone — its
-    // decrement was skipped by a non-local exit and the count is stale.
-    if (c->depthAnchor && c->depthAnchor < act)
-        c->liveDepth = 0;
-    const uint16_t savedDepth = c->liveDepth;
-    const uintptr_t savedAnchor = c->depthAnchor;
-    c->liveDepth = savedDepth + 1;
-    c->depthAnchor = act;
-    const uint8_t sigDepth = ObservedValues::clampDepthCompare(c->liveDepth);
-    const uint8_t sigDepthStore = ObservedValues::clampDepthStore(c->liveDepth);
+    // This activation's operand positions: each operand of an inner node
+    // publishes its signature here, and the inner node compares them with the
+    // tuple it last recorded (ObservedValues::tuple). Per activation, so a
+    // nested activation of the same Code cannot touch them. Zeroed: a
+    // position not yet written reads as the sentinel, which never matches.
+    // A trampolined loop body is the same activation and is handed ours.
+    uint8_t* scratch = sharedScratch;
+    if (!scratch && c->innerScratchSize > 0) {
+        scratch = (uint8_t*)alloca(c->innerScratchSize);
+        memset(scratch, 0, c->innerScratchSize);
+    }
 
     // Per-function-invocation bitmap for record_type_once_promise_ — disabled:
     // record_type_once_promise_ / ldvar_cached_envRecordFB_ are not emitted;
@@ -2599,8 +2528,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             // doRecord + propagate (own parent + any deps, together)
-            typeFeedback->record_type_leaf_notify(idx, ostack_top(), act,
-                                                  sigDepth, sigDepthStore);
+            typeFeedback->record_type_leaf_notify(idx, ostack_top(), scratch);
             REC_STAT(g_recStats.leafAlwaysRec++);
             NEXT();
         }
@@ -2613,8 +2541,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 NEXT();
             });
             typeFeedback->record_type_leaf_notify(
-                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), act, sigDepth,
-                sigDepthStore);
+                RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), scratch);
             // A value outside the signature domain (an object, say) must keep
             // re-arming the parent on every execution: `+` may dispatch to a
             // method whose result type changes although `x` is not reassigned.
@@ -2632,34 +2559,39 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_inner_) {
             Immediate idx = readImmediate();
             advanceImmediate();
-            REC_STAT(if (!typeFeedback->types(idx).dirty)
-                         g_recStats.innerSkip++;
-                     else g_recStats.innerRec++);
-            // Test dirty here rather than inside the (noinline) handler: an
-            // inner node is suppressed on the overwhelming majority of its
-            // executions, so calling out just to load a byte, test a bit and
+            // Test here rather than inside the (noinline) handler: an inner
+            // node is suppressed on the overwhelming majority of its
+            // executions, so calling out just to compare its operands and
             // return is pure overhead. Only the recording itself stays out of
             // line, keeping this dispatch loop small.
             //
             // The handler redoes types(idx) rather than taking the slot from
             // here — passing it was measured slower, see the note on
-            // record_type_inner_when_dirty.
-            if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner_when_dirty(idx, ostack_top(),
-                                                           act);
+            // record_type_inner_when_changed.
+            if (typeFeedback->types(idx).operandsUnchanged(scratch)) {
+                REC_STAT(g_recStats.innerSkip++);
+            } else {
+                REC_STAT(g_recStats.innerRec++);
+                typeFeedback->record_type_inner_when_changed(idx, ostack_top(),
+                                                             scratch);
+            }
             NEXT();
         }
 
         INSTRUCTION(record_type_inner_notify_) {
             Immediate idx = readImmediate();
             advanceImmediate();
-            REC_STAT(if (!typeFeedback->types(idx).dirty)
-                         g_recStats.innerNotifySkip++;
-                     else g_recStats.innerNotifyRec++);
-            // Same as record_type_inner_: skip the call when suppressed.
-            if (typeFeedback->types(idx).dirty)
-                typeFeedback->record_type_inner_notify_when_dirty(
-                    idx, ostack_top(), act, sigDepth, sigDepthStore);
+            // Same as record_type_inner_. A suppressed node still publishes:
+            // its result's signature is the one recorded with the tuple.
+            auto& slot = typeFeedback->types(idx);
+            if (slot.operandsUnchanged(scratch)) {
+                REC_STAT(g_recStats.innerNotifySkip++);
+                typeFeedback->publish(slot, idx, slot.lastSig, scratch);
+            } else {
+                REC_STAT(g_recStats.innerNotifyRec++);
+                typeFeedback->record_type_inner_notify_when_changed(
+                    idx, ostack_top(), scratch);
+            }
             NEXT();
         }
 
@@ -4204,7 +4136,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
-            loopTrampoline(c, env, callCtxt, pc, bindingCache);
+            loopTrampoline(c, env, callCtxt, pc, bindingCache, scratch);
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
@@ -4216,12 +4148,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         INSTRUCTION(return_) {
             SEXP res = ostack_pop();
-            // Rf_findcontext longjmps past eval_done. The enclosing closure's
-            // LiveDepthGuard undoes the body Code's frames, but return_ is also
-            // emitted inside promises, and a promise has no context of its own
-            // to do that - so undo this frame here.
-            c->liveDepth = savedDepth;
-            c->depthAnchor = savedAnchor;
             // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
             // not reached
@@ -4239,8 +4165,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
 eval_done:
-    c->liveDepth = savedDepth;
-    c->depthAnchor = savedAnchor;
     return ostack_pop();
 }
 

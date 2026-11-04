@@ -29,7 +29,7 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
       stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
       codeSize(cs), srcLength(sourceLength), extraPoolSize(0),
-      recordTypeOnceCount(0), liveDepth(0), depthAnchor(0) {
+      recordTypeOnceCount(0), innerScratchSize(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
@@ -125,6 +125,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
     code->recordTypeOnceCount = (uint16_t)InInteger(inp);
+    code->innerScratchSize = (uint16_t)InInteger(inp);
     SEXP extraPool = ReadItem(refTable, inp);
     PROTECT(extraPool);
     auto hasArgReorder = InInteger(inp);
@@ -173,6 +174,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
     OutInteger(out, (int)recordTypeOnceCount);
+    OutInteger(out, (int)innerScratchSize);
     WriteItem(getEntry(0), refTable, out);
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))

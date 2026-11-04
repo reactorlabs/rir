@@ -172,24 +172,15 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (auto i = 0; i < size; ++i) {
         ObservedValues tmp;
         InBytes(inp, &tmp, sizeof(ObservedValues));
-        // `dirty` and both stamps are transient per-run state — a notification
-        // in flight and the identities of the frames that armed it / last wrote
-        // lastSig — not observations, yet all three are inside sizeof() so they
-        // ride along in the byte image. A stamp deserialized from another
-        // process is a meaningless address that could alias a live frame here:
-        // a stale activationStamp would let an activation disarm a flag it does
-        // not own. Reset both. (`lastSigDepth` rides along too but is bounded
-        // and only ever causes an extra record, so it needs nothing.) (Zero is
-        // safe: a real stamp is a frame address and never 0, so both
-        // comparisons fail and we arm conservatively.)
-        tmp.dirty = 0;
-        tmp.activationStamp = 0;
         // `hasDeps` describes noRecordSourceToDeps_, which is in-memory state
         // rebuilt locally (buildNoRecordReverseMap) and never transported. We
         // do not serialize typeDeps_ either, so create() below refills it with
         // NoDep: after deserialization this feedback genuinely has no
         // dependents and 0 is the accurate value, not merely the safe one.
-        // Leaving a 1 here would send markRelatedDirty into an empty vector.
+        // Leaving a 1 here would send publish into an empty vector. The
+        // operand positions ride along, and so does Code::innerScratchSize;
+        // a dependent's position is then never written and reads 0, so its
+        // inner node records on every execution.
         tmp.hasDeps = 0;
         types.push_back(std::move(tmp));
     }
@@ -247,15 +238,21 @@ void ObservedValues::print(std::ostream& out) const {
     }
 
     out << " @ " << this;
-    if (hasParent()) {
-        out << " -> Type#" << parentSlot();
+    // The operand position this site publishes to, and for an inner node its
+    // own positions and the tuple last recorded (`-` = nothing complete yet).
+    // Cast to int: streaming a uint8_t prints a character glyph.
+    if (publishes())
+        out << " -> pos " << pos();
+    if (arity) {
+        out << ", operands " << tupleBase << ".." << tupleBase + arity - 1
+            << ", tuple ";
+        if (tuple[0] == kNoTuple) {
+            out << "-";
+        } else {
+            for (unsigned i = 0; i < arity; i++)
+                out << (i ? "," : "") << (int)tuple[i];
+        }
     }
-    // Cast the uint8_t bitfields to int: streaming a uint8_t (= unsigned char)
-    // prints a character glyph (0x00/0x01 control chars), not the digits 0/1.
-    // leaf-vs-inner is not stored — the opcode name printed alongside this
-    // already says which it is. `dirty` is whether an inner node will record
-    // on its next execution.
-    out << ", dirty: " << (int)dirty;
 }
 
 bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }
