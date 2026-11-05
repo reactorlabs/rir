@@ -84,6 +84,7 @@ class CompilerContext {
     std::stack<std::vector<uint32_t>>& slotsStack() {
         return code.top()->slotsStack;
     }
+    std::stack<bool>& slotsRecorded() { return code.top()->slotsRecorded; }
 
     FunctionWriter& fun;
     Preserve& preserve;
@@ -339,13 +340,106 @@ class CompilerContext {
         auto& stack = slotsStack();
         auto slots = std::move(stack.top());
         stack.pop();
+        slotsRecorded().pop();
         if (!slots.empty() && !stack.empty()) {
             for (auto s : slots)
                 stack.top().push_back(s);
         }
     }
 
-    void pushNewNodeForSlots() { slotsStack().push(std::vector<uint32_t>()); }
+    void pushNewNodeForSlots() {
+        slotsStack().push(std::vector<uint32_t>());
+        slotsRecorded().push(false);
+    }
+
+    // Stands in for an operand whose value no single slot describes: a
+    // construct that records nothing and is not transparent, e.g. an `if` used
+    // as a value (its type depends on which branch ran). An operator with it
+    // among its operands is not made an inner node — registerSlot links
+    // nothing — so it records unconditionally.
+    enum : uint32_t { kOpaqueOperand = UINT32_MAX };
+
+    // Called when a LANGSXP has been compiled, before popNodeForSlots: reduce
+    // what it leaves pending to what its VALUE contributes to an enclosing
+    // operator — at most one slot, or kOpaqueOperand. Anything more would make
+    // slots inside an operand children of an operator levels above them, and
+    // a binary operator has two operands.
+    void finishNodeForSlots(SEXP fun, size_t nargs, bool voidContext) {
+        auto& level = slotsStack().top();
+        // Its value goes nowhere.
+        if (voidContext) {
+            level.clear();
+            return;
+        }
+        // Its own record (inner node or opaque result) stands for it.
+        if (slotsRecorded().top())
+            return;
+        // Its value's signature is fixed whatever its operands: a logical
+        // scalar, NULL, a closure, a constant AST. Like a constant operand,
+        // it contributes nothing. `is.null`, `is.list`, `is.pairlist` and
+        // `missing` reach here only when compiled inline without a record (a
+        // call records its result); they return a logical scalar. `return`
+        // has no value here at all: control leaves.
+        if (fun == symbol::And || fun == symbol::Or || fun == symbol::While ||
+            fun == symbol::Repeat || fun == symbol::For ||
+            fun == symbol::Function || fun == symbol::quote ||
+            fun == symbol::Return || fun == symbol::Missing ||
+            fun == symbol::isnull || fun == symbol::islist ||
+            fun == symbol::ispairlist) {
+            level.clear();
+            return;
+        }
+        // Transparent: its value IS one subexpression's value, exactly as
+        // that subexpression recorded it, whose slot is all that is left
+        // pending (the `{` and complex-assignment sites trim everything else).
+        bool transparent = fun == symbol::Parenthesis || fun == symbol::Block ||
+                           fun == symbol::Assign || fun == symbol::Assign2 ||
+                           fun == symbol::SuperAssign;
+        if (transparent && level.size() <= 1)
+            return;
+        // A unary operator's value is not its operand's: `-x` was never
+        // recorded, so x's slot must not stand for it. Only around a constant
+        // (`-1L`, nothing pending) is it a constant itself.
+        bool unary = nargs == 1 && (fun == symbol::Add || fun == symbol::Sub ||
+                                    fun == symbol::Not);
+        if (unary && level.empty())
+            return;
+        // Anything else that records nothing — `if`, `switch`, ... — has a
+        // value no single slot describes.
+        if (getenv("RL_SLOTDBG")) {
+            std::cerr << "RL_SLOTDBG opaque "
+                      << (TYPEOF(fun) == SYMSXP ? CHAR(PRINTNAME(fun)) : "<?>")
+                      << " pending=" << level.size() << "\n";
+        }
+        level.clear();
+        level.push_back(kOpaqueOperand);
+    }
+
+    // Keep only the pending slots [from, to) of the current level: those of
+    // the subexpression that is the value. Used where a construct evaluates
+    // more than its value (complex assignment: target and index reads).
+    void keepPendingSlots(size_t from, size_t to) {
+        if (slotsStack().empty())
+            return;
+        auto& level = slotsStack().top();
+        std::vector<uint32_t> kept(level.begin() + from, level.begin() + to);
+        level = std::move(kept);
+    }
+    // The value is recorded, but untracked: outside the analysis nothing is
+    // an inner node, so it stands for its subexpression with no slot at all.
+    void markValueRecordedUntracked() {
+        if (slotsStack().empty())
+            return;
+        slotsStack().top().clear();
+        slotsRecorded().top() = true;
+    }
+    size_t pendingSlotCount() {
+        return slotsStack().empty() ? 0 : slotsStack().top().size();
+    }
+    void clearPendingSlots() {
+        if (!slotsStack().empty())
+            slotsStack().top().clear();
+    }
 
     void registerSlot(uint32_t slotIdx, bool isParent) {
 
@@ -361,11 +455,20 @@ class CompilerContext {
             // Link all current children to this parent slot, then replace the
             // current level with just this slot. Do NOT pop — popNodeForSlots()
             // in compileExpr is the single owner of the push/pop balance.
-            for (auto child : currentSlots) {
-                parents[child] = slotIdx;
-            }
+            // An opaque operand leaves it unlinked: a leaf, always recording.
+            bool opaque = false;
+            for (auto child : currentSlots)
+                opaque = opaque || child == kOpaqueOperand;
+            // Each operand contributes at most one slot (finishNodeForSlots),
+            // and inner nodes are binary operators.
+            assert((opaque || currentSlots.size() <= 2) &&
+                   "an operand contributed more than one slot");
+            if (!opaque)
+                for (auto child : currentSlots)
+                    parents[child] = slotIdx;
             currentSlots.clear();
             currentSlots.push_back(slotIdx);
+            slotsRecorded().top() = true;
         }
     }
 
@@ -578,8 +681,10 @@ class CompilerContext {
     }
 
     BC recordTypeTracked(bool isParent) {
-        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
+        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled()) {
+            markValueRecordedUntracked();
             return recordTypeUntracked();
+        }
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack().empty())
             registerSlot(slotIdx, isParent);
@@ -603,13 +708,16 @@ class CompilerContext {
     // notifies anyway). Consuming them leaves them parent-less, so they stay
     // plain record_type_.
     BC recordTypeOpaqueResult() {
-        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled())
+        if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled()) {
+            markValueRecordedUntracked();
             return recordTypeUntracked();
+        }
         auto slotIdx = typeFeedbackBuilder.addType();
         if (!slotsStack().empty()) {
             auto& currentSlots = slotsStack().top();
             currentSlots.clear(); // operands consumed by this operation
             currentSlots.push_back(slotIdx); // this result flows onward
+            slotsRecorded().top() = true;
         }
         return recordTypeForSlot((int)slotIdx);
     }
@@ -1420,7 +1528,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
 
             // First rhs (assign is right-associative)
+            size_t rhsFrom = ctx.pendingSlotCount();
             compileExpr(ctx, rhs);
+            size_t rhsTo = ctx.pendingSlotCount();
             if (!voidContext) {
                 // Keep a copy of rhs since it's the result of this expression
                 cs << BC::dup();
@@ -1507,6 +1617,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             if (!voidContext)
                 cs << BC::invisible();
+            // The value is the rhs: the target and index reads are not part
+            // of it.
+            ctx.keepPendingSlots(rhsFrom, rhsTo);
         } else {
             /*
                 3.b) Deal with all the other functions:
@@ -1727,6 +1840,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (e + 1 != args.end()) {
                 compileExpr(ctx, *e, true);
             } else {
+                // Only the last expression is the block's value; a statement
+                // before it (a bare variable read, say) leaves nothing behind.
+                ctx.clearPendingSlots();
                 compileExpr(ctx, *e, voidContext);
             }
         }
@@ -2933,6 +3049,7 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
         auto args = CDR(exp);
         compileCall(ctx, exp, fun, args, voidContext);
 
+        ctx.finishNodeForSlots(fun, Rf_length(args), voidContext);
         ctx.popNodeForSlots();
 
     } break;
