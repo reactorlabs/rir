@@ -246,11 +246,13 @@ void ObservedValues::print(std::ostream& out) const {
     if (arity) {
         out << ", operands " << tupleBase << ".." << tupleBase + arity - 1
             << ", tuple ";
-        if (tuple[0] == kNoTuple) {
+        if (tuple == kNoTuple) {
             out << "-";
         } else {
+            uint8_t t[2];
+            memcpy(t, &tuple, sizeof(t));
             for (unsigned i = 0; i < arity; i++)
-                out << (i ? "," : "") << (int)tuple[i];
+                out << (i ? "," : "") << (int)t[i];
         }
     }
 }

@@ -212,13 +212,16 @@ struct ObservedValues {
     };
 
     static constexpr unsigned MaxTypes = 3;
-    // Inner nodes with more operand positions than fit in `tuple` are not
-    // elided (setTypeFeedbackParents leaves them plain leaves).
-    static constexpr unsigned MaxArity = 6;
+    // Inner nodes are binary operators, and the compiler gives each operand
+    // at most one slot (finishNodeForSlots), so two positions always suffice.
+    // An inner node gets both even with one operand: the second is then never
+    // written and reads 0, as does tuple's second byte, so the 16-bit compare
+    // needs no arity.
+    static constexpr unsigned MaxArity = 2;
     // A `tuple` that no current tuple can equal: no signature is 0xFF (the
-    // widest is 131, see signatureOf). Set in tuple[0] while nothing complete
-    // has been recorded, so a never-written operand (0) cannot match a zero.
-    static constexpr uint8_t kNoTuple = 0xFF;
+    // widest is 131, see signatureOf). Stored while nothing complete has been
+    // recorded, so a never-written operand (0) cannot match a zero.
+    static constexpr uint16_t kNoTuple = 0xFFFF;
 
     // byte 0: existing flags
     uint8_t numTypes : 2;
@@ -264,9 +267,9 @@ struct ObservedValues {
     // all-zero slot publishes nothing. Set for an operand of an inner node,
     // including a NoRecord use (its source publishes for it).
     uint16_t posPlus1;
-    // bytes 8-9: inner node: the first of its `arity` operand positions.
+    // bytes 8-9: inner node: the first of its two operand positions.
     uint16_t tupleBase;
-    // bytes 10-15: inner node: the operand signatures of the execution it last
+    // bytes 10-11: inner node: the operand signatures of the execution it last
     // recorded (§2B.5). Written together with lastSig, by the record itself,
     // so it is always a tuple whose result this slot has absorbed.
     //
@@ -276,8 +279,14 @@ struct ObservedValues {
     // can only replace `tuple` by another recorded one. An inner node skips
     // iff its current tuple equals `tuple`, i.e. iff a record would add
     // nothing.
-    std::array<uint8_t, MaxArity> tuple;
-    // total (packed): 1+1+3+1+2+2+6 = 16 bytes
+    //
+    // The two bytes as one uint16_t, in the byte order of the positions, so
+    // the test is one load and one compare.
+    uint16_t tuple;
+    // bytes 12-15: padding, to keep the slot a power of two (it is indexed on
+    // every record).
+    std::array<uint8_t, 4> unused2;
+    // total (packed): 1+1+3+1+2+2+2+4 = 16 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -333,7 +342,7 @@ struct ObservedValues {
         assert(canReference(base + n) && n > 0 && n <= MaxArity);
         tupleBase = (uint16_t)base;
         arity = n;
-        tuple[0] = kNoTuple;
+        tuple = kNoTuple;
     }
     static bool canReference(uint32_t p) { return p + 1 <= UINT16_MAX; }
 
@@ -546,11 +555,9 @@ struct ObservedValues {
     // equal the tuple last recorded here.
     __attribute__((always_inline)) bool
     operandsUnchanged(const uint8_t* scratch) const {
-        const uint8_t* cur = scratch + tupleBase;
-        for (unsigned i = 0; i < arity; i++)
-            if (cur[i] != tuple[i])
-                return false;
-        return true;
+        uint16_t cur;
+        memcpy(&cur, scratch + tupleBase, sizeof(cur));
+        return cur == tuple;
     }
 
     // Caller-guarded on !operandsUnchanged: the interpreter tests it inline,
@@ -578,13 +585,12 @@ struct ObservedValues {
     // must never compare equal.
     __attribute__((__always_inline__)) void storeTuple(const uint8_t* scratch) {
         const uint8_t* cur = scratch + tupleBase;
-        bool complete = true;
-        for (unsigned i = 0; i < arity; i++) {
-            tuple[i] = cur[i];
-            complete = complete && cur[i] != SigAlwaysDirty;
-        }
-        if (!complete)
-            tuple[0] = kNoTuple;
+        bool complete =
+            cur[0] != SigAlwaysDirty && (arity < 2 || cur[1] != SigAlwaysDirty);
+        if (complete)
+            memcpy(&tuple, cur, sizeof(tuple));
+        else
+            tuple = kNoTuple;
     }
 };
 
@@ -859,8 +865,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     __attribute__((__always_inline__)) void publish(const ObservedValues& slot,
                                                     uint32_t idx, uint8_t sig,
                                                     uint8_t* scratch) {
-        if (slot.publishes())
-            scratch[slot.pos()] = sig;
+        // Every site with a publishing opcode has a position of its own, a
+        // source without an operator above it too (setTypeFeedbackParents
+        // gives it one nobody reads), so this store needs no test.
+        scratch[slot.pos()] = sig;
         if (slot.hasDeps) { // almost never: see ObservedValues::hasDeps
             for (uint32_t d : noRecordSourceToDeps_[idx])
                 if (types_[d].publishes())

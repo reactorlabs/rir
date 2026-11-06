@@ -495,11 +495,12 @@ class CompilerContext {
         for (const auto& kv : parents)
             operands[kv.second].push_back(kv.first);
 
-        // Give each inner node `arity` consecutive positions in its Code, and
-        // each operand its position. An operand set that does not fit (more
-        // than MaxArity operands, or past the 16-bit position range) is not
-        // made an inner node: it stays a leaf, which always records, and its
-        // operands publish nothing. Conservative and sound.
+        // Give each inner node two consecutive positions in its Code (see
+        // ObservedValues::MaxArity), and each operand its position. An operand
+        // set that does not fit (more than MaxArity operands, or past the
+        // 16-bit position range) is not made an inner node: it stays a leaf,
+        // which always records, and its operands publish nothing.
+        // Conservative and sound.
         std::unordered_map<Code*, uint32_t> nextPos;
         for (const auto& kv : operands) {
             auto c = codeOf.find(kv.first);
@@ -508,15 +509,13 @@ class CompilerContext {
             uint32_t base = nextPos[c->second];
             unsigned n = kv.second.size();
             if (n > ObservedValues::MaxArity ||
-                !ObservedValues::canReference(base + n))
+                !ObservedValues::canReference(base + ObservedValues::MaxArity))
                 continue;
             tf.types(kv.first).setInner(base, n);
             for (unsigned i = 0; i < n; i++)
                 tf.types(kv.second[i]).setPos(base + i);
-            nextPos[c->second] = base + n;
+            nextPos[c->second] = base + ObservedValues::MaxArity;
         }
-        for (const auto& kv : nextPos)
-            kv.first->innerScratchSize = (uint16_t)kv.second;
 
         // Source slots: those a NoRecord (elided) use depends on AND whose
         // dependent is an operand of an inner node. Such a source publishes
@@ -528,6 +527,25 @@ class CompilerContext {
         for (size_t d = 0; d < tf.types_size(); d++)
             if (tf.hasTypeDep(d) && tf.types(d).publishes())
                 sourceSlots.insert(tf.typeDep(d));
+
+        // A publishing site stores to its own position unconditionally
+        // (TypeFeedback::publish), so a source that is no operand gets a
+        // position nobody reads. One that cannot get one publishes nothing:
+        // its dependents' positions then read 0, so their inner nodes always
+        // record.
+        for (auto it = sourceSlots.begin(); it != sourceSlots.end();) {
+            ObservedValues& v = tf.types(*it);
+            auto c = codeOf.find(*it);
+            if (!v.publishes() && c != codeOf.end() &&
+                ObservedValues::canReference(nextPos[c->second]))
+                v.setPos(nextPos[c->second]++);
+            if (v.publishes())
+                ++it;
+            else
+                it = sourceSlots.erase(it);
+        }
+        for (const auto& kv : nextPos)
+            kv.first->innerScratchSize = (uint16_t)kv.second;
 
         // Specialize each record_type_ / record_type_once_ by (isInner,
         // publishes). Inner nodes come only from record_type_ (RecordOnce only
