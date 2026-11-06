@@ -105,6 +105,10 @@ class CodeContext {
     // unrelated node — e.g. in `f(x) + g(x)` the promise loads of `x` became
     // children of the `+`. See recordless-design.md §2C.5.
     std::stack<std::vector<uint32_t>> slotsStack;
+    // Parallel to slotsStack: did the LANGSXP of this level record its own
+    // value (an inner node, or an opaque result such as a call)? Then that
+    // one slot stands for the whole subexpression.
+    std::stack<bool> slotsRecorded;
 };
 
 class PromiseContext : public CodeContext {
