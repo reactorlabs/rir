@@ -862,10 +862,13 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         // Kept inline: not rare in arithmetic code (a variable or temporary
         // read again under another operator), e.g. 30% of the publishes in
         // Mandelbrot, mostly one or two positions. Tested first so that a
-        // site without dependents does not touch depPositions_.
-        if (slot.depsCount) {
+        // site without dependents does not touch depPositions_. The count is
+        // read once: scratch is uint8_t*, so each store may alias the slot
+        // as far as the compiler knows, and slot.depsCount in the loop
+        // condition would be reloaded on every iteration.
+        if (unsigned n = slot.depsCount) {
             const uint16_t* p = depPositions_.data() + slot.depsBegin;
-            for (unsigned i = 0; i < slot.depsCount; i++)
+            for (unsigned i = 0; i < n; i++)
                 scratch[p[i]] = sig;
         }
     }
