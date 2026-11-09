@@ -1,6 +1,7 @@
 # Recordless: reducing type-feedback recording overhead in the Ř interpreter
 
-**Status:** working design snapshot, last revised **2026-09-24**. The author is
+**Status:** working design snapshot, last revised **2026-11-09** (§2B–§2C
+rewritten for the per-activation operand-pair design). The author is
 actively iterating; see *Current implementation status* (§7) for what is stable
 vs. in flux.
 
@@ -140,12 +141,13 @@ if (Compiler::profile)               cs << ctx.recordType();     // one opcode, 
   uint8_t numTypes:2, stateBeforeLastForce:2, notScalar:1, attribs:1, object:1, notFastVecelt:1;
   std::array<uint8_t,3> seen;              // → static_assert(sizeof==4)
   ```
-  It has **none** of the expression-tree fields. The current **8-byte** layout
-  adds `dirty`, `lastSig`, and the 2-byte biased parent index —
-  **+4 bytes/slot**. This is the "node-size confound" (§7): any cross-branch
-  timing partly reflects the larger feedback node, not the algorithm. It used to
-  be +12 (a 16-byte slot with an 8-byte parent *pointer*); §2C.1 records how it
-  came down.
+  It has **none** of the expression-tree fields. The current **16-byte** layout
+  adds `arity`, `lastSig`, the operand position, the inner node's operand
+  positions and recorded operand pair, and the dependents range (§2C.1) —
+  **+12 bytes/slot**. This is the "node-size confound" (§7): any cross-branch
+  timing partly reflects the larger feedback node, not the algorithm. (The size
+  has moved: 16 with a parent pointer, 8 with a parent index, 24 with the frame
+  stamp of the `dirty` design, 16 since.)
 
 **Force-behavior is PRE-EXISTING baseline machinery — not a recordless
 invention.** The `stateBeforeLastForce` lattice and the `recordForceBehavior`
@@ -1036,16 +1038,17 @@ The data path, end to end (verified 2026-07-27):
      (`typeFeedbackBuilder.addType()`),
    - records the dependency `typeDeps_[slot] = sourceSlot`
      (`Builder::setTypeDep`), and
-   - calls `registerLeafSlot(slot)` so the elided use still gets a **parent
-     pointer** in the expression tree — this is what lets the source's
-     notification reach the elided use's enclosing inner node (§2C.4).
+   - calls `registerLeafSlot(slot)` so the elided use is still a pending
+     operand in the expression tree — if it is an operand of an inner node it
+     gets an **operand position**, and the source publishes into it (§2C.2).
    No opcode is emitted.
-2. **`Compiler::finalize`.** `buildNoRecordReverseMap()` inverts `typeDeps_` into
-   `noRecordSourceToDeps_` (source → list of dependent slots), so the runtime can
-   walk a source's dependents.
-3. **Runtime.** The dependent slot is never written (no opcode). The *notify*
-   half is live: when the source's signature changes, `markRelatedDirty` walks
-   `noRecordSourceToDeps_[source]` and marks each dependent's parent dirty.
+2. **`Compiler::finalize`.** After the post-pass assigned positions,
+   `buildNoRecordReverseMap()` inverts `typeDeps_` into `depPositions_`: for
+   each source, the operand positions of its dependents, as a range
+   (`depsBegin`, `depsCount`) stored in the source's slot.
+3. **Runtime.** The dependent slot is never written (no opcode). The *publish*
+   half is live: on every execution the source writes its signature into its
+   dependents' positions in the activation's `scratch` (`TypeFeedback::publish`).
 4. **Consumer side (out of scope here).** `TypeFeedback::reconstructFeedback()` is the
    recovery step: it fills every dependent slot from its source
    (`copyTypeObservationsFrom`, the type fields only) and derives the
@@ -1142,7 +1145,7 @@ never grant a wrong slot.
 emits no record at all, so it stamps `uc.defSlot` — the *ultimate source* — with
 the `ldvar`'s position. That is what makes `a <- f(); b <- a; c <- b; d <- c`
 resolve as `#1→#0, #2→#0, #3→#0, #4→#0` instead of a chain, which
-`markRelatedDirty`'s one-level walk requires (§2C.2).
+`publish`'s one-level dependents list requires (§2C.2).
 
 **Complex assignment is a type barrier.** Every form of `f(x) <- v` stores a
 value that nothing observed, so all of them reseat the def with `kNoSlot`. This
@@ -1616,13 +1619,13 @@ strategy selection (`ldvar_cached_` / `ldvar_cached_noRecordFB_` /
   test is a conservative structural approximation (§3), and it deliberately bails
   (unseen loop defs, closed scopes).
 - **Over-eager source marking (a fixed bug).** A def was at one point marked a
-  NoRecord *source* even when its NoRecord dependent had no parent inner node to
-  un-suppress — pointless work and a classification muddle. Fixed by requiring
-  the dependent to be a registered child (`childSlots.find(d) != end`) before
-  treating `typeDep(d)`'s target as a notifying source (§2C.5).
+  NoRecord *source* even when its NoRecord dependent had no inner node above it
+  — pointless work and a classification muddle. Now a def is a publishing
+  source only if one of its dependents received an operand position (§2C.5).
 - **Reentrancy** — handled by the per-invocation `fired` array (§2A.2.1); would
-  be a correctness bug if the bitmap were global. The inner-node dirty gate *was*
-  global in exactly this sense and had exactly this bug — see §2B.5.
+  be a correctness bug if the bitmap were global. The inner nodes' former
+  `dirty` gate *was* global in exactly this sense and had exactly this bug; the
+  current operand signatures now live in a per-activation array too (§2B.5).
 - **Stats ambiguity** — a genuinely untracked leaf and a RecordAlways leaf both
   emit plain `record_type_`; telling them apart for measurement needs a runtime
   side table (`isStatsUntracked`, §2C.3).
@@ -1639,53 +1642,94 @@ from its children's.
 
 ### 2B.1 Suppress-by-default (the inferability insight)
 
-An inner node starts clean and records only when a child tells it to. Its
-handler does nothing otherwise:
+An inner node records only when its operands give it something it has not
+absorbed yet. Otherwise its record instruction is one 16-bit compare and
+nothing else:
 
 ```cpp
-void recordInner(SEXP e) { if (!dirty) return; dirty = false; doRecord(e); }
+if (slot.operandsUnchanged(scratch)) skip; else record and remember the operands;
 ```
 
-So in the common case an inner node costs only a bit test, never a full
-observation. Note there is no separate `shouldNotRecord` flag: "is this an
-elidable inner node" is carried by the opcode, and `dirty` is the whole runtime
-state.
+There is no separate `shouldNotRecord` flag: "is this an elidable inner node" is
+carried by the opcode (§2C.3), and the operand pair the node last recorded
+(`tuple`, §2B.2) is its whole runtime state.
 
-### 2B.2 Reversal: record when the operands change
+### 2B.2 Record when the operand tuple changes
 
-**This section describes the mechanism as of 2026-08-11; it replaced an
-object-gated design, and §2B.2.1 explains why.**
+**This section describes the mechanism as of 2026-11-04 (`e995aa09`,
+"sigpair"), refined through `bcd013f3`. It replaced a per-slot `dirty` bit with
+an ownership stamp and a depth stamp; §2B.5 explains why.**
 
-An inner node must re-record whenever its result could differ from the one it
-already absorbed. Each child therefore computes a **per-execution signature** of
-the value it just observed, compares it against the previous execution's, and on
-a change marks its parent `dirty`. The parent records once and re-arms.
+An inner node must re-record whenever its result could differ from the ones it
+has already absorbed. Its result's `ObservedValues` contribution is a function
+of its operands' **signatures**:
 
 ```
-sig(v) = 1 + TYPEOF*4 + isScalar*2 + hasDim      (see signatureOf)
-sig(v) = 0  ("always dirty") for objects, attributes beyond a lone `dim`,
+sig(v) = ((TYPEOF + 1) << 2) | isScalar << 1 | hasDim      (see signatureOf)
+sig(v) = 0  (SigAlwaysDirty) for objects, attributes beyond a lone `dim`,
             S4, and length 0 — values that cannot be summarised
 ```
 
-Soundness is one induction: *not dirty* means every operand had the same
-signature as last execution, so — given the operator's result is a function of
-its operands' signatures — the result is the one already recorded, and since the
-accumulated state only grows, having absorbed it once is permanent. The base
-case holds because a slot's initial signature is 0, which never compares equal,
-so the first execution always records.
+(58 = integer scalar, 62 = double scalar, 46 = logical scalar.) So the node
+needs to know exactly one thing: *is this execution's pair of operand
+signatures one I have recorded before?* The state that answers it is split by
+who owns it:
 
-The critical property is that the signature describes **this execution**, not
-the accumulated state. The accumulated state is monotone and stops changing
-while the live value keeps varying underneath it: after operands have separately
-been seen as `int` and `double`, an accumulated-state watcher sees nothing when
-the first `(int, int)` pair arrives, and misses the `integer` result.
+| state | lives in | written by | read by |
+|---|---|---|---|
+| the **current** operand signatures | `scratch`, a byte array per **activation** (§2B.5), one byte per *operand position* | each operand, when it executes (`publish`) | its inner node |
+| the **recorded** operand pair, `tuple` | the node's `ObservedValues` (shared by all activations) | the node, at the end of each record | the node |
+| `lastSig`, the signature of the value last recorded in full | the node's `ObservedValues` | the record | the node, when it publishes upward |
+
+Each inner node owns two consecutive operand positions, `tupleBase` and
+`tupleBase + 1`; each of its operands owns one of them (`posPlus1`). An operand
+writes its signature to `scratch[pos]` on *every* execution, changed or not —
+a position holds this activation's current value, not a delta. The node then
+compares the two bytes at `scratch + tupleBase` with `tuple` as one `uint16_t`:
+
+```cpp
+bool operandsUnchanged(const uint8_t* scratch) const {
+    uint16_t cur; memcpy(&cur, scratch + tupleBase, sizeof(cur));   // one cmpw
+    return cur == tuple;
+}
+```
+
+On a mismatch it records and stores the current pair as `tuple`
+(`storeTuple`) — unless the pair is incomplete (an operand position holds 0:
+unwritten in this activation, or an unsummarisable value), in which case it
+stores `kNoTuple` (`0xFFFF`, which no pair of real signatures can equal, the
+widest being 131). A node with one operand (`x + 1`: constants record nothing)
+still gets two positions; the second is never written, reads 0 in both
+`scratch` and `tuple`, and the 16-bit compare needs no arity.
+
+**Soundness** is one invariant: *`tuple` is always a complete operand pair whose
+result this slot has absorbed.* It is written only at the end of a record, from
+the pair that record ran on. A skip therefore means "this execution's operands
+have the signatures of an execution already recorded here", so — the result
+being a function of those signatures, and the accumulated state only growing —
+recording again would change nothing. The base case holds because a fresh slot
+has `tuple = kNoTuple`, which nothing matches, so the first execution always
+records.
+
+The critical property, unchanged since the first signature design, is that the
+signatures describe **this execution**, not the accumulated state. The
+accumulated state is monotone and stops changing while the live value keeps
+varying underneath it: after operands have separately been seen as `int` and
+`double`, an accumulated-state watcher sees nothing when the first `(int, int)`
+pair arrives, and misses the `integer` result.
+
+An unsummarisable operand publishes 0, so the pair is incomplete, `tuple` stays
+unmatchable, and the node records on every execution while such values keep
+arriving. It re-suppresses as soon as two summarisable operands repeat a
+recorded pair.
 
 ### 2B.2.1 What this replaced, and why
 
-The previous design un-suppressed a parent when a child observed an **object**,
-via `notifyRelatedNodes` — object-gated, monotonic, and latched once per
-activation. It was cheaper (one test on a value `doRecord` had already computed)
-but not lossless, for two independent reasons:
+**First: an object gate (until 2026-08-11).** The original design un-suppressed
+a parent when a child observed an **object**, via `notifyRelatedNodes` —
+object-gated, monotonic, and latched once per activation. It was cheaper (one
+test on a value `doRecord` had already computed) but not lossless, for two
+independent reasons:
 
 1. **The type set is unreconstructible when both operands are polymorphic.**
    `h(1L,1.5); h(1.5,1L)` and the same plus `h(1L,1L)` leave *byte-identical*
@@ -1697,32 +1741,41 @@ but not lossless, for two independent reasons:
    operand's actual length while the feedback carries only `notScalar`
    (§2B.3).
 
-Worse, inner-node reconstruction was never implemented — `reconstructFeedback` only
-does the leaf copy, and is itself never called (§2A.3, §4.6) — so suppressed
-inner slots simply stayed empty
-(`numTypes == 0`, which `PirType::merge` asserts against). And when the old gate
-*did* fire it recorded a biased sample: only post-object executions, missing
-every one before the latch.
+Inner-node reconstruction was never implemented anyway — `reconstructFeedback`
+only does the leaf copy, and is itself never called (§2A.3, §4.6) — so
+suppressed inner slots simply stayed empty (`numTypes == 0`, which
+`PirType::merge` asserts against). And when the old gate *did* fire it recorded
+a biased sample: only post-object executions, missing every one before the
+latch. One object anywhere also meant the parent recorded on *every*
+subsequent execution for the life of the function.
 
-The signature mechanism needs no reconstruction at all: the inner node holds its
-own recorded observations. Two further consequences of dropping the latch:
+**Then: a `dirty` bit (2026-08-11 → 2026-11-04).** Each child compared its
+signature with its own previous one (`lastSig`) and, on a change, set its
+parent's `dirty` bit; the parent recorded if `dirty` and cleared it. This made
+inner nodes lossless and re-armable, but both pieces of state — the bit and the
+child's previous signature — were per *Code*, while the protocol they
+implement spans an activation. Two reentrancy holes followed, and the fixes
+(an owner stamp on `dirty`, a live-depth stamp on `lastSig`, depth restoration
+on every non-local exit) were the most intricate part of the system. §2B.5
+covers them and why the tuple design removes them rather than patching them.
 
-- it is **re-armable**. The old latch was monotone in the wrong direction — one
-  object anywhere meant the parent recorded on *every* subsequent execution for
-  the life of the function. The signature version re-suppresses as soon as the
-  operands settle, so a loop that sees an object early and plain doubles for a
-  million iterations is far cheaper.
-- an object operand keeps signature 0, which never compares equal even to
-  itself, so it re-records for as long as objects keep arriving — the old
-  behaviour, without the permanence.
+What survives from both predecessors: signatures, not objects, decide; the node
+holds its own observations (no reconstruction); suppression re-arms as soon as
+operands settle; and a value outside the domain keeps the consumer recording
+for as long as it keeps arriving.
 
 ### 2B.3 What actually becomes an inner node
 
 There is exactly **one** `recordTypeTracked(true)` call site in the compiler
-(verified 2026-08-07, `Compiler.cpp:952`) — that call is the *only* way a slot
-becomes an inner node, and it covers a fixed list of **13 binary operators**:
+(verified 2026-08-07) — that call is the *only* way a slot can become an inner
+node, and it covers a fixed list of **13 binary operators**:
 
 > `Add Sub Mul Div Idiv Mod Pow` (arithmetic), `Eq Ne Lt Le Gt Ge` (comparison).
+
+It *becomes* one only if the post-pass gives it operand positions, i.e. if at
+least one operand registered under it and none of them was opaque (§2C.5). The
+corpus (710 functions, 43 programs) has 4,616 inner nodes with one recorded
+operand, 5,790 with two, and none with more.
 
 Everything else — general calls, `[`, `[[`, `:`, replacement functions, `for`
 elements — is a **leaf**, not an inner node. `:` is the one case that looks like
@@ -1741,14 +1794,18 @@ Two distinct shapes among the 13:
   of operand types; length again `max(operand lengths)`. Inferable, but by a
   constant rule, not by propagation.
 
+Unary `-x`, `+x`, `!x` share the `Add`/`Sub`/`Not` symbols but are compiled
+without a record of their own, so they are not inner nodes (and not
+transparent either, §2C.5).
+
 **Why `[` is *not* an inner node (it was, until it was demoted).** From
-2026-06-03 (`b659827e`, "optimnize for extract1") until recently, `[` (`Bracket`)
-*was* emitted as an elidable inner node, on the justification: "`x[...]` has the
-same SEXPTYPE as `x` for non-object `x`, so its result type is inferable from the
-lhs leaf." The SEXPTYPE half is true; the conclusion does not follow, because
-eliding the node discards the **entire** `ObservedValues`, and `notScalar` is not
-inherited. Measured on the baseline (record-everything) build with
-`f <- function(x,i) x[i]`, `x = c(1,2,3)`, `i = 1L`:
+2026-06-03 (`b659827e`, "optimnize for extract1") until 2026-08, `[`
+(`Bracket`) *was* emitted as an elidable inner node, on the justification:
+"`x[...]` has the same SEXPTYPE as `x` for non-object `x`, so its result type is
+inferable from the lhs leaf." The SEXPTYPE half is true; the conclusion does not
+follow, because eliding the node discards the **entire** `ObservedValues`, and
+`notScalar` is not inherited. Measured on the baseline (record-everything) build
+with `f <- function(x,i) x[i]`, `x = c(1,2,3)`, `i = 1L`:
 
 ```
 ldvar_cached_ x   → [ double () | promise ]   Type#0    ← lhs: notScalar
@@ -1766,11 +1823,9 @@ consumer could do is conservatively assume `notScalar`, which is a precision los
 scalar-ness drives PIR's unboxing and fast-path selection, this is a materially
 useful bit to lose.
 
-`[` has therefore been **demoted to `recordTypeTracked(false)`** — a tracked
-always-record leaf, the same treatment as `[[`. Confirmed in the emitted
-bytecode: `x[i]`'s result slot is now a plain always-recording leaf and its
-operands carry no parent pointer, while `x + y` still yields a suppressed inner
-node.
+`[` has therefore been **demoted to `recordTypeOpaqueResult()`** — an
+always-recording leaf, the same treatment as `[[`. Its operands carry no
+operand position, while `x + y` still yields a suppressed inner node.
 
 `:` is excluded for the same reason: its result type and length come from the
 operand *values*, not their types, so the feedback cannot be reconstructed. It
@@ -1779,8 +1834,8 @@ is emitted as `recordTypeOpaqueResult()`.
 The general lesson, worth carrying into any future inner-node candidate: **the
 inference obligation is over the whole `ObservedValues`, not just the SEXPTYPE.**
 An operator qualifies only if *every* recorded field — type set, `notScalar`,
-`attribs`, `notFastVecelt` — is derivable from the operands' recorded feedback.
-`[` fails on `notScalar`; the arithmetic ops pass because result length is
+`attribs`, `notFastVecelt` — is a function of the operands' signatures. `[`
+fails on `notScalar`; the arithmetic ops pass because result length is
 `max(operand lengths)`.
 
 `[[` (`DoubleBracket`) extracts an *element* whose type genuinely varies (e.g.
@@ -1792,68 +1847,60 @@ distinct from the `Colon` result node.
 
 - **Determining inferability** is per-operator, conservative, and easy to get
   wrong. `[[`, general calls, and anything whose recorded feedback isn't a
-  function of the operands' recorded feedback must *not* be made an elidable
-  inner node. Note the obligation covers the **whole `ObservedValues`**, not just
-  the SEXPTYPE — `[` was demoted for exactly this reason (§2B.3), having been an
+  function of the operands' signatures must *not* be made an elidable inner
+  node. The obligation covers the **whole `ObservedValues`**, not just the
+  SEXPTYPE — `[` was demoted for exactly this reason (§2B.3), having been an
   inner node for ~7 weeks on a SEXPTYPE-only argument.
-- **Sound + cheap reversal** (§2B.2). Cheapness relies on the signature compare;
-  soundness relies on *some* child always observing the object before the inner
-  node's (elided) feedback is consumed.
-- **Graceful degradation / leaning on leaves.** An inner node can only be elided
-  if at least one child registered under it: the post-pass sets
-  leaf-vs-inner (`slot ∉ parentSlots`) into the opcode, and
-  `registerSlot(parent, /*isParent=*/true)` only enters `parents` for the slots
-  pending at that level. So an expression whose operands registered nothing stays
-  leaf status and falls back to always-record — it degrades rather than eliding
-  unsoundly.
-
-  Keep this distinct from the *soundness* requirement, which is the stronger one:
-  it is not enough for an inner node to have **some** child — the child that
-  actually **produces its operand** must be tracked, or an object appearing only
-  in that operand will never un-suppress the node. That is the real reason opaque
-  value results are `recordTypeTracked(false)` rather than untracked; see the
-  worked `x[[i]] + 1` counterexample in §2C.4. (Note the two can come apart:
-  because `popNodeForSlots` propagates unadopted slots upward, an enclosing node
-  often has the *inner* expression's operands as children even when the inner
-  result itself is untracked — enough to make it an inner node, not enough to make
-  the elision sound.)
-- **Reentrancy of the dirty gate.** The suppress/notify handshake spans two
-  instructions, and the flag was global to the Code, so a nested activation could
-  consume a notification meant for an outer one and cost it an observation.
-  Written up with the witness and the fix in **§2B.5**.
+- **The operands must be exactly the operator's operands.** The node skips when
+  its operand pair is unchanged, so every value that flows into the operator
+  must be described by exactly one operand slot that publishes on every
+  execution — no more (a slot from *inside* an operand would make the skip
+  depend on something that is not an operand) and no less (an operand nobody
+  describes could change while the pair stays equal). The unsound case this
+  rules out, present until `b070b332`: `(if (c) a else b) + d`. Neither branch
+  records the `if`'s value, so `c`, `a`, `b` and `d` all used to propagate up as
+  "operands" of the `+`. With `a` and `b` each keeping its own type, a flip of
+  `c` changed the `+`'s operand type while every published signature stayed
+  the same. The compile-time rules that guarantee "exactly one slot per
+  operand, or none" are in §2C.5; an operand no single slot can describe makes
+  the operator an ordinary always-recording leaf. Witness: `a` double once,
+  `b` always integer, `c` selecting `a` once — the `+` now records
+  `integer, double` on every execution (plain `record_type_`).
+- **Graceful degradation.** Anything that does not fit — an opaque operand, more
+  than two operands, positions past the 16-bit range, a promise-context default
+  argument — leaves the operator a leaf, which always records. Nothing ever
+  degrades into an unsound skip.
+- **The producer of an operand must be the thing that publishes it.** That is
+  why opaque value results are tracked (`recordTypeOpaqueResult`) rather than
+  untracked; see the worked `x[[i]] + 1` example in §2C.4.
+- **Reentrancy.** The protocol spans several instructions (each operand
+  publishes, then the node compares), so where its state lives decides whether
+  a nested activation can interfere. §2B.5.
 - **Root inner nodes that are also sources.** The top of an assigned expression
-  (`a <- f(x)+1`) is an inner node that may *also* be a NoRecord source for other
-  reads of `a`; when it observes an object it must notify its *dependents'*
-  parents, not a parent of its own. This is the reason the inner opcodes split on
-  the "notifies-or-not" axis (§2C.3), not the root-vs-non-root axis.
+  (`a <- f(x)+1`) is an inner node that may *also* be a NoRecord source for later
+  reads of `a`; it must publish its result's signature into its *dependents'*
+  operand positions, not a position of its own. This is why the inner opcodes
+  split on the "publishes-or-not" axis (§2C.3), not the root-vs-non-root axis.
 
 ---
 
 ### 2B.5 Reentrancy
 
-There are **two** independent reentrancy holes in the suppress/notify scheme,
-with the same root cause — a field that is per-execution state but lives in the
-Code-wide `TypeFeedback` — and different symptoms. §2B.5.1 covers `dirty`, the
-flag that can be *stolen* after being armed. §2B.5.2 covers `lastSig`, which
-decides whether to arm at all and so produces a flag that is *never raised*.
-Fixing one does nothing for the other.
+The skip test compares *current* operand signatures with a *recorded* pair. The
+first are per-execution state; the second is persistent. Every reentrancy
+problem the inner nodes have had came from keeping per-execution state in the
+Code-wide `TypeFeedback`, which all activations of the Code share. The current
+design keeps each kind of state where its owner lives, and has no reentrancy
+protocol at all.
 
-#### 2B.5.0 The dirty gate needs an owner
+#### 2B.5.1 The two holes of the `dirty`-bit design (history)
 
-The suppress/notify scheme of §2B.2 is not a point event. It is a **two-instruction
-protocol**: a child sets its parent's `dirty`, and the parent consumes it when its
-own record instruction runs. Between those two instructions lies a window, and
-`dirty` lives in the persistent `TypeFeedback` — one copy shared by every
-activation of the Code. Anything in that window that re-enters the same Code can
-therefore consume a notification meant for an activation further out.
+Both are kept here because they are the witnesses any future design must pass.
 
-This is the same hazard §2A.2.1 already calls out for record-once, where §2A.6
-states the rule plainly: *"would be a correctness bug if the bitmap were global."*
-The `fired` bitmap is per-invocation precisely to avoid it. The inner-node dirty
-gate was global in exactly that sense, and had exactly that bug.
-
-**The witness.** The window opens at the *first child's record*, so whether a
-re-entrant call falls inside it depends on operand order:
+**A stolen flag.** In the `dirty` design a child set its parent's flag and the
+parent consumed it at its own record instruction. Anything in between that
+re-entered the same Code could consume a flag meant for an activation further
+out:
 
 ```r
 f <- function(a, n) {
@@ -1870,83 +1917,16 @@ f(1.5, 2)
 | 3 | B | `add_` sees dirty, records **integer**, clears |
 | 4 | A | `add_` sees a clean slot, **skips** — A's `double` is lost |
 
-Measured, the `add_` slot ends with `[integer]`. Moving the call to the other
-operand (`f(1L, n-1) + a`) puts it *before* any flag is set, and the same slot
-ends with `[integer, double]`; hoisting it into a temporary (`b <- f(...); a + b`)
-also records both. Of the three arrangements of the same computation, only one
-loses. The shape is not exotic — `binarytrees_naive`'s hot line is
-`tree[[1]] + check(tree[[2]]) - check(tree[[3]])`, where `check` recurses to
-depth 13+ through both operators.
+The `add_` slot ended with `[integer]`; `f(1L, n-1) + a`, or hoisting the call
+into a temporary, recorded both. So the recorded feedback depended on operand
+order — not merely lost, but unstable under semantics-preserving edits.
+`binarytrees_naive`'s hot line `tree[[1]] + check(tree[[2]]) -
+check(tree[[3]])` has exactly this shape.
 
-**Why that is more than a lost type.** `seen` is a set of observed types,
-accumulated by union, and the flags accumulate with `||` — both commutative by
-construction. "Which types did this site see" ought to be a question about a
-multiset of executions, not about their sequence. The steal makes *whether an
-execution is observed at all* depend on a syntactic accident, so the profile stops
-being stable under semantics-preserving edits: hoisting a call into a temporary
-changes the recorded feedback. It is also silent — nothing distinguishes "this
-site only ever saw integer" from "it saw double and lost it" — and it falsifies
-the losslessness claim of §2B.2, which is the stated reason the notify scheme
-replaced the abandoned reconstruction approach (§2B.2.1).
-
-(The one *deliberate* order-dependence is unaffected: `numTypes < MaxTypes` caps
-`seen` at three distinct types, so which three you keep is the first three to
-arrive. That is a documented capacity limit, not an accident.)
-
-#### 2B.5.1 The stamp protocol (for `dirty`)
-
-`dirty` is given an **owner**: the activation that armed it, identified by the
-address of a frame-local in that activation of `evalRirCode`. Three rules, each
-load-bearing — getting any of them wrong either reinstates the bug or deletes the
-optimization:
-
-| | guard | why |
-|---|---|---|
-| **arm** | `!dirty` — first setter wins | The outer activation always sets before it calls inward, so the first setter is the **outermost** pending one, which is also the last to consume. Stamping unconditionally instead lets the nested activation seize ownership and the bug returns verbatim — one stamp cannot name two owners. |
-| **consume** | record always; clear only if `stamp == me` | A non-owner here is a nested activation inside the owner's window. It still records (its own operands changed too), but clearing would leave the owner to find a clean slot and skip. |
-| **skip** | `!dirty` alone — **never** consult the stamp | Since nobody clears a flag they do not own, a flag I armed survives until I consume it, so `!dirty` proves no operand of mine changed. Testing the stamp here instead would make the bail fail on every iteration after the first clear and delete the inner-node optimization outright — on mandelbrot that is 185,473,342 skips, ≈100% of the dimension. |
-
-The third rule is what keeps the hot path unchanged: the suppressed case is still
-a single `dirty` test, and the stamp is touched only when a node actually records.
-
-**Soundness** follows from arm and consume together: a flag is never cleared by
-anyone but its owner, so no activation can be made to observe a false "clean". An
-inner activation may record when it did not strictly need to — harmless, since a
-spurious record writes correct data.
-
-**Why a frame address is the right identity.** Live stack frames are disjoint, so
-addresses are unique among *simultaneously live* activations — exactly the set
-that matters. Reuse of a dead frame's address by a later activation is benign in
-the only direction it can go: it can cause a spurious record, never a skip.
-
-**Known hole: a leaked stamp.** If an owner arms the flag but never reaches its
-consume — an R error, or a `return()` from a forced promise, longjmp'ing past the
-operator — the flag stays armed with a dead owner. Every later execution then sees
-`dirty && stamp != me`, records, and never clears: that node loses suppression
-permanently. It over-records, never under-records, so it is a silent performance
-decay rather than a correctness bug. A cheap reclaim exists and is **not
-implemented**: the stack grows down, so a stamp numerically below the current
-frame's address belongs to a dead frame and can be treated as unowned.
-
-**Cost.** Deterministic instruction counts (the subtraction method of §8), same
-commit with and without the protocol: binarytrees +0.13%, nbody +0.13%,
-mandelbrot +0.23%, against a repeat-measurement floor of about ±0.04pp. Recording
-work itself is unchanged — the stats table is byte-identical, so `doRecord` fires
-exactly as often; the delta is the protocol's own test-and-store. Wall-clock A/B
-on this host was useless for a change this small (mixed signs spanning six points
-under the powersave governor), as §8 warns. Note the cost is sensitive to *where*
-the stamp is kept, which is an implementation choice deliberately left out of this
-section.
-
-### 2B.5.2 The second reentrancy hole: a shared signature
-
-The stamp of §2B.5.1 protects a flag that **has** been armed. It says nothing
-about a flag that is **never armed**, and that is a separate, equally real miss.
-
-`lastSig` is shared across activations, and it is what *decides* whether to arm.
-So an interleaved activation can rewrite it such that each of an outer
-activation's operands compares "unchanged" against a write that the outer never
-made — and the combination they form is one nobody recorded:
+**A shared signature.** Whether to set the flag at all was decided by comparing
+with the child's previous signature, also shared. An interleaved activation
+could rewrite it so that each of the outer activation's operands compared
+"unchanged" against a write the outer never made:
 
 ```r
 f <- function(x, ret, n) {
@@ -1958,251 +1938,80 @@ f(1L, 2.5,  1)      # A1:  1L + 2.5  -> double
 f(1L, TRUE, 2)      # B:   1+0i + TRUE -> complex ;  A: 1L + TRUE -> integer
 ```
 
-| | `x` (leaf) | call result | armed? |
-|---|---|---|---|
-| call 1, A1 | `1L` int — first, arms | `2.5` dbl — first, arms | yes → records `double` |
-| call 2, A | `1L` int — matches | *(later)* | **no** |
-| call 2, B | `1+0i` cplx — differs, arms | `TRUE` lgl — differs, arms | yes → records `complex` |
-| call 2, A resumes | | `TRUE` lgl — matches, **B just wrote it** | **no** → skips |
+The `+` ended with `[double, complex]`; the truth is
+`{double, complex, integer}`. Both operands *were* observed — the node never
+learned they were paired that way: a cross-product of two independently stale
+signatures.
 
-Measured, the `+` node ends with `[double, complex]`; the truth is
-`{double, complex, integer}`. `MaxTypes` is 3, so the cap is not the cause.
+**The patches, and why they were abandoned.** The flag got an owner (the frame
+address of the activation that set it: first setter wins, only the owner
+clears, the skip path never looks at the owner). The signature got a stamp:
+the count of live activations of the Code (`Code::liveDepth`), 6 bits with an
+asymmetric clamp, and an early-out only if `lastSigDepth <= depth`. Keeping
+`liveDepth` exact then required restoring it on every non-local exit
+(`return()` in a loop or promise, `break`/`next` in a promise, trampolined
+loops) via a guard in `rirCallTrampoline` and `loopTrampoline` and R's `cend`
+hook — and promise Codes, deopt and caught errors in nested activations were
+still open. A stamp leaked by an error disabled suppression for that node
+permanently. An external review (point 2) found further missed records and
+orphaned flags under recursion. Each fix was correct on its own terms, but the
+protocol had become the most complex part of the system for a problem that is
+not inherent: the current operand signatures *are* per-activation facts.
 
-Both operands **were** observed — the leaf slot holds `[integer, complex]`, the
-call-result slot `[double, logical]`. The node simply never learned they were
-paired that way. The miss is a **cross-product of two independently stale
-signatures**, and it needs three records that never co-occur: one establishing
-each stale half, and a third execution combining them. That is why the smallest
-witness needs recursion plus a third parameter — `ret` is returned instead of
-`w` so the return value can be steered independently of the node's own value.
+#### 2B.5.2 Current operand signatures per activation, recorded pair shared
 
-#### The identity has to be reentrancy, not activation
+`evalRirCode` allocates the activation's `scratch` array on entry (`alloca`,
+`Code::innerScratchSize` bytes, `memset` to 0), next to the record-once `fired`
+array (§2A.2.1), which is per-invocation for the same reason. A trampolined
+loop body (`loopTrampoline`) is the same activation and is handed the
+caller's array (`sharedScratch`). Operands publish into it; inner nodes read
+it.
 
-The fix is the same shape as §2B.5.1 — stamp `lastSig` with who wrote it, and
-only take the early-out if the writer was not nested inside us — but the
-*identity* matters enormously, and the obvious choice is wrong.
+Why this needs no further protocol:
 
-Stamping with the **frame address** works, but it distinguishes *every*
-activation, including sequential ones. Suppression then depends on the caller's
-shape rather than on the data:
+- **Current signatures cannot be disturbed.** A nested activation of the same
+  Code has its own array. Between an operand's publish and its node's compare,
+  nothing but this activation writes those bytes. Both witnesses of §2B.5.1
+  pass: the outer `+` compares the outer activation's own pair.
+- **The recorded pair can be disturbed, harmlessly.** A nested activation may
+  replace `tuple` while the outer one is between operands — but only with
+  another pair it recorded. By the invariant of §2B.2, whatever `tuple` holds,
+  matching it proves a record would add nothing. The worst an interleaving can
+  do is make the outer activation record a pair it would otherwise have
+  skipped: over-recording, never under-recording.
+- **`lastSig` is read only together with `tuple`.** A suppressed
+  `inner_notify_` node publishes `lastSig` as its result's signature. Both are
+  written at the end of the same record and read by the same instruction, with
+  no other code in between, so they always describe the same pair.
+- **Nothing to restore on a non-local exit.** The array dies with the frame.
+  `liveDepth`, `LiveDepthGuard`, the owner stamp, the depth clamp, `pin()` and
+  the `cend` hook are all gone.
+- **No first-execution cost per activation.** `tuple` is shared, so a new
+  activation whose operands have the signatures recorded by an earlier one
+  skips on its first execution. (Making the recorded pair per-activation too
+  would be simpler still, but would record each inner node at least once per
+  call.) A position is read as 0 only if no operand wrote it in this
+  activation, which within one Code happens only for a NoRecord dependent
+  whose source has not run — and that is the conservative outcome.
 
-```r
-{ f(); (function() { f() })(); }        # alternating call depth, in a loop
-```
+**Measured**, deterministic record counts (stats build), vs the depth-stamp
+design:
 
-| | inner nodes armed, 10,000 calls, types never change |
-|---|---|
-| frame-address stamp, single call site | 1 / 10,000 |
-| frame-address stamp, **alternating depth** | **10,000 / 10,000** — suppression gone entirely |
-| depth stamp, either shape | 1 / 10,000 |
-
-The flat case only looked fine because a loop calling one function from one site
-reuses the same stack position, so the address happened to repeat. That is an
-accident of layout, not a property of the design.
-
-What the check actually needs to ask is *"was `lastSig` written by something
-nested inside me?"* — and the answer is carried by a count of live activations
-**of this Code** (`Code::liveDepth`, incremented on entry, decremented on exit).
-A nested activation necessarily runs at a strictly greater depth, so:
-
-```cpp
-lastSigDepth <= depth      // written at my level or shallower ⇒ not inside me
-```
-
-- **equal** — a previous, finished activation at my level, or me earlier. Safe
-  to inherit: every write arms the parent, and the parent's record captures the
-  then-current pair, so a surviving set of signatures is one that was recorded.
-- **shallower** — an activation enclosing me. Also not inside my window.
-- **deeper** — the only case that can have written between two of my own
-  children. Rejected → arm.
-
-Using `<` instead of `<=` would break the flat case outright: it all runs at
-depth 1, and `1 < 1` is false, so nothing would ever early-out.
-
-`<=` rather than `==` matters a great deal for recursion, where `==` makes every
-new depth re-arm even though nothing changed:
-
-| | recursion to depth 20, 30,500 executions |
-|---|---|
-| `lastSigDepth == depth` | 20,501 recorded (32.8% skipped) |
-| `lastSigDepth <= depth` | **22 recorded (99.9% skipped)** |
-
-#### The asymmetric clamp
-
-`lastSigDepth` is 6 bits, stolen from the byte that already held `dirty`, so the
-depth costs **no space at all** — and removing the frame-address stamp it
-replaces takes `ObservedValues` from 24 bytes back to **16**.
-
-Six bits hold 0–63, so deeper recursion must saturate, and the saturation must
-fail *safe* in both directions. Doing that with explicit tests costs two extra
-conjuncts on the single hottest comparison in the system — measured at **+0.6%**
-on mandelbrot, which runs it ~126M times per iteration. Instead the two sides
-saturate in **opposite** directions, so the ordinary comparison fails by itself:
-
-| | saturates to | effect on `lastSigDepth <= depth` | why that is right |
-|---|---|---|---|
-| **writer** too deep | `63` (above every real depth) | false for any shallower reader | a write I cannot place must be assumed nested inside me → arm |
-| **reader** too deep | `0` (below every real depth) | only true if `lastSigDepth == 0` | and `0` means "never written", already rejected because `lastSig` is then `SigAlwaysDirty` → arm |
-
-So the test stays three comparisons — fewer than the frame-address version's
-four — and both clamps are computed once per activation, not once per execution:
-
-```cpp
-const uint8_t sigDepth      = clampDepthCompare(c->liveDepth);   // d < 63 ? d : 0
-const uint8_t sigDepthStore = clampDepthStore(c->liveDepth);     // d < 63 ? d : 63
-```
-
-This is hand-rolled NaN semantics: under `==` the saturation value was safe for
-free, because like NaN it never compared equal to itself. `<=` destroys that
-(`63 <= 63` holds), so the sentinel has to be split per side to keep losing.
-
-#### Keeping the depth exact across non-local exits (fixed 2026-09-29, `69c05f03`)
-
-`liveDepth` is restored in exactly one place, `evalRirCode`'s epilogue
-(`eval_done`). Any other way out leaks one level. This was originally assumed
-to mean R errors only. It does not: **ordinary, error-free code leaks**, through
-three routes.
-
-| route | opcode | how it leaves |
+| | depth stamp (`b070b332`) | per-activation pair (`e995aa09`) |
 |---|---|---|
-| `return()` inside a **loop** or a **promise** | `return_` | longjmp to the function's context (`Rf_findcontext`) |
-| `break` / `next` inside a **promise** | loop compiled via `beginloop_` → `loopTrampoline` | R's builtin longjmps into the trampoline's `SETJMP` |
-| normal end of such a trampolined loop | `endloop_` | returns the marker directly, never reaches `eval_done` |
+| recursion to depth 20, 30,500 executions of `n + r(n - 1L)` | 22 recorded | **3** |
+| `gcd` inner-node records | 1.30M | **61** |
+| `binarytrees` inner-node records | ≈37,000 | **≈50** |
 
-The first route is set by the compiler, not the programmer:
+(`gcd` was one of the programs whose leaked `liveDepth` saturated; the depth
+design then recorded those functions' inner nodes on every execution.)
 
-```cpp
-if (ctx.inLoop() || ctx.isInPromise())   // Compiler.cpp, compiling return()
-    cs << BC::return_();                 // longjmp
-else
-    cs << BC::ret();                     // through eval_done
-```
-
-Either condition alone is enough. A tail `return(x)`, or one inside an `if`,
-compiles to `ret_` and was never affected.
-
-**No recursion is needed.** The failure is on plain sequential calls. Each call
-enters at `liveDepth + 1` and leaves via `return_` without decrementing. The
-next call starts from the leaked value, at the **same** stack address, so the
-anchor test (`depthAnchor < act`, strictly below) does not fire. The counter
-climbs by one per call and reads as if calls were nested inside each other.
-
-Up to depth 30 this is harmless: each call reads a `lastSigDepth` written by
-the previous call at a lower depth, `<=` holds, and the early-out is taken. At
-**31** it saturates. Writes store `kDepthUnknown`, reads compare as 0, and
-`lastSigDepth <= depth` can never hold again. From then on every leaf in that
-Code records and re-arms its parent and every inner node records, for the rest
-of the process. Feedback stays correct (this is over-recording). Recordless is
-simply off for that function.
-
-Measured on HEAD `b6ef9156` with one witness per route, 200 calls each,
-reporting the maximum `liveDepth` reached:
-
-| route | before | after |
-|---|---|---|
-| control (tail `return`, local `break`) | 1 | 1 |
-| `return()` in a loop | **200** | 1 |
-| `return()` in a promise | **200** | 1 |
-| `break` in a promise | **200** | body 2, promise **200** |
-| `next` in a promise | **600** (one per `next`) | body 2, promise **600** |
-| trampolined loop, normal exit | 2 | 2 |
-| `return()` in a trampolined loop | 2 | 2 |
-
-A body depth of 2 is correct: the loop body is a genuinely live activation of
-the same Code, nested in the function body. The last two rows were already
-bounded before the fix, but only by accident (the enclosing frame's own
-`eval_done`, and the anchor reset, respectively).
-
-**Why the restore lives at the landing context, not at the raise site.** A
-longjmp abandons *every* frame between raiser and target, and several can
-belong to one Code: `return()` inside a trampolined loop abandons both the
-loop-body frame and the function-body frame. A restore at `return_` sees only
-its own frame. Worse, it moves `depthAnchor` up to the outer frame's address,
-which turns a case the anchor used to reclaim into one it cannot. So the fix
-snapshots `(liveDepth, depthAnchor)` where the context is **opened** and puts it
-back when control leaves, undoing all of that Code's frames at once
-(`LiveDepthGuard`, `interp.cpp`). It is installed in `rirCallTrampoline`
-(closure body) and `loopTrampoline` (loop body), and covers both ways R leaves
-a context on unwind:
-
-- **landing**: the context is the jump target, or an intermediate one with
-  `on.exit` code. Control returns from its `SETJMP` and the guard restores.
-  `loopTrampoline` also restores after a normal `endloop_` return.
-- **pass-through**: every other context strictly between raiser and target. R
-  never returns into it, but `R_run_onexits` calls its `cend` hook, and the
-  guard registers itself there. `endcontext` never calls `cend`, so normal
-  exits are unaffected. RIR used `cend` nowhere before this.
-
-Restoring twice is harmless (both write the same snapshot). It is deliberately
-not an RAII destructor, since longjmp runs no destructors. A promise has no
-context of its own, so `return_` raised *inside a promise* also undoes its own
-frame at the raise site.
-
-**The anchor stays, as a fallback, and stays strict (`<`).** At entry every live
-activation of the Code is an outer one, at a higher address, so an anchor below
-us is dead. `<=` would also reclaim the exact-reuse case above. But the repair
-resets to 0, which discards any *live* outer activations still counted, and two
-live activations at one depth break the ordering the signature test relies on
-(a nested writer must compare strictly greater than its reader). Eager resets
-widen that window. With the exits covered it is not needed.
-
-**Still not covered**, all of which only inflate the counter (over-record, never
-skip):
-- **Promise Codes** abandoned by a longjmp raised inside them: `break`/`next`
-  inside a promise (the promise rows above) and errors raised inside a promise.
-  Closing this needs a context per promise force (too expensive on a hot path)
-  or a global undo log.
-- **Deopt landing** (`deoptFramesWithContext`): a `return()` in a deoptimized
-  frame leaks once per deopt, so it is bounded. Attaching `cend` there would be
-  unsafe, because that context outlives the lambda frame that would hold the
-  guard.
-- **OSR returns**: OSR is unimplemented.
-
-The only known route to a *wrong* early-out is the anchor reset: if a nested
-activation of a Code dies to a caught error and the still-live outer one calls
-it again, the new frame can land above the dead anchor, reset to 0, and take the
-outer activation's depth. This is argued from the code, not demonstrated.
-
-**Suite impact** (static scan of all 169 benchmark files with R's parser; every
-hit is `return()` inside a loop, none are in promises):
-
-| benchmark | site | effect before the fix |
-|---|---|---|
-| `prg/gcd.R` | `gcd3`, `gcd4` (`return` in `repeat`) | saturated after 31 of `size²` calls |
-| `prg/primes.R` | `isPrime` (`return(FALSE)` in `while`) | saturated (fires on every composite) |
-| `shootout/pidigits` (both) | `cmp_mag`, `strip_leading_zeros` | saturated (`cmp_mag` backs every bigint compare) |
-| `shootout/fannkuch` (both) | `return(max_flip_count)` in `while (TRUE)` | once per harness iteration; saturates only past ~31 iterations |
-| `prg/matmult` (sumprd, triplp) | `return(FALSE)` in the check loop | none (fires only on a wrong result) |
-
-Nothing else in the suite is affected, including nbody, binarytrees, fasta and
-mandelbrot. **Recordless numbers for gcd, primes and pidigits measured before
-`69c05f03` were taken with recordless effectively disabled for those
-functions.** This table is a static prediction; it has not yet been confirmed
-with a depth probe or re-measured.
-
-Cost, deterministic instruction counts against `b6ef9156` (none of these four
-trigger the leak, so this is pure overhead, about 6 instructions per closure
-call):
-
-| nbody | binarytrees | fasta | mandelbrot |
-|---|---|---|---|
-| +0.052% | +0.158% | +0.108% | +0.013% |
-
-#### Cost
-
-Deterministic instruction counts against the frame-address stamp, five
-benchmarks:
-
-| | binarytrees | storage | mandelbrot | nbody | fasta |
-|---|---|---|---|---|---|
-| depth, `==` | −1.79% | −0.03% | −0.20% | −0.07% | +0.16% |
-| depth, `<=`, explicit guards | −4.09% | −0.78% | +0.63% | +0.40% | +0.68% |
-| **depth, `<=`, asymmetric clamp** | **−4.23%** | **−0.91%** | **−0.17%** | **+0.00%** | **+0.27%** |
-
-Recursion-heavy code gains ~4%; nothing else moves beyond about ±0.27%. Wall
-clock was unusable throughout — the host carried an unrelated load average of 25
-during these runs, which affects elapsed time but not retired-instruction counts
-(§8).
+**Cost.** One `alloca` + `memset` of `innerScratchSize` bytes per activation of
+a Code that has inner nodes (two bytes per inner node, plus one per source that
+is not itself an operand). In exchange the hot paths lost: the depth clamps
+computed per activation, the depth increment/decrement and its exit guards, and
+the per-record ownership tests. The skip itself is one 16-bit load and
+compare, in place of a 1-bit test.
 
 ---
 
@@ -2211,105 +2020,109 @@ during these runs, which affects elapsed time but not retired-instruction counts
 ### 2C.1 One node type: `ObservedValues`
 
 Both strategies are carried by extra fields on the single feedback node
-(`runtime/TypeFeedback.h`):
+(`runtime/TypeFeedback.h`), 16 bytes in all:
 
 ```cpp
-uint8_t  dirty : 1;    // inner node: a child's signature changed, re-record
-uint8_t  lastSig;      // signature of the value seen on the PREVIOUS execution
-uint16_t parentPlus1;  // parent slot index, biased by one (0 = no parent)
+// byte 0: baseline flags (numTypes, stateBeforeLastForce, notScalar, attribs, object, notFastVecelt)
+uint8_t  arity : 3;     // inner node: number of operand positions (1 or 2); 0 otherwise
+uint8_t  unused : 5;
+std::array<uint8_t, 3> seen;   // bytes 2-4, baseline
+uint8_t  lastSig;       // signature of the value last recorded in full
+uint16_t posPlus1;      // operand position this site publishes to, biased by one (0 = none)
+uint16_t tupleBase;     // inner node: its first operand position
+uint16_t tuple;         // inner node: operand signatures it last recorded (kNoTuple = none)
+uint16_t depsBegin;     // NoRecord source: its dependents' positions are
+uint16_t depsCount;     //   TypeFeedback::depPositions_[depsBegin, +depsCount)
 ```
 
-Total size: **8 bytes** (1 flags + 1 `dirty` + 3 `seen` + 1 `lastSig` + 2
-parent) vs. the baseline **4 bytes**. `parentPlus1` links a node to its
-enclosing inner node; it is reconstructed at compile time, not serialized.
+vs. the baseline **4 bytes** (§1.1). All tree fields are compile-time
+(`setTypeFeedbackParents`, `buildNoRecordReverseMap`) except `lastSig` and
+`tuple`, which the record writes. The size is a power of two on purpose:
+`types_[idx]` is then a scaled index, and it is indexed on every record.
 
-Three fields that earlier versions carried are **gone**:
+Layout choices:
 
-- `isLeaf` / `shouldNotRecord` — nothing read them at runtime (`PirType::merge`,
-  the JIT-side consumer, never looks at them) and the opcode already says
-  whether a slot is a leaf or an elidable inner node. `shouldNotRecord` was in
-  any case only ever set as `!isLeaf`.
-- `hasPropagatedNotification` — the notify latch, meaningless once notification
-  became per-execution rather than one-shot (§2B.2.1).
+- **Positions, not slot indices.** An operand does not name its parent slot; it
+  names the byte of the activation's `scratch` its parent reads. Positions are
+  dense per Code (two per inner node), which keeps `scratch` small, and they
+  are what make a node's two operands adjacent, so the compare is one 16-bit
+  load. `tupleBase` is therefore **not** a slot index, and `pos()` is not the
+  operand's slot index either.
+- **`posPlus1` is biased by one** so that an all-zero slot publishes nothing: the
+  array is `memcpy`'d from a vector and the constructor `memset`s, so a `0xFFFF`
+  sentinel would be one forgotten initializer away from silently making
+  position 0 everyone's. A position that will not fit in 16 bits is *dropped* at
+  compile time, not truncated — the operator then stays a leaf.
+- **`lastSig` gets a whole byte**: no read-modify-write to preserve neighbouring
+  bits, and no range guard on `TYPEOF` (5 bits, so the widest encoding is
+  `((31 + 1) << 2) | 3 = 131`).
+- **`depsBegin`/`depsCount` replaced padding** (`bcd013f3`): bytes 12–15 used to
+  be unused, so the dependents list cost no size.
 
-Two deliberate layout choices:
+Fields earlier versions carried and that are **gone**: `isLeaf` /
+`shouldNotRecord` (the opcode says it); `hasPropagatedNotification` (the
+object-gate latch, §2B.2.1); `parentPlus1` (the parent slot index of the
+`dirty` design); `dirty`, the owner stamp and `lastSigDepth` (§2B.5.1);
+`hasDeps` (replaced by `depsCount`).
 
-- **`parent` is an index, not a pointer.** Every edge is within one `types_`
-  array, so 2 bytes replace 8 — most of the way from 13 bytes to 8. It is
-  **biased by one** so that an all-zero slot means "no parent": the array is
-  `memcpy`'d from a vector and the constructor `memset`s, so a `0xFFFF` sentinel
-  would be one forgotten initializer away from silently making slot 0 everyone's
-  parent. An edge whose parent index will not fit is *dropped* at compile time,
-  not truncated — a truncated edge would leave an inner node that no child can
-  reach, so it would never record at all.
-- **`lastSig` gets a whole byte** rather than sharing one with `dirty`. That
-  costs a byte and buys three things: no read-modify-write to preserve a
-  neighbouring bit; no range guard on `TYPEOF` (a 5-bit field, so `≤ 31`, and
-  the widest encoding fits a byte — at 7 bits the encoding saturated and needed
-  a `type <= 30` check to stop a wrapped signature aliasing another type's); and
-  `sizeof` becomes a power of two.
+### 2C.2 One publish function for both edges
 
-### 2C.2 One notification function for both edges
-
-The single mechanism that serves *both* "leaf/inner notifies its parent" and
-"source notifies its dependents' parents":
+The single mechanism that serves *both* "an operand feeds its inner node" and
+"a source stands in for its NoRecord dependents":
 
 ```cpp
-// TypeFeedback::markRelatedDirty — mark this slot's own parent (if any) AND the
-// parents of all its NoRecord dependents. Called only when the signature
-// actually changed.
-void markRelatedDirty(ObservedValues& slot, uint32_t idx) {
-    if (slot.hasParent())                          // leaf-with-parent / non-root inner
-        types_[slot.parentSlot()].dirty = true;
-    if (slot.hasDeps)                              // almost never
-        for (uint32_t d : noRecordSourceToDeps_[idx])  // source → dependents' parents
-            if (types_[d].hasParent())
-                types_[types_[d].parentSlot()].dirty = true;
+// TypeFeedback::publish — called on EVERY execution of a publishing site
+void publish(const ObservedValues& slot, uint8_t sig, uint8_t* scratch) {
+    scratch[slot.pos()] = sig;                      // own operand position
+    if (slot.depsCount) {                           // NoRecord dependents' positions
+        const uint16_t* p = depPositions_.data() + slot.depsBegin;
+        for (unsigned i = 0; i < slot.depsCount; i++)
+            scratch[p[i]] = sig;
+    }
 }
 ```
 
-(Simplified: the real code arms through the ownership protocol of §2B.5.1.)
-
-**`hasDeps`** (`b6ef9156`). `noRecordSourceToDeps_` is one `std::vector` per
-slot, 24 bytes each (~36 KB for a 1,500-slot function), and almost every entry
-is empty: nbody has 37 dependents across ~1,500 slots. A one-bit
-`ObservedValues::hasDeps`, set by `buildNoRecordReverseMap`, lets the walk skip
-the map for the ~97% of slots that have no dependents. It lives in the spare bit
-of the `dirty` byte, so `sizeof(ObservedValues)` is unchanged. Measured in
-isolation on nbody (7 interleaved reps): instructions −0.001%, cycles and L1d
-misses within noise. The walk is reached only on a signature change, which is
-already rare in hot loops, so the bit gates a path that was cold to begin with.
-It is kept because it is free and bounds the worst case.
-
-It also narrows a latent bug: `serialize` never writes `typeDeps_`, so a
-deserialized `TypeFeedback` has an empty `noRecordSourceToDeps_`, which the old
-unconditional walk indexed out of bounds. `deserialize` now clears `hasDeps`
-along with `dirty` and the owner stamp. That is the accurate value, since the
-deserialized feedback genuinely has no dependents.
+Callers: `record_type_leaf_notify[_once]_` (with the signature
+`doRecordAndSign` just computed), `record_type_inner_notify_` after recording
+(with the new `lastSig`) and when skipping (with the stored `lastSig`, the
+result of the pair that just matched).
 
 Design points:
 
-- **Fires on change, not on objects, and is not latched.** The predicate is "the
-  per-execution signature differed", and the consumer clears `dirty` after
-  recording. See §2B.2.1 for why the object gate and the one-shot latch went
-  away.
-- **Generic over both edges.** One function handles the parent edge (leaf 2B
-  reversal / non-root inner) and the dependents edge (leaf 2A NoRecord source),
-  with the inapplicable branch a cheap no-op. This is *the* place the two
-  strategies literally share code, and it is why the opcode taxonomy collapses to
-  "notifies or not" rather than a 2×2 of parent×source.
-- **The walk is one level deep, and that is load-bearing.**
-  `noRecordSourceToDeps_` holds only *direct* edges, so a source reaches its
-  dependents' parents but not a dependent's dependents'. This is only correct
+- **Unconditional, not on change.** A position holds this activation's value, so
+  it is rewritten on every execution. In steady state the store writes the
+  value already there, but no test is needed to know that.
+- **Every publishing site has a position of its own**, so the first store needs
+  no test: a source that is not itself an operand gets a dummy position nobody
+  reads (`setTypeFeedbackParents`).
+- **Dependents are a flat list of positions** (`bcd013f3`). The dependents emit
+  no opcode, so their source writes their positions for them. All sources'
+  lists are concatenated in `TypeFeedback::depPositions_`, and each source
+  keeps its range in the slot (`depsBegin`, `depsCount`). Only dependents that
+  are operands (have a position) are listed; the rest have nothing to receive.
+  This replaced a `std::vector` of dependent *slot indices* per slot
+  (`noRecordSourceToDeps_`), whose loop loaded each dependent's
+  `ObservedValues` to test `publishes()` and read `pos()`. A list longer than
+  the 16-bit range would be left empty — its dependents' nodes then always
+  record — but it cannot occur: each dependent has one source and its own
+  position, and positions are already 16-bit.
+- **The loop is inline, behind the `depsCount` test.** Dependents are not rare in
+  arithmetic code (a variable or temporary read again under another operator):
+  8.71% of all publishes in the corpus have dependents (1.44 on average),
+  30.4% in mandelbrot, 48.7% in sieve1. The test keeps sites without
+  dependents from touching `depPositions_`.
+- **One level deep, and that is load-bearing.** A source reaches its
+  dependents' positions but not a dependent's dependents'. That is correct only
   because the dep graph is kept **flat**: a NoRecord read stamps the *ultimate
   source* slot rather than the dep slot just allocated, so `b <- a; c <- b`
-  yields `#2→#0, #3→#0` rather than a `#3→#2→#0` chain (§2A.4). With chains, a
-  copy sitting under a suppressed inner node was two hops from the source and
-  never reached — the inner node stayed suppressed permanently and recorded
-  nothing at all, a real divergence from baseline. Flattening removes the need
-  for a transitive walk rather than adding one.
-- **Only leaves that need it pay.** A parentless non-source leaf keeps the plain
-  `record_type_` opcode and never calls this, nor maintains a signature.
+  yields `#2→#0, #3→#0` rather than a `#3→#2→#0` chain (§2A.4).
+- **Only leaves that need it pay.** A non-operand, non-source leaf keeps the
+  plain `record_type_` opcode and never publishes nor computes a signature.
+- **Deserialized feedback has no dependents.** `serialize` writes neither
+  `typeDeps_` nor `depPositions_`, so `deserialize` zeroes `depsBegin` /
+  `depsCount`. Operand positions and `innerScratchSize` do travel; a
+  dependent's position is then never written, reads 0, and its inner node
+  records on every execution. Conservative.
 
 ### 2C.3 One unified opcode family
 
@@ -2318,51 +2131,60 @@ After the post-pass (`setTypeFeedbackParents`), the value-type record opcodes ar
 
 | opcode | strategy | meaning |
 |---|---|---|
-| `record_type_` | leaf | plain leaf, RecordAlways; also every *untracked* record and the RecordOnce fallback |
+| `record_type_` | leaf | plain leaf, RecordAlways; also every *untracked* record, the RecordOnce fallback, and an operator that did not become an inner node |
 | `record_type_once_` | leaf | plain leaf, RecordOnce (fired-gated) |
-| `record_type_leaf_notify_` | leaf | leaf that **notifies**: a NoRecord *source*, and/or a leaf with a parent inner node |
+| `record_type_leaf_notify_` | leaf | leaf that **publishes**: an operand of an inner node, and/or a NoRecord *source* |
 | `record_type_leaf_notify_once_` | leaf | RecordOnce variant of the above |
-| `record_type_inner_` | inner | **standalone** inner node: root, no dependents — nothing to notify |
-| `record_type_inner_notify_` | inner | inner node that **notifies**: non-root (parent) **or** root source (dependents) |
+| `record_type_inner_` | inner | **standalone** inner node: root, no dependents — nothing to publish |
+| `record_type_inner_notify_` | inner | inner node that **publishes**: an operand itself (non-root), **or** a root source (dependents) |
 
-Note the two families are parallel: each has a plain form and a `*_notify_` form,
-and the "notify" form of both routes through the same `markRelatedDirty`.
-`record_test_`/`record_call_` (branch/callee feedback) sit outside this range.
+The two families are parallel: each has a plain form and a `*_notify_` form,
+and the "notify" form of both routes through the same `publish`. (`notify` is
+the historical name; the opcodes publish.) `record_test_`/`record_call_`
+(branch/callee feedback) sit outside this range.
+
+The inner opcodes test `operandsUnchanged` **inline in the dispatch loop**; only
+the record itself is out of line (`record_type_inner_when_changed`,
+`record_type_inner_notify_when_changed`, both `noinline`). Passing the
+already-resolved slot reference into those handlers was measured 0.23% slower
+on mandelbrot than recomputing `types(idx)`.
 
 The `ObservedValues` recording primitives:
 
 - `doRecord(e)` — shared core: updates `numTypes/seen[]`, `notScalar`, `object`,
   `attribs`, `notFastVecelt`.
+- `doRecordAndSign(e)` — the same updates plus the signature, from a single
+  inspection of `e`; returns early, touching nothing, when the signature equals
+  `lastSig` (every update is then provably a no-op). Sets `lastSig`.
 - `record(e)` → just `doRecord(e)`. Used by plain `record_type_`/`_once_`.
-  (Leaves are never suppressed, so `record()` has **no** `dirty` check;
-  it was dead for its callers and was removed this session.)
-- `recordSimple(e)` — historically a thin alias for `doRecord`; **inlined away**
-  this session (`record_type_leaf_notify` calls `doRecord` directly, being a
-  friend of `ObservedValues`).
-- `recordInner(e)` — `if (!dirty) return; dirty = false; doRecord(e);`. Used by *both*
-  inner-node opcodes.
+- `recordInner(e, scratch)` — `doRecord` + `storeTuple`. Used by `inner_`, which
+  publishes nothing and so needs no result signature.
+- `recordInnerAndSign(e, scratch)` — `doRecordAndSign` + `storeTuple`. Used by
+  `inner_notify_`.
 
 **Untracked records** (a leaf concern that touches the shared opcode). Not every
 `record_type_` participates in the analysis. `recordTypeUntracked()` emits a
 plain `record_type_` and registers nowhere, so the post-pass leaves it untouched:
-always records, never notifies, never suppressed, never NoRecord/RecordOnce. The
+always records, never publishes, never suppressed, never NoRecord/RecordOnce. The
 truly-untracked sites: the colon `m:n` operand casts (×2), the super-assign
 target read-for-update, and the `ldvar` fallback while compiling default formal
 args (no main-body context).
 
-`recordTypeTracked` also **degrades to untracked while compiling default formal
-arguments** (`!mainBodyCtx_`), so every record inside a default arg records always
-and is attributed to the untracked row — matching the baseline, which has no
-suppression anywhere. Without this, an expression like `a + f(1)` in a default arg
-would suppress the `+` on the strength of the tracked call result while `a`, being
-untracked, held no parent pointer to revoke it.
+`recordTypeTracked` and `recordTypeOpaqueResult` also **degrade to untracked
+while compiling default formal arguments** (`!mainBodyCtx_`) and when the leaf
+optimization is off. Every record there records always and is attributed to the
+untracked row — matching the baseline, which has no suppression anywhere. The
+degraded record still marks its level as recorded
+(`markValueRecordedUntracked`) and leaves no slot pending, so the enclosing
+operator sees no operand and no opaque marker for it: an operator *outside* the
+default argument cannot be suppressed on the strength of a slot inside it.
 
-Not registering guarantees leaf && root — nothing maps to or from the slot
-in `parents`. It does **not** structurally guarantee `!isSource`: the post-pass
-derives `sourceSlots` from `typeDeps_` targets, and `trackDef` records whatever
-slot the value-record stamp names, without regard to tracking (§2A.4), so an
-untracked slot could in principle be named as a def's feedback slot and then be specialized
-to `record_type_leaf_notify_`. In practice it never is, but *contingently*, for a
+Not registering guarantees the slot has no position. It does **not**
+structurally guarantee `!isSource`: the post-pass derives `sourceSlots` from
+`typeDeps_` targets, and `trackDef` records whatever slot the value-record stamp
+names, without regard to tracking (§2A.4), so an untracked slot could in
+principle be named as a def's feedback slot and then be specialized to
+`record_type_leaf_notify_`. In practice it never is, but *contingently*, for a
 different reason at each site: the colon casts and the default-arg fallback are
 never reached by `trackDef` at all (the latter returns before `classifyUse`), and
 the super-assign branch deliberately skips `trackDef` (§2A.4). Worth re-checking
@@ -2376,55 +2198,46 @@ set, consulted only under `RIR_RECORD_STATS`).
 
 - **A leaf's source can be an inner node.** The `a <- f(x)+1; …; a` case: the
   root inner node (`f(x)+1`) is the source, later reads of `a` are NoRecord
-  leaves depending on it. When the source (an inner node) records an object it
-  must un-suppress the *dependent leaves' parents* — a "two-step" propagation
-  that `markRelatedDirty`'s dependents loop performs.
+  leaves depending on it. When one of those reads is an operand of another
+  operator, the source publishes its result signature (recorded or, when
+  skipping, `lastSig`) into that read's position.
 - **An inner node's elision is sound only if the node that *produces* its operand
-  can un-suppress it.** This is why opaque value results (call return, `[`, `[[`,
-  `for` element, replacement-fn) use `recordTypeTracked(isParent=false)` rather
-  than `recordTypeUntracked()`. The two helpers differ in exactly one line —
-  `recordTypeTracked` calls `registerSlot(slotIdx, isParent)`, so the slot joins
-  `slotsStack.top()` as a child candidate and the enclosing
-  `recordTypeTracked(true)` adopts it, giving it a **`parent` pointer**. An
-  untracked slot never gets one, so it can never un-suppress anything.
+  publishes it.** This is why opaque value results (call return, `[`, `[[`,
+  `for` element, replacement-fn) use `recordTypeOpaqueResult()` rather than
+  `recordTypeUntracked()`: the opaque result stays pending at its level as the
+  one slot standing for that operand, so the enclosing operator gives it a
+  position. An untracked slot never gets one, so it could never tell its
+  operator anything.
 
   Why that is not academic — `g <- function(x, i) x[[i]] + 1` run with
   `x = list(structure(1, class = "myclass"))` and a `+.myclass` method
-  (measured 2026-07-27):
+  (measured 2026-07-27, under the `dirty` design; the argument is unchanged):
 
   ```
   x       → [ list    (s)    … ] Type#0   ← NOT an object
   i       → [ integer (s)    … ] Type#2   ← NOT an object
-  x[[i]]  → [ double  (oavs) … ] Type#3   ← IS an object;  parent -> Type#4
-  add_    → [ double  (oavs) … should not record: 0 ] Type#4  ← un-suppressed
+  x[[i]]  → [ double  (oavs) … ] Type#3   ← IS an object;  operand of Type#4
+  add_    → [ double  (oavs) … ] Type#4   ← records
   ```
 
   `x[[i]]` is an object while `x` and `i` are not, so the `[[` result is the
-  *only* node that can tell `+` its inference has broken. Because it is tracked it
-  holds `parent -> Type#4`, so its `markRelatedDirty` set `+`'s
-  `dirty` and `+` correctly recorded the S3-dispatched result. Had the
-  `[[` result been untracked, `+`'s children would be only `x` and `i` — both
-  non-objects — so **nothing would ever have un-suppressed `+`**: it would have
-  kept empty feedback while dispatching to `+.myclass` and returning an object.
+  *only* site that can tell `+` its inference has broken. It publishes 0, the
+  pair is incomplete, and `+` records the S3-dispatched result. Had `x` and `i`
+  been the `+`'s operands instead, both would publish unchanged signatures and
+  the `+` would skip while dispatching to `+.myclass` and returning an object.
 
-  **Runtime cost of tracking: none.** The same `record_type_` opcode is emitted,
-  and a tracked slot that ends up with no parent and no dependents is left plain
-  by the post-pass. It is compile-time bookkeeping that *enables* the enclosing
-  elision. (Only other effect: stats attribution — tracked leaves are counted in
-  the "leaves" row, untracked ones in the "untracked" row.)
+  **Runtime cost of tracking: none** when the result is not an operand: a
+  tracked slot with no position and no dependents is left plain
+  `record_type_` by the post-pass. (Only other effect: stats attribution.)
 
-  Note this benefit is specifically about the **parent edge**. Acting as a *def's
-  feedback slot* does **not** require tracking: `trackDef` records whatever slot
-  the value-record stamp names, regardless of whether that slot was ever
-  registered in the tree (§2A.4).
-- **Outside the signature domain, the operand's producer must notify on *every*
-  execution of the consumer (found in external review, fixed 2026-10-29).** An
-  inner node records only when armed, and a value outside the domain (an
-  object, attributes richer than a lone `dim`, S4, length 0) gets
-  `SigAlwaysDirty`, which never compares equal — so the parent is re-armed
-  *each time the child records*. That gives "outside the domain, the parent
-  records on every execution" only while the child records every time the
-  parent runs. The two leaf optimizations break exactly that:
+  Acting as a *def's feedback slot* does **not** require tracking: `trackDef`
+  records whatever slot the value-record stamp names, regardless of whether that
+  slot was ever registered in the tree (§2A.4).
+- **Outside the signature domain, the operand's producer must publish on *every*
+  execution of the consumer (found in external review, fixed 2026-10-29).** A
+  value outside the domain (an object, attributes richer than a lone `dim`, S4,
+  length 0) publishes 0, so the consumer records — but only while the producer
+  keeps publishing it. The two leaf optimizations stop that:
 
   ```r
   `+.ctr` <- function(e1, e2) { e1$n <- e1$n + 1L; if (e1$n > 2L) 2.5 else 1L }
@@ -2433,23 +2246,15 @@ set, consulted only under `RIR_RECORD_STATS`).
   ```
 
   `x` is an environment-backed S3 object whose `+` method changes its state,
-  so the result type changes although `x` is never reassigned. In `f1` the
-  RecordOnce gate skips the leaf from the second iteration on; in `f2` the
-  NoRecord read emits nothing and its source (`mk()`'s result) ran once,
-  before the loop. Either way nothing re-arms `+`, which recorded `integer`
-  only while it returned `2.5`. The loss needs a dispatched method whose
-  result type changes for an unchanged binding (reference-semantics state,
-  globals, randomness) — or, for a non-object outside the domain, another
-  operand that changes *within* its signature (`c(a=1,b=2) + y` keeps or drops
-  `names` as `y`'s length goes 2 → 4). It is lost feedback, not a miscompile:
-  PIR guards its speculation, so the cost is a deopt.
+  so the result type changes although `x` is never reassigned. The loss needs a
+  dispatched method whose result type changes for an unchanged binding
+  (reference-semantics state, globals, randomness) — or, for a non-object
+  outside the domain, another operand that changes *within* its signature
+  (`c(a=1,b=2) + y` keeps or drops `names` as `y`'s length goes 2 → 4). It is
+  lost feedback, not a miscompile: PIR guards its speculation, so the cost is a
+  deopt.
 
-  A NoRecord use can run more often than its source only when the source is a
-  pre-loop def read in a `while` condition (the condition compiles in the
-  enclosing scope, §2A.4.1), or when the source is itself RecordOnce — rules
-  1 and 2 otherwise keep source and use in the same scope.
-
-  **Fix A — a RecordOnce leaf stays armed outside the domain.** In
+  **RecordOnce (`f1`) — the leaf stays armed outside the domain.** In
   `record_type_leaf_notify_once_` the once-bit is set only if the value just
   recorded has a real signature:
 
@@ -2459,69 +2264,52 @@ set, consulted only under `RIR_RECORD_STATS`).
       RECORD_TYPE_ONCE_SET(fired, raw);
   ```
 
-  `lastSig` holds this execution's signature on every path out of
-  `doRecordAndSign`, including the early-out. While the value is
-  unsummarisable the leaf behaves as RecordAlways; the next invocation starts
-  with cleared bits, so it is not permanent. The skip path is untouched — the
-  compare runs only on executions that already passed the gate. This also
-  covers a NoRecord use whose source is RecordOnce.
+  While the value is unsummarisable the leaf behaves as RecordAlways and
+  publishes 0 each time; the next invocation starts with cleared bits.
+  Under the current design this matters less than it did — the 0 published by
+  the first execution stays in the position for the rest of the activation, so
+  the consumer would keep recording anyway — but it still keeps the leaf's own
+  feedback complete.
 
-  **Fix B1 — pin the dependents' parents.** For a pre-loop source the source
-  really does run once, so only the consumer can carry the state. When a
-  source with `SigAlwaysDirty` reaches `markRelatedDirty`'s dependents loop,
-  each dependent's parent is **pinned** instead of armed:
-  `ObservedValues::pin()` sets `dirty` with `activationStamp = kPinned` (1,
-  never the address of a frame-local), so `disarmIfOwner` never clears it and
-  the parent records on every execution from then on. Overriding a live
-  owner's stamp is safe — it can only make that owner record more. Pinning is
-  **permanent** (until the feedback is reset) because nothing ever observes
-  the dependent's value again to say it is back in the domain; this is why
-  the review's "sticky until the operand re-enters the domain" cannot be
-  implemented for NoRecord. It is a narrow return of the permanent latch of
-  §2B.2.1, limited to NoRecord dependents of unsummarisable values. The
-  alternative, B2 — never make a `while`-condition read NoRecord against a
-  pre-loop source, so it becomes RecordOnce and Fix A applies — needs no
-  runtime state but gives up rule 2's condition-read gains; not taken.
+  **NoRecord (`f2`) — handled by the per-activation array, no special case.**
+  The source (`mk()`'s result) runs once, before the loop, and publishes 0 into
+  the dependent's position. Nothing overwrites it in this activation, so the
+  `+` sees an incomplete pair and records on every iteration; the next call
+  starts from a zeroed array and the source publishes again. The `dirty` design
+  needed a dedicated mechanism here ("Fix B1": *pinning* the dependents' parents
+  permanently, since a per-Code flag could not tell when the source's value had
+  left the domain). Re-measured on `bcd013f3`: the in-loop `+` records
+  `integer, double` with `tuple -` (`kNoTuple`), and the pre-loop first check
+  `integer` (it only ever returns `1L`).
 
-  **The test is `SigAlwaysDirty`, not objectness**, in both fixes. The
-  non-object cases above need it too, and `markRelatedDirty` has only the
-  slot, whose `object` bit is cumulative ("ever saw an object"), not the
-  current value. The price is that a named-vector or length-0 source also pins.
-
-  Nested inner nodes need nothing more: a child whose operands are all in the
-  domain and unchanged yields a deterministic in-domain result, and a child
-  with an operand outside it is now armed on every execution, records, gets
-  `SigAlwaysDirty` itself and passes it on.
-
-  | witness | `+` before | after |
-  |---|---|---|
-  | `f1`, RecordOnce leaf | `integer` | `integer, double` (A) |
-  | `f3`: `for (…) { z <- x; y <- x + 1L }`, RecordOnce source | `integer` | `integer, double` (A; B1 also pins) |
-  | `f2`, `while` condition, pre-loop source | `integer` | `integer, double` (B1, `dirty: 1`) |
-  | `f4`, `f1` with `x <- 1L` | `integer` | `integer`, still once-gated, nothing pinned |
-
-  Both fixes are runtime-only; bytecode is unchanged.
+  A NoRecord use can run more often than its source only when the source is a
+  pre-loop def read in a `while` condition (the condition compiles in the
+  enclosing scope, §2A.4.1), or when the source is itself RecordOnce — rules
+  1 and 2 otherwise keep source and use in the same scope.
 - **The `tracked` vs `untracked` distinction is the bridge.**
-  `recordTypeTracked(isParent)` registers a slot in the expression-tree structure
-  (parent/leaf role) so the post-pass can specialize it and an enclosing inner
-  node can lean on it; `recordTypeUntracked()` opts a slot out entirely. The
-  genuinely untracked sites (§2C.3) are the ones that can never be the operand of
-  a tracked expression, so they have no parent edge to lose.
+  `recordTypeTracked(isParent)` / `recordTypeOpaqueResult()` register a slot in
+  the expression-tree structure so the post-pass can give it a position and
+  specialize it; `recordTypeUntracked()` opts a slot out entirely. The genuinely
+  untracked sites (§2C.3) are the ones that can never be the operand of a
+  tracked expression, so they have no position to lose.
 
 ### 2C.5 Compile-time construction and the specialization post-pass
 
 **Building the tree during a single compile pass.** The expression tree is never
 materialized as a data structure; it is discovered with a **stack of pending
-child-slot lists** (`slotsStack`) plus a flat `parents` map (child slot → parent
-slot):
+child-slot lists** (`slotsStack`), a parallel stack of "did this level record
+its own value" flags (`slotsRecorded`), and a flat `parents` map (operand slot
+→ operator slot):
 
-- `slotsStack` lives on the **`CodeContext`**, i.e. one per Code object, not per
+- Both stacks live on the **`CodeContext`**, i.e. one per Code object, not per
   function. An expression tree never spans a Code boundary: a promise body is a
   separate Code object whose evaluation is decoupled in time from the expression
   that created it, so its operands are not operands of that expression. When
   this lived on the function-wide `CompilerContext`, a promise's leaves landed
   in whatever level the *enclosing* function had open — in `f(x) + g(x)` the
-  promise loads of `x` became children of the `+`.
+  promise loads of `x` became children of the `+`. It is also what makes
+  operand positions per-Code: an operator and its operands always run in the
+  same activation's `scratch`.
 
   **`valueRecord` (§2A.4's def-slot stamp) lives there for the same reason**, and
   the reason is worth stating because it is not the obvious one. Both quantities
@@ -2533,85 +2321,98 @@ slot):
   top-level record stamps `scopeId == 0`, which `scopeStillOpen` accepts
   unconditionally, so the scope half would offer no protection at all there.
 
-  Note this is **not** covered by promises being excluded from the optimization.
-  That exclusion stops a stamp made in a promise from being *consumed* in that
-  promise (`emitRecordTypeForVar` returns early, so `classifyUse` never runs),
-  but the degradation path is `recordTypeUntracked()`, which still stamps — and
-  the consumer at the assignment is guarded only by the global
-  `isRecordlessLeafEnabled()`. What made the leak unreachable in practice was
-  unrelated and contingent: every `mk_promise_` happens to be followed by a
-  `call_` whose result re-stamps. Putting the state on the `CodeContext` makes
-  it unreachable by construction instead, which is why there is deliberately no
-  "same Code object?" check in `valueRecordSlotHere`.
-- `compileExpr`'s `LANGSXP` case brackets every call/expression with
-  `pushNewNodeForSlots()` … `compileCall(...)` … `popNodeForSlots()`. One stack
-  level per nested expression; `compileExpr` is the *single owner* of the
-  push/pop balance.
-- `registerSlot(slotIdx, isParent)`:
+  Note this is **not** covered by promises being excluded from the leaf
+  optimization. That exclusion stops a stamp made in a promise from being
+  *consumed* in that promise (`emitRecordTypeForVar` returns early, so
+  `classifyUse` never runs), but the degradation path is
+  `recordTypeUntracked()`, which still stamps — and the consumer at the
+  assignment is guarded only by the global `isRecordlessLeafEnabled()`. What
+  made the leak unreachable in practice was unrelated and contingent: every
+  `mk_promise_` happens to be followed by a `call_` whose result re-stamps.
+  Putting the state on the `CodeContext` makes it unreachable by construction
+  instead, which is why there is deliberately no "same Code object?" check in
+  `valueRecordSlotHere`.
+- `compileExpr`'s `LANGSXP` case brackets every call with
+  `pushNewNodeForSlots()` … `compileCall(...)` … `finishNodeForSlots(fun, nargs,
+  voidContext)` … `popNodeForSlots()`. One stack level per nested call;
+  `compileExpr` is the *single owner* of the push/pop balance.
+- **Leaves register as pending operands**: `registerLeafSlot` (RecordAlways,
+  RecordOnce, and NoRecord uses via `registerNoRecordDep`) pushes the slot onto
+  the current level. Constants register nothing — they never change, so they
+  need no position.
+- **An operator adopts what is pending** — `registerSlot(slot, isParent=true)`,
+  from `recordTypeTracked(true)`:
   ```cpp
-  if (!isParent) {
-      currentSlots.push_back(slotIdx);        // a leaf/operand at this level
-  } else {
-      for (auto child : currentSlots)         // this slot is the result of the
-          parents[child] = slotIdx;           //   expression → adopt the pending
-      currentSlots.clear();                   //   operands as children,
-      currentSlots.push_back(slotIdx);        //   then stand in for them
-  }
+  bool opaque = any(currentSlots == kOpaqueOperand);
+  assert(opaque || currentSlots.size() <= 2);   // one slot per operand, binary op
+  if (!opaque) for (child : currentSlots) parents[child] = slot;
+  currentSlots = { slot };  slotsRecorded.top() = true;
   ```
-  So `recordTypeTracked(isParent=true)` (emitted for a type-preserving
-  sub-expression result) **collapses** the operands registered at the current
-  level into children of the new node, and the new node becomes the single
-  pending slot at that level — which the *enclosing* expression will in turn
-  adopt. That is how `a <- f(x) + 1` links `x`→`+` etc. without an explicit tree.
-- `popNodeForSlots()` moves any still-unadopted slots **up to the enclosing
-  level** rather than dropping them. This matters for non-profiled or
-  non-type-preserving calls, where no `recordTypeTracked(true)` was emitted for
-  the result: the operands would otherwise be orphaned (and the stack would go
-  out of balance).
-- **`recordTypeOpaqueResult()` — the third role.** An opaque value result (call
-  return, `[`, `[[`, `for`, replacement-fn) is a recording *leaf*, so it must not
-  adopt its operands as children (that would make it an inner node and hence
-  suppressible). But it must still **consume** them: it clears the pending list
-  and pushes only itself.
+  The operator then stands in for its own value at this level, for the
+  enclosing operator to adopt. That is how `a <- f(x) + 1` links the call
+  result to `+` without an explicit tree.
+- **An opaque result consumes what is pending** — `recordTypeOpaqueResult()`
+  (call return, `[`, `[[`, `:`, `for`, replacement-fn) clears the level, pushes
+  only itself and marks the level recorded. Its operands say nothing about its
+  type, so they must not become anyone's operands: in `v[i] + 1`, `v` and `i`
+  stay parent-less (plain `record_type_`, no publish) and `v[i]` is the `+`'s
+  one operand.
+- **`finishNodeForSlots` reduces each call to what its *value* contributes** —
+  at most one slot, or the marker `kOpaqueOperand` — before `popNodeForSlots`
+  lifts whatever is left to the enclosing level (`b070b332`). In order:
 
-  Without that, the operands stay pending, `popNodeForSlots` lifts them to the
-  enclosing level, and the *enclosing* inner node adopts them. In `v[i] + 1`,
-  `v` and `i` would become children of the `+` even though its only operand is
-  `v[i]` — so they would be specialized to `record_type_leaf_notify_` and pay the
-  notification check on every execution, and an object-valued `v` would
-  **un-suppress the `+` needlessly** (the `[` result observes the object and
-  notifies anyway). Consuming leaves them parent-less, hence plain
-  `record_type_`:
+  | the call | leaves pending | why |
+  |---|---|---|
+  | in void context | nothing | its value goes nowhere |
+  | recorded its own value (operator or opaque result) | its own slot | already reduced |
+  | `&&`, `\|\|`, `while`, `repeat`, `for`, `function`, `quote`, `return`, `missing`, `is.null`, `is.list`, `is.pairlist` (compiled inline, no record) | nothing | value's signature is fixed (logical scalar, NULL, a closure, …) — a constant |
+  | `(`, `{`, `<-`, `=`, `<<-` with ≤ 1 pending slot | that slot | transparent: its value *is* that subexpression's, exactly as recorded |
+  | unary `-`, `+`, `!` with nothing pending (`-1L`) | nothing | a constant |
+  | anything else (`if`, `switch`, unary op around a recorded operand, a transparent form with leftovers, …) | `kOpaqueOperand` | no single slot describes the value |
 
-  ```
-  v      → Type#0 (record_type_)                        ← no parent
-  i      → Type#2 (record_type_)                        ← no parent
-  v[i]   → Type#3 (record_type_leaf_notify_)  -> Type#4 ← the real operand
-  add_   → Type#4 (record_type_inner_)  suppressed
-  ```
+  An operator with `kOpaqueOperand` among its pending operands links nothing,
+  gets no positions, and stays an always-recording leaf. So `-x + y` records the
+  `+` every time — `-x` was never recorded, so `x`'s slot must not stand for
+  it — and `(if (c) a else b) + d` too (§2B.4). Two sites trim before the
+  reduction so that transparency holds: `{` clears the pending list before its
+  last expression (earlier statements contribute nothing), and a complex
+  assignment keeps only the right-hand side's slots (`keepPendingSlots`), not
+  those of the target and index reads.
 
-  The second effect is the more valuable one. Measured 2026-07-27, the stray
-  inner-node *recordings* that spurious notifications were causing disappeared
-  entirely: `nbody_naive_inner`, `binarytrees_naive` and `spectralnorm` each went
-  from exactly 1 recorded inner node to **0**, i.e. 100% inner-node elision.
-  Recording counts otherwise barely move, since this changes *which* opcode a
-  leaf uses, not *whether* it records.
-- `registerLeafSlot(slot)` is the `isParent=false` shorthand, used for
-  RecordAlways/RecordOnce leaves *and* for NoRecord elided uses (so the elided
-  use still gets a parent, §2A.3).
+  Effect vs `6465ef10` (the last commit without these rules): 278 of the
+  corpus's 70,752 record opcodes changed kind; record counts changed only in
+  `fannkuchredux` (+362,880 each version), `pidigits` (+248,185) and `nbody`
+  (+3/+1) — inner nodes that used to skip on operands that were not theirs.
+- `popNodeForSlots()` still lifts unadopted slots to the enclosing level, which
+  is now at most one slot or the marker per call; at the outermost level of a
+  Code they are dropped (the Code boundary). `pop()` asserts the stack is empty
+  when a Code is finished.
+- **The post-pass**, `CompilerContext::setTypeFeedbackParents` (called from
+  `Compiler::finalize`, after all Codes are emitted):
+  1. Maps every placeholder record to its Code (`codeOf`).
+  2. Inverts `parents` into each operator's operand list, in slot order, and
+     gives the operator two consecutive positions in its Code
+     (`setInner(base, n)`, `tuple = kNoTuple`) and each operand one
+     (`setPos(base + i)`). More than `MaxArity` operands, or a position past the
+     16-bit range: the operator stays a leaf.
+  3. Collects `sourceSlots`: the sources of NoRecord dependents that received a
+     position. A source with no position of its own gets a dummy one (so
+     `publish` needs no test); one that cannot is dropped from the set, and its
+     dependents' positions read 0.
+  4. Stores each Code's position count in `Code::innerScratchSize` (serialized
+     with the Code).
+  5. **Specializes each placeholder `record_type_`/`record_type_once_` opcode**
+     by `(isInner = arity > 0, publishes = has a position or is a source)` into
+     `inner_` / `inner_notify_` / `leaf_notify_[once_]`, or leaves it plain.
+     Inner nodes only ever come from `record_type_` (RecordOnce only classifies
+     leaves), which an `assert` checks.
+- `buildNoRecordReverseMap()` (called right after, since it needs the
+  positions) fills `depPositions_` and each source's `depsBegin` /
+  `depsCount` from `typeDeps_` (§2C.2).
 - `bc/CodeContext.h` holds the per-Code compile state (including
-  `recordTypeOnceBitmapSize`); `bc/CompilerCFG.{h,cpp}` supplies the CFG/scope
-  structure the dominance approximation reads (§3).
-- A post-pass, `TypeFeedback::setTypeFeedbackParents` (called from
-  `Compiler::finalize`), then: sets each slot's `parentPlus1`, computes the
-  `sourceSlots` set (a def is a notifying source only if its NoRecord dependent
-  is a registered child — the over-marking fix of §2A.6), and **specializes each
-  placeholder `record_type_`/`record_type_once_` opcode** into the right family
-  member (`leaf_notify_[once_]` / `inner_` / `inner_notify_`) by `(isLeaf, isRoot,
-  isSource)`.
-- `buildNoRecordReverseMap` builds `noRecordSourceToDeps_` (source slot → its
-  NoRecord dependent slots) from `typeDeps_`, so `markRelatedDirty` can walk a
-  source's dependents at runtime.
+  `recordTypeOnceBitmapSize`, `slotsStack`, `slotsRecorded`, `valueRecord`);
+  `bc/CompilerCFG.{h,cpp}` supplies the CFG/scope structure the dominance
+  approximation reads (§3).
 
 ---
 
@@ -3144,7 +2945,9 @@ which is why the type half now goes through
   propagation runs strictly once and recording never resumes, but RIR re-enters
   the interpreter after deopt and keeps recording.
 - **Same for `lastSig` and `dirty`**, which imported the source's per-execution
-  signature state into a slot that never records for itself.
+  signature state into a slot that never records for itself. (Those fields are
+  now `posPlus1` / `arity` / `tupleBase` / `tuple` / `lastSig`, §2C.1; the
+  type-only copy excludes all of them.)
 
 **Structure of the pass.** One forward loop over all slots, doing the type copy
 and then the FB rule for each. Both rules read only lower-numbered slots — a
@@ -3247,7 +3050,8 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
   notify gate every execution. The new axis moves that cost off the common path;
   a root+source now correctly lands in the notifying bucket. This also let
   `notifyParent()` and the separate `recordInnerNode()` primitive be deleted
-  (both inner opcodes route through `recordInner` + `markRelatedDirty`).
+  (both inner opcodes then routed through `recordInner` + `markRelatedDirty`;
+  today through `recordInner[AndSign]` + `publish`, §2C.3).
 - **suppression check inside `record()`** (the plain-leaf recorder).
   Removed: leaves are never suppressed, so the check
   was provably dead for its callers and cost a load+branch on the hottest record
@@ -3380,9 +3184,11 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-10-13)
+## 7. Current implementation status (snapshot, 2026-11-09)
 
-Working branch: `recordLessNew2-expressionsNewSchema`, at commit `69c05f03`.
+Working branch: `recordLessNew2-expressionsNewSchema-sigPair`, at commit
+`bcd013f3` (entries 31–35 below). `recordLessNew2-expressionsNewSchema` holds
+the `dirty`-bit design up to `6465ef10`, merged in at `1f41af40`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
 
@@ -3404,9 +3210,12 @@ by direct inspection, not recalled:
 - The opcode family `record_type_leaf_notify_[once_]` /
   `record_type_inner_` / `record_type_inner_notify_`; the old
   `record_type_dep_` / `record_type_once_dep_` are **gone**.
-- `markRelatedDirty(slot, idx)`;
-  `recordInner()`; `record()` is a plain `doRecord` with **no**
-  suppression check; `recordSimple` and `notifyParent` are **gone**.
+- `TypeFeedback::publish`, `ObservedValues::operandsUnchanged` /
+  `storeTuple`, the per-activation `scratch` array (`Code::innerScratchSize`);
+  `recordInner()` / `recordInnerAndSign()`; `record()` is a plain `doRecord`
+  with **no** suppression check. `markRelatedDirty`, `dirty`, the owner
+  stamp, `liveDepth` / `LiveDepthGuard`, `pin()`, `parentPlus1`, `hasDeps`,
+  `noRecordSourceToDeps_`, `recordSimple` and `notifyParent` are **gone**.
 - `RECORDLESS_EXPTREE_ENABLED` **removed** — the expression-tree scheme is
   unconditionally compiled in (only `RECORDLESS_EXPTREE_DEBUG` remains).
 - FB: `ldvar_cached_` / `ldvar_cached_noRecordFB_` /
@@ -3534,7 +3343,8 @@ by direct inspection, not recalled:
 
 **Changes landed since (2026-09-02 → 2026-09-14).**
 
-14. **Inner-node dirty gate given an owner** (§2B.5). The suppress/notify
+14. **Inner-node dirty gate given an owner** (superseded by 31; history in
+    §2B.5.1). The suppress/notify
     handshake spans two instructions and the flag was global to the Code, so a
     nested activation landing in that window consumed notifications meant for an
     outer one — `a + f(...)` inside `f` lost the outer activation's type, while
@@ -3568,8 +3378,9 @@ by direct inspection, not recalled:
 
 **Changes landed since (2026-09-22 → 2026-09-24).**
 
-16. **Second reentrancy hole closed: the shared signature** (§2B.5.2). The
-    owner-stamp of §2B.5.1 protects a flag that *has* been armed; it does
+16. **Second reentrancy hole closed: the shared signature** (superseded by
+    31; history in §2B.5.1). The
+    owner-stamp protects a flag that *has* been armed; it does
     nothing for a flag that is **never armed**, because `lastSig` — which
     decides whether to arm — is itself shared across activations. An
     interleaved activation can rewrite it so that each of an outer
@@ -3603,13 +3414,14 @@ by direct inspection, not recalled:
 
 **Changes landed since (2026-09-24 → 2026-09-29).**
 
-17. **`hasDeps` bit** (`b6ef9156`, §2C.2). Gates `markRelatedDirty`'s walk of
+17. **`hasDeps` bit** (`b6ef9156`; superseded by 35). Gates `markRelatedDirty`'s walk of
     the reverse-dependency map, which is empty for ~97% of slots. Free (spare
     bit, no size change), measured at −0.001% instructions on nbody, i.e. no
     measurable effect. Also stops deserialized feedback from indexing an empty
     `noRecordSourceToDeps_`.
 
-18. **`liveDepth` leak on non-local exits fixed** (`69c05f03`, §2B.5.2). The
+18. **`liveDepth` leak on non-local exits fixed** (`69c05f03`; superseded by
+    31, `liveDepth` no longer exists). The
     depth was restored only at `eval_done`, so `return()` inside a loop or a
     promise (`return_`), `break`/`next` inside a promise, and the trampolined
     `endloop_` all leaked one level per exit. No recursion needed: a flat loop
@@ -3751,11 +3563,55 @@ by direct inspection, not recalled:
     checks only the innermost loop. Paper corpus vs `b231d619`: stats CSVs and
     the bytecode of all 710 benchmark functions byte-identical.
 
+**Changes landed since (2026-11-03 → 2026-11-09), branch
+`recordLessNew2-expressionsNewSchema-sigPair`.** Entries 14, 16, 17, 18 and the
+B1 half of 29 are superseded by 31.
+
+31. **Inner nodes compare operand pairs; current signatures per activation**
+    (`e995aa09`, §2B.2, §2B.5). Each operand publishes its signature into the
+    running activation's `scratch` array; each inner node compares its two
+    positions, as one `uint16_t`, with the pair it last recorded (`tuple`,
+    shared). Removes `dirty`, the owner stamp, `liveDepth` with its clamp and
+    exit guards, and pinning; the reentrancy witnesses of §2B.5.1 and external
+    review point 2 pass with no protocol. Inner records: recursion witness 22 →
+    3 of 30,500; `gcd` 1.30M → 61; `binarytrees` ≈37k → ≈50.
+
+32. **An operator's operands are exactly its operands** (`b070b332`, §2B.4,
+    §2C.5). `finishNodeForSlots` reduces every call to at most one pending slot
+    or `kOpaqueOperand`: fixed-signature constructs count as constants,
+    `(`/`{`/assignments are transparent, a unary operator around a recorded
+    operand or any other unrecorded construct (`if`, `switch`, …) is opaque and
+    makes the operator an always-recording leaf. Closes the
+    `(if (c) a else b) + d` hole, where a branch flip changed the operand while
+    every published signature stayed the same (present on the `dirty` branch
+    too). `registerSlot` asserts ≤ 2 operands. Corpus vs `6465ef10`: 278 of
+    70,752 record opcodes changed kind; record counts changed in
+    `fannkuchredux` (+362,880 each version), `pidigits` (+248,185) and `nbody`
+    (+3/+1) only.
+
+33. **Merge** of `recordLessNew2-expressionsNewSchema` (`1f41af40`), resolved in
+    favour of 32 wherever the two touched the slot tree.
+
+34. **Hot-path tightening** (`0d2b174b`): two positions per inner node always
+    (no arity in the compare), `kNoTuple` instead of a validity bit,
+    `operandsUnchanged` as a single 16-bit `memcpy` compare, `publish` without
+    a slot index. Opcodes and record stats byte-identical.
+
+35. **Flat dependents list** (`bcd013f3`, §2C.2). `depPositions_` holds each
+    source's dependents' *positions* contiguously, indexed from the slot by
+    `depsBegin` / `depsCount` (in former padding); only dependents with a
+    position are listed. Replaces `noRecordSourceToDeps_` and `hasDeps`; the
+    loop stays inline behind the `depsCount` test (dependents occur in 8.71% of
+    publishes, 30% in mandelbrot). Also removes the `RL_SLOTDBG` debug hook.
+    Opcodes of all 710 corpus functions and record stats of all 43 programs
+    byte-identical to `0d2b174b`. Strictly less runtime work; the only
+    additions are compile-time (one extra pass in `buildNoRecordReverseMap`).
+
 All build clean and every checked benchmark produces correct results.
 
-To collect stats: flip `//#define RIR_RECORD_STATS` on in
-`rir/src/interpreter/record_stats.h`, rebuild, run; **flip it back off for any
-timing.**
+To collect stats: configure with `cmake -DRECORD_STATS=ON .` in the build
+directory (it defines `RIR_RECORD_STATS` everywhere), rebuild, run; **set it
+back to `OFF` for any timing.**
 
 ---
 
@@ -3806,10 +3662,10 @@ columns (skip% = skipped/should):
 2. **leaves by class:** `RecordAlways`, `RecordOnce`, `NoRecord (elided)` — each
    row's "should" carries its share of all leaves.
 3. **inner nodes by opcode:** `inner (standalone)`, `inner_notify` — here
-   "skipped" means *suppressed* via the `dirty` gate (the elision), not gated:
-   no operand's per-execution signature changed, so the result is the one
-   already absorbed. Unlike the old latch this is re-armable, so a node can go
-   back to being suppressed once its operands settle.
+   "skipped" means *suppressed* (the elision), not gated: this activation's
+   operand pair equals the pair last recorded (§2B.2), so the result is one
+   already absorbed. Re-armable: a node goes back to being suppressed as soon
+   as its operands repeat a recorded pair.
    Printed under table 2 is a non-row line, **"of all N records, M updated
    nothing (signature unchanged)"** — the share of records that ran but whose
    early-out found nothing to do. It *overlaps* the recorded counts rather than
@@ -3981,22 +3837,28 @@ setup.
 
 ## Appendix: key files
 
-- `rir/src/interpreter/interp.cpp` — `evalRirCode`; the `fired` array; the
+- `rir/src/interpreter/interp.cpp` — `evalRirCode`; the `fired` and `scratch`
+  arrays (and `sharedScratch` for `loopTrampoline`); the
   `recordFbAtSlot` / `recordForceBehavior*` lambdas; all `record_type_*` and
   `ldvar*` handlers.
 - `rir/src/runtime/TypeFeedback.h` — `ObservedValues` (flags; `doRecord` vs.
   `doRecordAndSign`, the latter carrying the signature and the early-out;
   `record` / `recordInner` / `recordInnerAndSign`; `signatureOf` and
-  `SigAlwaysDirty`; `parentPlus1` and its accessors), `TypeFeedback`
-  (`record_type_*` methods, `markRelatedDirty`, `typeDeps_`,
-  `noRecordSourceToDeps_`, `buildNoRecordReverseMap`, `ForceBehaviorKind`).
+  `SigAlwaysDirty`; `posPlus1` / `tupleBase` / `tuple`, `operandsUnchanged`,
+  `storeTuple`), `TypeFeedback`
+  (`record_type_*` methods, `publish`, `depPositions_`, `typeDeps_`,
+  `buildNoRecordReverseMap`, `ForceBehaviorKind`).
+- `rir/src/runtime/Code.h` — `innerScratchSize` (the per-activation operand
+  array's size, serialized with the Code).
 - `rir/src/bc/Compiler.cpp` — `compileGetvar`, `emitRecordTypeForVar`,
-  `setTypeFeedbackParents` (the post-pass that specializes opcodes and sets
-  parents), once-bit assignment & clearing; the def-slot stamp
+  `finishNodeForSlots` / `registerSlot` (the slot tree),
+  `setTypeFeedbackParents` (the post-pass that assigns operand positions and
+  specializes opcodes), once-bit assignment & clearing; the def-slot stamp
   (`recordTypeForSlot` / `recordTypeOnceForSlot` — the single place a record is
   built and stamped — plus `noteValueRecord[At]` and `valueRecordSlotHere`).
 - `rir/src/bc/CodeContext.h` — the per-Code-object compile state that must not
-  leak across a Code boundary: `slotsStack` and `valueRecord` (§2C.5).
+  leak across a Code boundary: `slotsStack`, `slotsRecorded` and `valueRecord`
+  (§2C.5).
 - `rir/src/bc/CodeStream.h` — `lastValueInstructionPos()` and `isValueNeutral()`,
   which is how the def-slot check asks "did anything change the value since that
   record?".
