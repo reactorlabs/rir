@@ -172,16 +172,16 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (auto i = 0; i < size; ++i) {
         ObservedValues tmp;
         InBytes(inp, &tmp, sizeof(ObservedValues));
-        // `hasDeps` describes noRecordSourceToDeps_, which is in-memory state
+        // depsBegin / depsCount index depPositions_, which is in-memory state
         // rebuilt locally (buildNoRecordReverseMap) and never transported. We
         // do not serialize typeDeps_ either, so create() below refills it with
         // NoDep: after deserialization this feedback genuinely has no
         // dependents and 0 is the accurate value, not merely the safe one.
-        // Leaving a 1 here would send publish into an empty vector. The
-        // operand positions ride along, and so does Code::innerScratchSize;
-        // a dependent's position is then never written and reads 0, so its
-        // inner node records on every execution.
-        tmp.hasDeps = 0;
+        // The operand positions ride along, and so does
+        // Code::innerScratchSize; a dependent's position is then never written
+        // and reads 0, so its inner node records on every execution.
+        tmp.depsBegin = 0;
+        tmp.depsCount = 0;
         types.push_back(std::move(tmp));
     }
 

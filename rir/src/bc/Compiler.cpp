@@ -406,11 +406,6 @@ class CompilerContext {
             return;
         // Anything else that records nothing — `if`, `switch`, ... — has a
         // value no single slot describes.
-        if (getenv("RL_SLOTDBG")) {
-            std::cerr << "RL_SLOTDBG opaque "
-                      << (TYPEOF(fun) == SYMSXP ? CHAR(PRINTNAME(fun)) : "<?>")
-                      << " pending=" << level.size() << "\n";
-        }
         level.clear();
         level.push_back(kOpaqueOperand);
     }

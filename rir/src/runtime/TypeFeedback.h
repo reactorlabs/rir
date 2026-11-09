@@ -234,18 +234,7 @@ struct ObservedValues {
     // Inner node: the number of its operand positions, 0 for any other slot.
     // Compile-time (setTypeFeedbackParents).
     uint8_t arity : 3;
-    // Does this slot have NoRecord dependents? Compile-time, set by
-    // buildNoRecordReverseMap.
-    //
-    // A source must publish its signature into the operand positions of its
-    // dependents (publish), and the reverse map that answers that is one
-    // std::vector PER SLOT - 24 bytes each, so ~36 KB for a 1,500-slot
-    // function, several times the `types_` array and larger than L1d. Almost
-    // every access finds it empty: nbody has 37 dependents across ~1,500
-    // slots. Consulting this bit first turns that random 36 KB touch into a
-    // field already loaded with the slot.
-    uint8_t hasDeps : 1;
-    uint8_t unused : 4;
+    uint8_t unused : 5;
     // bytes 2-4: type observations
     std::array<uint8_t, MaxTypes> seen;
     // byte 5: signature of the value this site last recorded in full (see
@@ -283,10 +272,15 @@ struct ObservedValues {
     // The two bytes as one uint16_t, in the byte order of the positions, so
     // the test is one load and one compare.
     uint16_t tuple;
-    // bytes 12-15: padding, to keep the slot a power of two (it is indexed on
-    // every record).
-    std::array<uint8_t, 4> unused2;
-    // total (packed): 1+1+3+1+2+2+2+4 = 16 bytes
+    // bytes 12-15: a source's NoRecord dependents that are operands, as the
+    // range [depsBegin, depsBegin + depsCount) of TypeFeedback::depPositions_,
+    // which holds their operand positions. The dependents emit no opcode, so
+    // the source publishes for them (TypeFeedback::publish). Dependents with
+    // no operator above them have no position and are not listed. Compile-
+    // time (buildNoRecordReverseMap); not transported by serialization.
+    uint16_t depsBegin;
+    uint16_t depsCount;
+    // total (packed): 1+1+3+1+2+2+2+2+2 = 16 bytes
 
     // ---- lastSig encoding ------------------------------------------------
     // Low bits first:
@@ -714,14 +708,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // Parallel to types_: forceBehaviorKinds_[i] is the compile-time FB
     // recording decision for slot i (default ForceBehaviorKind::Always).
     uint8_t* forceBehaviorKinds_;
-    // Reverse of typeDeps_: source slot -> its NoRecord dependent slots. Built
-    // in-memory at compile time (buildNoRecordReverseMap); empty when the
-    // function has no NoRecord uses. Used at runtime so that when a source
-    // records an object it can enable the parents of its dependents — those
-    // dependents emit no record opcode and so cannot notify their parents
-    // themselves (the "two-step notification"). Not serialized (like parent
-    // pointers, it is reconstructed by the compiler).
-    std::vector<std::vector<uint32_t>> noRecordSourceToDeps_;
+    // The operand positions of NoRecord dependents, grouped by source: a
+    // source's are depPositions_[depsBegin .. depsBegin + depsCount). Built
+    // at compile time (buildNoRecordReverseMap) from typeDeps_; not
+    // serialized, and a deserialized TypeFeedback has depsCount 0 throughout.
+    std::vector<uint16_t> depPositions_;
 #ifdef RIR_RECORD_STATS
     // Stats only: which slots were emitted via the compiler's
     // recordTypeUntracked() — the genuinely untracked sites (loop bounds,
@@ -835,7 +826,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
                                           uint8_t* scratch) {
         ObservedValues& slot = types(idx);
         slot.recordInnerAndSign(e, scratch);
-        publish(slot, idx, slot.lastSig, scratch);
+        publish(slot, slot.lastSig, scratch);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
     // A simple leaf that publishes its signature: either a *source* (a
@@ -847,7 +838,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     record_type_leaf_notify(uint32_t idx, const SEXP e, uint8_t* scratch) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
-        publish(slot, idx, slot.doRecordAndSign(e), scratch);
+        publish(slot, slot.doRecordAndSign(e), scratch);
         REC_HOOK(recording::recordSC(slot, idx, owner_));
     }
 
@@ -862,32 +853,45 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // consumers record on every execution while it keeps showing up. For a
     // dependent the 0 stays in place until the source runs again, however
     // often the dependent's parent runs in between.
-    __attribute__((__always_inline__)) void publish(const ObservedValues& slot,
-                                                    uint32_t idx, uint8_t sig,
-                                                    uint8_t* scratch) {
+    __attribute__((__always_inline__)) void
+    publish(const ObservedValues& slot, uint8_t sig, uint8_t* scratch) {
         // Every site with a publishing opcode has a position of its own, a
         // source without an operator above it too (setTypeFeedbackParents
         // gives it one nobody reads), so this store needs no test.
         scratch[slot.pos()] = sig;
-        if (slot.hasDeps) { // almost never: see ObservedValues::hasDeps
-            for (uint32_t d : noRecordSourceToDeps_[idx])
-                if (types_[d].publishes())
-                    scratch[types_[d].pos()] = sig;
+        // Kept inline: not rare in arithmetic code (a variable or temporary
+        // read again under another operator), e.g. 30% of the publishes in
+        // Mandelbrot, mostly one or two positions. Tested first so that a
+        // site without dependents does not touch depPositions_.
+        if (slot.depsCount) {
+            const uint16_t* p = depPositions_.data() + slot.depsBegin;
+            for (unsigned i = 0; i < slot.depsCount; i++)
+                scratch[p[i]] = sig;
         }
     }
 
-    // Build noRecordSourceToDeps_ (source slot -> its NoRecord dependent slots)
-    // from typeDeps_, once at compile time. Sized to types_size_ here, but a
-    // deserialized TypeFeedback never runs this and keeps it empty, so readers
-    // must gate on the hasDeps bit rather than index unconditionally.
+    // Fill depPositions_ and each source's depsBegin / depsCount from
+    // typeDeps_, once at compile time, after setTypeFeedbackParents assigned
+    // the positions. Only dependents with a position are listed. A source
+    // whose list would not fit the 16-bit range lists none: its dependents'
+    // positions then read 0, so their inner nodes always record.
     void buildNoRecordReverseMap() {
-        noRecordSourceToDeps_.assign(types_size_, {});
+        std::vector<std::vector<uint16_t>> bySource(types_size_);
         for (size_t d = 0; d < types_size_; d++) {
             uint32_t s = typeDeps_[d];
-            if (s != NoDep && s < types_size_) {
-                noRecordSourceToDeps_[s].push_back((uint32_t)d);
-                types_[s].hasDeps = 1;
-            }
+            if (s != NoDep && s < types_size_ && types_[d].publishes())
+                bySource[s].push_back((uint16_t)types_[d].pos());
+        }
+        depPositions_.clear();
+        for (size_t s = 0; s < types_size_; s++) {
+            const auto& ps = bySource[s];
+            types_[s].depsBegin = 0;
+            types_[s].depsCount = 0;
+            if (ps.empty() || depPositions_.size() + ps.size() > UINT16_MAX)
+                continue;
+            types_[s].depsBegin = (uint16_t)depPositions_.size();
+            types_[s].depsCount = (uint16_t)ps.size();
+            depPositions_.insert(depPositions_.end(), ps.begin(), ps.end());
         }
     }
 

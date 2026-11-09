@@ -2586,7 +2586,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             auto& slot = typeFeedback->types(idx);
             if (slot.operandsUnchanged(scratch)) {
                 REC_STAT(g_recStats.innerNotifySkip++);
-                typeFeedback->publish(slot, idx, slot.lastSig, scratch);
+                typeFeedback->publish(slot, slot.lastSig, scratch);
             } else {
                 REC_STAT(g_recStats.innerNotifyRec++);
                 typeFeedback->record_type_inner_notify_when_changed(
