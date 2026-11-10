@@ -139,6 +139,17 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
+    // Deserialized feedback has no NoRecord dependents (depPositions_ is not
+    // transported, TypeFeedback::deserialize), so a dependent's operand
+    // position is never written, and scratch is not zeroed on entry: an inner
+    // node could compare a stale byte. Demote every inner node to a plain,
+    // always-recording record_type_ (same immediate). Sound; deserialized
+    // code just suppresses no inner record.
+    for (Opcode* pc = code->code(); pc < code->endCode(); pc = BC::next(pc)) {
+        if (*pc == Opcode::record_type_inner_ ||
+            *pc == Opcode::record_type_inner_publish_)
+            *pc = Opcode::record_type_;
+    }
 
     // Srclist
     for (unsigned i = 0; i < code->srcLength; i++) {

@@ -214,13 +214,13 @@ struct ObservedValues {
     static constexpr unsigned MaxTypes = 3;
     // Inner nodes are binary operators, and the compiler gives each operand
     // at most one slot (finishNodeForSlots), so two positions always suffice.
-    // An inner node gets both even with one operand: the second is then never
-    // written and reads 0, as does tuple's second byte, so the 16-bit compare
-    // needs no arity.
+    // An inner node gets one position per operand: a one-operand node (the
+    // other side a constant) gets one, and compares one byte
+    // (operandsUnchanged tests arity).
     static constexpr unsigned MaxArity = 2;
     // A `tuple` that no current tuple can equal: no signature is 0xFF (the
-    // widest is 131, see signatureOf). Stored while nothing complete has been
-    // recorded, so a never-written operand (0) cannot match a zero.
+    // widest is 131, see signatureOf), so neither byte can match. Stored while
+    // nothing complete has been recorded.
     static constexpr uint16_t kNoTuple = 0xFFFF;
 
     // byte 0: existing flags
@@ -336,6 +336,13 @@ struct ObservedValues {
         assert(canReference(base + n) && n > 0 && n <= MaxArity);
         tupleBase = (uint16_t)base;
         arity = n;
+        tuple = kNoTuple;
+    }
+    // Back to a plain leaf (setTypeFeedbackParents, when an operand position
+    // would never be written).
+    void unsetInner() {
+        tupleBase = 0;
+        arity = 0;
         tuple = kNoTuple;
     }
     static bool canReference(uint32_t p) { return p + 1 <= UINT16_MAX; }
@@ -539,16 +546,37 @@ struct ObservedValues {
     // ---- inner nodes -----------------------------------------------------
     //
     // `scratch` is the running activation's operand-position array (one byte
-    // per position of its Code, zeroed at entry): each operand publishes its
-    // signature there when it executes, and its inner node reads its own
-    // positions back. Per activation, so no other activation can interleave
-    // with it. A position nobody wrote in this activation reads 0, the
-    // sentinel, which never matches.
+    // per position of its Code): each operand publishes its signature there
+    // when it executes, and its inner node reads its own positions back. Per
+    // activation, so no other activation can interleave with it.
+    //
+    // NOT zeroed on a normal entry, so an inner node may only read positions
+    // that are written earlier in the same activation. They are: operands run
+    // before their inner node, a NoRecord dependent's source dominates it,
+    // and a RecordOnce leaf fires on its first execution in the activation.
+    // Each case that breaks this is handled where it arises:
+    //  * a one-operand node has no second operand: it compares one byte
+    //    (operandsUnchanged tests arity), never the byte after it;
+    //  * a deopt resumes the Code mid-expression, after operands that ran in
+    //    native code: evalRirCode zeroes scratch when entered with initialPC,
+    //    and a 0 never matches;
+    //  * a dependent whose source cannot write its position (deserialized
+    //    feedback, a source without a position): its inner node is demoted
+    //    to a plain record_type_ (Code::deserialize, setTypeFeedbackParents).
 
     // Would a record add nothing? True iff the current operand signatures
-    // equal the tuple last recorded here.
+    // equal the tuple last recorded here. Reads only this node's own
+    // positions: a one-operand node (the other side a constant, e.g.
+    // `x + 1L`) has one, and compares it with the first byte of `tuple`; the
+    // byte after it belongs to no operand of this node and may be unwritten.
+    // arity sits in the same 16-byte slot, so the test adds no cache line.
     __attribute__((always_inline)) bool
     operandsUnchanged(const uint8_t* scratch) const {
+        if (arity == 1) {
+            uint8_t t;
+            memcpy(&t, &tuple, sizeof(t));
+            return scratch[tupleBase] == t;
+        }
         uint16_t cur;
         memcpy(&cur, scratch + tupleBase, sizeof(cur));
         return cur == tuple;
@@ -575,16 +603,18 @@ struct ObservedValues {
 
   private:
     // After the record: `tuple` now names what was absorbed. A tuple with an
-    // unwritten or unsummarisable operand (0) is stored unmatchable, since 0
-    // must never compare equal.
+    // unsummarisable operand (0) is stored unmatchable, since 0 must never
+    // compare equal. Reads only this node's own positions: for arity 1 the
+    // first byte is set and the second stays 0xFF (never compared).
     __attribute__((__always_inline__)) void storeTuple(const uint8_t* scratch) {
         const uint8_t* cur = scratch + tupleBase;
-        bool complete =
-            cur[0] != SigAlwaysDirty && (arity < 2 || cur[1] != SigAlwaysDirty);
-        if (complete)
+        tuple = kNoTuple;
+        if (cur[0] == SigAlwaysDirty)
+            return;
+        if (arity < 2)
+            memcpy(&tuple, cur, 1);
+        else if (cur[1] != SigAlwaysDirty)
             memcpy(&tuple, cur, sizeof(tuple));
-        else
-            tuple = kNoTuple;
     }
 };
 
@@ -875,9 +905,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     // Fill depPositions_ and each source's depsBegin / depsCount from
     // typeDeps_, once at compile time, after setTypeFeedbackParents assigned
-    // the positions. Only dependents with a position are listed. A source
-    // whose list would not fit the 16-bit range lists none: its dependents'
-    // positions then read 0, so their inner nodes always record.
+    // the positions. Only dependents with a position are listed.
     void buildNoRecordReverseMap() {
         std::vector<std::vector<uint16_t>> bySource(types_size_);
         for (size_t d = 0; d < types_size_; d++) {
@@ -890,8 +918,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
             const auto& ps = bySource[s];
             types_[s].depsBegin = 0;
             types_[s].depsCount = 0;
-            if (ps.empty() || depPositions_.size() + ps.size() > UINT16_MAX)
+            if (ps.empty())
                 continue;
+            // Cannot overflow: each dependent has one source and a position of
+            // its own, and positions are below UINT16_MAX. It must not: an
+            // unlisted dependent's position would never be written.
+            assert(depPositions_.size() + ps.size() <= UINT16_MAX);
             types_[s].depsBegin = (uint16_t)depPositions_.size();
             types_[s].depsCount = (uint16_t)ps.size();
             depPositions_.insert(depPositions_.end(), ps.begin(), ps.end());

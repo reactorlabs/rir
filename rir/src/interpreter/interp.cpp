@@ -2003,13 +2003,20 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // This activation's operand positions: each operand of an inner node
     // publishes its signature here, and the inner node compares them with the
     // tuple it last recorded (ObservedValues::tuple). Per activation, so a
-    // nested activation of the same Code cannot touch them. Zeroed: a
-    // position not yet written reads as the sentinel, which never matches.
-    // A trampolined loop body is the same activation and is handed ours.
+    // nested activation of the same Code cannot touch them. A trampolined loop
+    // body is the same activation and is handed ours.
+    //
+    // Not zeroed on a normal entry: every position an inner node reads is
+    // written earlier in the same activation (see ObservedValues, "inner
+    // nodes"). The exception is entering mid-Code (initialPC: a deopt, or a
+    // promise resumed by one), where operands that ran before the entry point
+    // published nothing here. Then zero it: a 0 never matches, so those inner
+    // nodes record.
     uint8_t* scratch = sharedScratch;
     if (!scratch && c->innerScratchSize > 0) {
         scratch = (uint8_t*)alloca(c->innerScratchSize);
-        memset(scratch, 0, c->innerScratchSize);
+        if (initialPC)
+            memset(scratch, 0, c->innerScratchSize);
     }
 
     // Per-function-invocation bitmap for record_type_once_promise_ — disabled:

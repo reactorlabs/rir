@@ -178,8 +178,9 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         // NoDep: after deserialization this feedback genuinely has no
         // dependents and 0 is the accurate value, not merely the safe one.
         // The operand positions ride along, and so does
-        // Code::innerScratchSize; a dependent's position is then never written
-        // and reads 0, so its inner node records on every execution.
+        // Code::innerScratchSize; a dependent's position is then never
+        // written, so Code::deserialize demotes every inner node to a plain
+        // record_type_.
         tmp.depsBegin = 0;
         tmp.depsCount = 0;
         types.push_back(std::move(tmp));
