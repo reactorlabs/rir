@@ -134,7 +134,7 @@ if (Compiler::profile)               cs << ctx.recordType();     // one opcode, 
 ```
 
 - Baseline has exactly **three** record opcodes: `record_call_`, `record_type_`,
-  `record_test_`. There is **no** `record_type_once_`, no leaf/inner/notify
+  `record_test_`. There is **no** `record_type_once_`, no leaf/inner/publish
   variants, and no No-Record (every load that is profiled gets a `record_type_`).
 - Baseline `ObservedValues` is **4 bytes**:
   ```cpp
@@ -161,7 +161,7 @@ should be described as such in any writeup:
    peek-free helpers `recordForceBehaviorNoCheck` /
    `recordForceBehaviorRecordOnceNoCheck`;
 2. **once-gating** of FB via the shared `fired` bitmap;
-3. teaching the generic dispatcher to recognize the `leaf_notify_` opcodes
+3. teaching the generic dispatcher to recognize the `leaf_publish_` opcodes
    (without which FB was silently dropped for tree-participating non-cached
    leaves).
 
@@ -200,7 +200,7 @@ value assigned to `a`).
   node whose result type is *inferable from its operands* — unless something
   breaks that inference at runtime.
 - **§2C — Bringing the two together.** Both are realized on one `ObservedValues`
-  node type, one notification function, and one opcode family; and they interact
+  node type, one publish function, and one opcode family; and they interact
   (a leaf's "source" may be an inner node; an inner node leans on its leaves).
 
 Each strategy has its **own optimizations and its own failure modes**; they are
@@ -217,9 +217,9 @@ result). The compiler classifies each leaf via `DefUseAnalysis::classifyUse`
 
 ### 2A.1 The three recording classes
 
-- **RecordAlways** → emit `record_type_` (or the notifying variant
-  `record_type_leaf_notify_`, §2C). Records on every execution.
-- **RecordOnce** → emit `record_type_once_` (or `record_type_leaf_notify_once_`).
+- **RecordAlways** → emit `record_type_` (or the publishing variant
+  `record_type_leaf_publish_`, §2C). Records on every execution.
+- **RecordOnce** → emit `record_type_once_` (or `record_type_leaf_publish_once_`).
   Records on the first execution *per function invocation*, gated by a
   per-invocation bitmap (§2A.2). Later executions are skipped.
 - **NoRecord** → emit **no opcode at all**. A slot is still allocated and
@@ -1980,7 +1980,7 @@ Why this needs no further protocol:
   do is make the outer activation record a pair it would otherwise have
   skipped: over-recording, never under-recording.
 - **`lastSig` is read only together with `tuple`.** A suppressed
-  `inner_notify_` node publishes `lastSig` as its result's signature. Both are
+  `inner_publish_` node publishes `lastSig` as its result's signature. Both are
   written at the end of the same record and read by the same instruction, with
   no other code in between, so they always describe the same pair.
 - **Nothing to restore on a non-local exit.** The array dies with the frame.
@@ -2074,16 +2074,16 @@ The single mechanism that serves *both* "an operand feeds its inner node" and
 // TypeFeedback::publish — called on EVERY execution of a publishing site
 void publish(const ObservedValues& slot, uint8_t sig, uint8_t* scratch) {
     scratch[slot.pos()] = sig;                      // own operand position
-    if (slot.depsCount) {                           // NoRecord dependents' positions
+    if (unsigned n = slot.depsCount) {              // NoRecord dependents' positions
         const uint16_t* p = depPositions_.data() + slot.depsBegin;
-        for (unsigned i = 0; i < slot.depsCount; i++)
+        for (unsigned i = 0; i < n; i++)
             scratch[p[i]] = sig;
     }
 }
 ```
 
-Callers: `record_type_leaf_notify[_once]_` (with the signature
-`doRecordAndSign` just computed), `record_type_inner_notify_` after recording
+Callers: `record_type_leaf_publish[_once]_` (with the signature
+`doRecordAndSign` just computed), `record_type_inner_publish_` after recording
 (with the new `lastSig`) and when skipping (with the stored `lastSig`, the
 result of the pair that just matched).
 
@@ -2094,7 +2094,7 @@ Design points:
   value already there, but no test is needed to know that.
 - **Every publishing site has a position of its own**, so the first store needs
   no test: a source that is not itself an operand gets a dummy position nobody
-  reads (`setTypeFeedbackParents`).
+  reads (`setTypeFeedbackParents`). That store is wasted; §6 has how to drop it.
 - **Dependents are a flat list of positions** (`bcd013f3`). The dependents emit
   no opcode, so their source writes their positions for them. All sources'
   lists are concatenated in `TypeFeedback::depPositions_`, and each source
@@ -2111,6 +2111,15 @@ Design points:
   8.71% of all publishes in the corpus have dependents (1.44 on average),
   30.4% in mandelbrot, 48.7% in sieve1. The test keeps sites without
   dependents from touching `depPositions_`.
+- **The count is read once** (`06f8a4e5`). `scratch` is `uint8_t*`, so as far
+  as the compiler knows every store may alias the slot, and `slot.depsCount` in
+  the loop condition was reloaded on each iteration. With the count in a local,
+  the loop is five instructions per dependent (load position, advance, store,
+  compare, branch). Bytecode and record stats unchanged.
+- **Push, not pull.** The source writes into each dependent's position rather
+  than the dependent's inner node reading the source's own position. That
+  keeps every inner node's two operands adjacent, so its test stays one 16-bit
+  load (§5.2 has the rejected alternative).
 - **One level deep, and that is load-bearing.** A source reaches its
   dependents' positions but not a dependent's dependents'. That is correct only
   because the dep graph is kept **flat**: a NoRecord read stamps the *ultimate
@@ -2133,19 +2142,20 @@ After the post-pass (`setTypeFeedbackParents`), the value-type record opcodes ar
 |---|---|---|
 | `record_type_` | leaf | plain leaf, RecordAlways; also every *untracked* record, the RecordOnce fallback, and an operator that did not become an inner node |
 | `record_type_once_` | leaf | plain leaf, RecordOnce (fired-gated) |
-| `record_type_leaf_notify_` | leaf | leaf that **publishes**: an operand of an inner node, and/or a NoRecord *source* |
-| `record_type_leaf_notify_once_` | leaf | RecordOnce variant of the above |
+| `record_type_leaf_publish_` | leaf | leaf that **publishes**: an operand of an inner node, and/or a NoRecord *source* |
+| `record_type_leaf_publish_once_` | leaf | RecordOnce variant of the above |
 | `record_type_inner_` | inner | **standalone** inner node: root, no dependents — nothing to publish |
-| `record_type_inner_notify_` | inner | inner node that **publishes**: an operand itself (non-root), **or** a root source (dependents) |
+| `record_type_inner_publish_` | inner | inner node that **publishes**: an operand itself (non-root), **or** a root source (dependents) |
 
-The two families are parallel: each has a plain form and a `*_notify_` form,
-and the "notify" form of both routes through the same `publish`. (`notify` is
-the historical name; the opcodes publish.) `record_test_`/`record_call_`
+The two families are parallel: each has a plain form and a `*_publish_` form,
+and the publish form of both routes through the same `publish`. (Until
+`a3181731` these were the `*_notify_` opcodes, which §5 and §7 still use for
+history.) `record_test_`/`record_call_`
 (branch/callee feedback) sit outside this range.
 
 The inner opcodes test `operandsUnchanged` **inline in the dispatch loop**; only
 the record itself is out of line (`record_type_inner_when_changed`,
-`record_type_inner_notify_when_changed`, both `noinline`). Passing the
+`record_type_inner_publish_when_changed`, both `noinline`). Passing the
 already-resolved slot reference into those handlers was measured 0.23% slower
 on mandelbrot than recomputing `types(idx)`.
 
@@ -2160,7 +2170,7 @@ The `ObservedValues` recording primitives:
 - `recordInner(e, scratch)` — `doRecord` + `storeTuple`. Used by `inner_`, which
   publishes nothing and so needs no result signature.
 - `recordInnerAndSign(e, scratch)` — `doRecordAndSign` + `storeTuple`. Used by
-  `inner_notify_`.
+  `inner_publish_`.
 
 **Untracked records** (a leaf concern that touches the shared opcode). Not every
 `record_type_` participates in the analysis. `recordTypeUntracked()` emits a
@@ -2184,7 +2194,7 @@ structurally guarantee `!isSource`: the post-pass derives `sourceSlots` from
 `typeDeps_` targets, and `trackDef` records whatever slot the value-record stamp
 names, without regard to tracking (§2A.4), so an untracked slot could in
 principle be named as a def's feedback slot and then be specialized to
-`record_type_leaf_notify_`. In practice it never is, but *contingently*, for a
+`record_type_leaf_publish_`. In practice it never is, but *contingently*, for a
 different reason at each site: the colon casts and the default-arg fallback are
 never reached by `trackDef` at all (the latter returns before `classifyUse`), and
 the super-assign branch deliberately skips `trackDef` (§2A.4). Worth re-checking
@@ -2254,22 +2264,28 @@ set, consulted only under `RIR_RECORD_STATS`).
   lost feedback, not a miscompile: PIR guards its speculation, so the cost is a
   deopt.
 
-  **RecordOnce (`f1`) — the leaf stays armed outside the domain.** In
-  `record_type_leaf_notify_once_` the once-bit is set only if the value just
-  recorded has a real signature:
+  **RecordOnce (`f1`) — one publish is enough, no special case
+  (`3a04a9f5`).** `record_type_leaf_publish_once_` records, publishes, and
+  sets its once-bit unconditionally, like plain `record_type_once_`. Outside
+  the domain it publishes 0, and that 0 stays: `scratch` and `fired` are both
+  per activation and only this leaf writes its positions, so while the bit is
+  set they still hold what it published when it fired. A pair with a 0 is
+  stored as `kNoTuple` (`storeTuple`) and never matches, so the `+` records on
+  every iteration. Clearing the bit (an enclosing loop, §2A.2.2) re-records and
+  republishes.
 
-  ```cpp
-  if (typeFeedback->types(RECORD_TYPE_ONCE_SLOT_IDX(raw)).lastSig !=
-      ObservedValues::SigAlwaysDirty)
-      RECORD_TYPE_ONCE_SET(fired, raw);
-  ```
-
-  While the value is unsummarisable the leaf behaves as RecordAlways and
-  publishes 0 each time; the next invocation starts with cleared bits.
-  Under the current design this matters less than it did — the 0 published by
-  the first execution stays in the position for the rest of the activation, so
-  the consumer would keep recording anyway — but it still keeps the leaf's own
-  feedback complete.
+  Until `3a04a9f5` the leaf stayed armed while its value was unsummarisable
+  (set the bit only if `lastSig != SigAlwaysDirty`) and recorded on every
+  execution. The `dirty` design needed that, since the parent re-armed only on
+  a signalled change. Under sigpair it re-recorded the same binding for
+  nothing. The one thing lost is an object mutated through an alias (e.g. an
+  environment's attributes changed by reference) between the fire and a later
+  execution: the leaf's own feedback misses it, but its parent still records.
+  Witness, three calls with `n = 5`: RecordOnce leaf records 15 → 6 (skips
+  0 → 9), FB `record_once` the same (it shares the bit); inner-node counts
+  unchanged (29 executions / 16 recorded / 13 skipped); result `2.5` both.
+  Corpus: record stats byte-identical on all 43 programs (no RecordOnce leaf
+  there is ever outside the domain).
 
   **NoRecord (`f2`) — handled by the per-activation array, no special case.**
   The source (`mk()`'s result) runs once, before the loop, and publishes 0 into
@@ -2280,7 +2296,12 @@ set, consulted only under `RIR_RECORD_STATS`).
   permanently, since a per-Code flag could not tell when the source's value had
   left the domain). Re-measured on `bcd013f3`: the in-loop `+` records
   `integer, double` with `tuple -` (`kNoTuple`), and the pre-loop first check
-  `integer` (it only ever returns `1L`).
+  `integer` (it only ever returns `1L`). On `3a04a9f5`, three calls: the
+  NoRecord `x` 9 executions / 0 recorded, the `+` (`inner_publish_`) 9 / 9;
+  result `2`. No pinning code remains.
+
+  Both review cases now rest on one fact: a published 0 stays in `scratch`
+  for the rest of the activation.
 
   A NoRecord use can run more often than its source only when the source is a
   pre-loop def read in a `while` condition (the condition compiles in the
@@ -2403,7 +2424,7 @@ its own value" flags (`slotsRecorded`), and a flat `parents` map (operand slot
      with the Code).
   5. **Specializes each placeholder `record_type_`/`record_type_once_` opcode**
      by `(isInner = arity > 0, publishes = has a position or is a source)` into
-     `inner_` / `inner_notify_` / `leaf_notify_[once_]`, or leaves it plain.
+     `inner_` / `inner_publish_` / `leaf_publish_[once_]`, or leaves it plain.
      Inner nodes only ever come from `record_type_` (RecordOnce only classifies
      leaves), which an `assert` checks.
 - `buildNoRecordReverseMap()` (called right after, since it needs the
@@ -2688,7 +2709,7 @@ session: base `ldvar_cached_` is emitted *only* for `fbKind == Always`, which
 (non-once) leaf record right after the load. The two cases that would break a
 blind `pc+1` read — a No-Record elision (no opcode follows) and a packed `_once_`
 immediate — are exactly the ones the compiler patches to `noRecordFB_` /
-`fbRecordOnce_`. A `SLOWASSERT(*pc == record_type_ || *pc == record_type_leaf_notify_)`
+`fbRecordOnce_`. A `SLOWASSERT(*pc == record_type_ || *pc == record_type_leaf_publish_)`
 pins this in debug builds.
 
 **Non-cached loads use a generic runtime dispatcher.** `ldvar_`,
@@ -2700,9 +2721,9 @@ safe because a super-assign target is always followed by
 
 ```cpp
 switch (*pc) {
-case record_type_:  case record_type_leaf_notify_:            idx = raw;          // always
+case record_type_:  case record_type_leaf_publish_:            idx = raw;          // always
     REC_STAT(fbGenericRec++);                                                     break;
-case record_type_once_: case record_type_leaf_notify_once_:                        // once
+case record_type_once_: case record_type_leaf_publish_once_:                        // once
     RECORD_TYPE_ONCE_GATE(fired, raw, { REC_STAT(fbGenericSkip++); return; });
     idx = RECORD_TYPE_ONCE_SLOT_IDX(raw);
     REC_STAT(fbGenericOnceRec++);                                                 break;
@@ -2712,7 +2733,7 @@ recordFbAtSlot(idx, s);
 ```
 
 Note the dispatcher recognizes **all four** value-type leaf opcodes, including
-the `leaf_notify_` variants. Recognizing only the plain `record_type_`/`_once_`
+the `leaf_publish_` variants. Recognizing only the plain `record_type_`/`_once_`
 (the older behavior) silently dropped FB for any non-cached, tree-participating
 leaf — a real bug fixed this session.
 
@@ -3037,14 +3058,16 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 ### 5.2 Other alternatives considered
 
 - **`record_type_dep_` / `record_type_once_dep_` as separate opcodes.** Merged
-  this session into `record_type_leaf_notify_[once_]`. They had become
+  this session into `record_type_leaf_notify_[once_]` (now
+  `record_type_leaf_publish_[once_]`). They had become
   byte-identical handlers once the notifier was made generic over
   parent-and-dependents; the split was residual. The former name `leafWithParent`
   was renamed to `leaf_notify` because the merged opcode also covers a parentless
   source.
 - **Splitting inner nodes on the root-vs-non-root axis** (`root_inner_` /
   `inner_node_`). Replaced this session by the **notifies-vs-standalone** axis
-  (`record_type_inner_` / `record_type_inner_notify_`). The old axis lumped a
+  (`record_type_inner_` / `record_type_inner_notify_`, now `_inner_publish_`).
+  The old axis lumped a
   root that *is* a source (must notify its dependents) together with a root that
   is not (nothing to notify), forcing the common no-notify case to still run the
   notify gate every execution. The new axis moves that cost off the common path;
@@ -3062,6 +3085,28 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
   awaiting an `ENVSXP` change. See **§2A.2.3** for the lifetime argument that makes
   the environment the only viable storage, and for what remains in the tree.
   Promise-context free variables record FB via the normal path meanwhile.
+- **Dependents read their source's position ("pull") instead of the source
+  writing theirs ("push").** Sound: each dependent has exactly one source, and
+  the source's own position holds the same byte that push would copy. But an
+  inner node's operands are then no longer adjacent, so its test needs two
+  1-byte loads, a shift and an or instead of one 16-bit load (two position
+  fields replacing `tupleBase`, `depsBegin`, `depsCount`, still 16 bytes).
+  Where source and use run equally often (same scope), it is roughly a wash per
+  dependent: about 5 loop instructions saved, about 3 added to the test, and
+  only if the scattered test is a separate opcode — otherwise every inner node
+  pays. It loses where the use runs more often than its source: a pre-loop def
+  read in a `while` condition, and a NoRecord use of a RecordOnce source
+  (§2C.4). There push stores once per activation and every later check finds
+  the byte in place; pull pays the wider test on every iteration. Rejected.
+- **Suppressed operands not republishing.** A suppressed `inner_publish_` node
+  stores `lastSig` to its position on every execution. Reading the child's
+  shared `lastSig` from the parent instead reintroduces the stale-signature
+  hole of §2B.5.1 (a nested activation can re-record the child between its skip
+  and the parent's test). Relying on the byte already in `scratch` fails too: it
+  is 0 on the first execution in an activation, and stale when the child's pair
+  changed and then matched a `tuple` re-recorded by a nested activation.
+  Storing only when `scratch[pos] != lastSig` is a load, compare and branch to
+  save one store. Kept as is.
 - **`RECORDLESS_EXPTREE_ENABLED` compile-time guard.** Removed this session; the
   expression-tree optimization is now unconditionally compiled in. (A separate
   `RECORDLESS_EXPTREE_DEBUG` print toggle remains.) The dead non-recordless
@@ -3087,7 +3132,7 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
     tree-nested bytecode (§3, "Structural approximation"). A CFG-based JIT would
     need a real dominator/post-dominator analysis to get the same subsumptions;
     the *result* ports, the *cheap way of computing it here* may not.
-  - **Ř-specific in detail:** the exact opcode taxonomy, the suppress/notify
+  - **Ř-specific in detail:** the exact opcode taxonomy, the suppress/publish
     inner-node scheme (tied to RIR's expression-tree bytecode), and the
     force-behavior axis (R promise/force semantics). The inner-node elision in
     particular assumes result types are inferable from operand types, which is an
@@ -3141,6 +3186,14 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
   auxiliary-flag question below (are the flags exactly inferable for the elided
   inner-node operators?) is untouched by this and remains the real gap.
 - **`alloca` vs. fixed-size `fired`** — no confident perf verdict (see §5, §7).
+- **A source's dead position could be one of its dependents'.** A source that
+  is no operand (nearly every one: it is an assignment's RHS) gets a position
+  nobody reads, and `publish` stores to it on every execution before the
+  dependents' loop (§2C.2). Giving it one of its dependents' positions instead,
+  and leaving that one out of `depPositions_`, makes a one-dependent source a
+  single store with no loop iteration. Compile-time only (the post-pass and
+  `buildNoRecordReverseMap`); opcodes and record stats would be unchanged,
+  `innerScratchSize` smaller. Not done.
 - **`pc`-by-reference capture in the FB lambdas.** The FB helper lambdas capture
   the interpreter frame by reference (`[&]`), including `pc`. Whether taking
   `&pc` forces the hottest interpreter variable out of a register (a classic
@@ -3184,10 +3237,10 @@ allocation, no offset computation, and a trivial zeroing step. This supersedes t
 
 ---
 
-## 7. Current implementation status (snapshot, 2026-11-09)
+## 7. Current implementation status (snapshot, 2026-11-10)
 
 Working branch: `recordLessNew2-expressionsNewSchema-sigPair`, at commit
-`bcd013f3` (entries 31–35 below). `recordLessNew2-expressionsNewSchema` holds
+`3a04a9f5` (entries 31–38 below). `recordLessNew2-expressionsNewSchema` holds
 the `dirty`-bit design up to `6465ef10`, merged in at `1f41af40`.
 A sibling clone at `~/rsh-recordLess-baseline` (branch
 `recordLess-baseline-outline`) is used for A/B binary builds.
@@ -3207,9 +3260,10 @@ by direct inspection, not recalled:
 - Once-bit clearing: `clear_record_type_once_bit_`,
   `clear_record_type_once_bits_range_`, `LoopScopeGuards.h`, and the
   `CodeStream::patchImmediate` / `patchOpcode` primitives.
-- The opcode family `record_type_leaf_notify_[once_]` /
-  `record_type_inner_` / `record_type_inner_notify_`; the old
-  `record_type_dep_` / `record_type_once_dep_` are **gone**.
+- The opcode family `record_type_leaf_publish_[once_]` /
+  `record_type_inner_` / `record_type_inner_publish_` (the `_notify_` names
+  until `a3181731`); the old `record_type_dep_` / `record_type_once_dep_` are
+  **gone**.
 - `TypeFeedback::publish`, `ObservedValues::operandsUnchanged` /
   `storeTuple`, the per-activation `scratch` array (`Code::innerScratchSize`);
   `recordInner()` / `recordInnerAndSign()`; `record()` is a plain `doRecord`
@@ -3222,7 +3276,7 @@ by direct inspection, not recalled:
   `ldvar_cached_fbRecordOnce_`; helpers named **`recordForceBehaviorNoCheck`**
   and **`recordForceBehaviorRecordOnceNoCheck`** (both carry a `SLOWASSERT` on
   the following opcode); `ldvar_super_` calls `recordForceBehaviorNoCheck`; the
-  generic `recordForceBehavior` recognizes the `leaf_notify_` family. The
+  generic `recordForceBehavior` recognizes the `leaf_publish_` family. The
   soundness argument for each strategy and the reconstruction rule each implies
   are written up in §4.5 / §4.6; the reconstruction itself is **not**
   implemented (consumer side, out of scope).
@@ -3607,6 +3661,25 @@ B1 half of 29 are superseded by 31.
     byte-identical to `0d2b174b`. Strictly less runtime work; the only
     additions are compile-time (one extra pass in `buildNoRecordReverseMap`).
 
+36. **`publish` reads the dependents count once** (`06f8a4e5`, §2C.2). The
+    byte stores into `scratch` may alias the slot, so `depsCount` was reloaded
+    on every loop iteration; now five instructions per dependent. Bytecode of
+    all 710 corpus functions and record stats of all 43 programs unchanged.
+
+37. **`notify` renamed to `publish`** (`a3181731`), C++ only:
+    `record_type_leaf_publish_[once_]`, `record_type_inner_publish_`,
+    `record_type_leaf_publish`, `record_type_inner_publish_when_changed`, stats
+    counters `innerPublishRec` / `Skip` / `Should`. The stats row label stays
+    `inner_notify`, because `recordless/analysis/helpers.R` and existing data
+    key on it. Record stats byte-identical on all 43 programs.
+
+38. **RecordOnce publishing leaves set their bit unconditionally**
+    (`3a04a9f5`, §2C.4). Outside the domain the published 0 stays in `scratch`
+    for the activation, so the parent keeps recording without the leaf
+    re-recording the same binding. Corpus record stats byte-identical (no
+    RecordOnce leaf there leaves the domain); the `f1` witness drops its leaf
+    records 15 → 6 with inner-node counts unchanged.
+
 All build clean and every checked benchmark produces correct results.
 
 To collect stats: configure with `cmake -DRECORD_STATS=ON .` in the build
@@ -3661,7 +3734,8 @@ columns (skip% = skipped/should):
    done; "skipped" = what recordless avoided.
 2. **leaves by class:** `RecordAlways`, `RecordOnce`, `NoRecord (elided)` — each
    row's "should" carries its share of all leaves.
-3. **inner nodes by opcode:** `inner (standalone)`, `inner_notify` — here
+3. **inner nodes by opcode:** `inner (standalone)`, `inner_notify` (the
+   `record_type_inner_publish_` opcode; the label kept its old name) — here
    "skipped" means *suppressed* (the elision), not gated: this activation's
    operand pair equals the pair last recorded (§2B.2), so the result is one
    already absorbed. Re-armable: a node goes back to being suppressed as soon
@@ -3669,7 +3743,7 @@ columns (skip% = skipped/should):
    Printed under table 2 is a non-row line, **"of all N records, M updated
    nothing (signature unchanged)"** — the share of records that ran but whose
    early-out found nothing to do. It *overlaps* the recorded counts rather than
-   partitioning them, and only the `_notify_` paths can early-out (plain
+   partitioning them, and only the `_publish_` paths can early-out (plain
    `record_type_` has no signature and always does the work). It exists because
    that work is otherwise invisible: the opcode still executes.
 4. **force behavior (recordForceBehavior variants):** rows `fbgeneric`,
