@@ -531,8 +531,8 @@ struct ObservedValues {
 
     // Used by record_type_ / record_type_once_: plain leaves (no parent, no
     // dependents). Leaves are never suppressed (the post-pass routes every
-    // suppressible inner node to inner_/inner_notify_), so there is no skip
-    // check, no signature to maintain, and nothing to notify — just doRecord.
+    // suppressible inner node to inner_/inner_publish_), so there is no skip
+    // check, no signature to maintain, and nothing to publish — just doRecord.
     __attribute__((__always_inline__)) void record(SEXP e) { doRecord(e); }
 
   public:
@@ -565,7 +565,7 @@ struct ObservedValues {
         storeTuple(scratch);
     }
 
-    // Same, for an inner node that publishes (record_type_inner_notify_).
+    // Same, for an inner node that publishes (record_type_inner_publish_).
     // lastSig is the result's signature afterwards.
     __attribute__((__always_inline__)) void
     recordInnerAndSign(SEXP e, const uint8_t* scratch) {
@@ -822,8 +822,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     //
     // `_when_changed` as above: caller-guarded, so this always records.
     __attribute__((noinline)) void
-    record_type_inner_notify_when_changed(uint32_t idx, const SEXP e,
-                                          uint8_t* scratch) {
+    record_type_inner_publish_when_changed(uint32_t idx, const SEXP e,
+                                           uint8_t* scratch) {
         ObservedValues& slot = types(idx);
         slot.recordInnerAndSign(e, scratch);
         publish(slot, slot.lastSig, scratch);
@@ -835,7 +835,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // both, so a single opcode family covers all cases. A simple leaf that is
     // neither stays plain record_type_ / record_type_once_ and pays nothing.
     __attribute__((noinline)) void
-    record_type_leaf_notify(uint32_t idx, const SEXP e, uint8_t* scratch) {
+    record_type_leaf_publish(uint32_t idx, const SEXP e, uint8_t* scratch) {
         ObservedValues& slot = types(idx);
         // Leaves always record; the signature comes from the same pass.
         publish(slot, slot.doRecordAndSign(e), scratch);

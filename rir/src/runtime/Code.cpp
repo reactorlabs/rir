@@ -286,7 +286,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                     // packed value (an out-of-bounds read).
                     bool isOnce =
                         bc.bc == Opcode::record_type_once_ ||
-                        bc.bc == Opcode::record_type_leaf_notify_once_;
+                        bc.bc == Opcode::record_type_leaf_publish_once_;
                     bool isOncePromise =
                         false; // record_type_once_promise_ disabled
                     uint32_t slot =

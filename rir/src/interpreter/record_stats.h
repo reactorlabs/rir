@@ -76,8 +76,8 @@ struct RecordSkipStats {
     // being suppressed once its operands settle.)
     uint64_t innerRec = 0;        // record_type_inner_         — recorded
     uint64_t innerSkip = 0;       // record_type_inner_         — suppressed
-    uint64_t innerNotifyRec = 0;  // record_type_inner_notify_  — recorded
-    uint64_t innerNotifySkip = 0; // record_type_inner_notify_  — suppressed
+    uint64_t innerPublishRec = 0; // record_type_inner_publish_ — recorded
+    uint64_t innerPublishSkip = 0; // record_type_inner_publish_ — suppressed
     // Untracked records — every execution of a plain record_type_ opcode that
     // came from recordTypeUntracked() (sites excluded from the optimization:
     // loop bounds, super-assign target read-for-update, default args
@@ -86,7 +86,7 @@ struct RecordSkipStats {
     // to leafAlwaysRec, recovered at runtime via
     // TypeFeedback::isStatsUntracked. Note `[`/`[[` are NOT untracked: they are
     // recordTypeOpaqueResult() leaves (see leafAlwaysRec above), since they can
-    // be defs, NoRecord sources, or notify a parent.
+    // be defs, NoRecord sources, or publish to a parent.
     uint64_t untrackedRec = 0;
     // Force-behavior (FB) recording — a separate feedback dimension
     // (ObservedValues::stateBeforeLastForce) piggybacked on the same slots but
@@ -97,7 +97,7 @@ struct RecordSkipStats {
     // (ldvar_, ldvar_for_update_*, ldvar_super_, ldddvar_).
     uint64_t fbGenericRec = 0; // recordForceBehavior (generic) — recorded on
                                // the plain arm (the following value-type
-                               // record is a record_type_[leaf_notify_], so
+                               // record is a record_type_[leaf_publish_], so
                                // no gate exists and this records every time:
                                // the generic counterpart of fbAlwaysRec)
     uint64_t fbGenericOnceRec = 0; // recordForceBehavior (generic) — recorded

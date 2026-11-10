@@ -463,39 +463,32 @@ DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_type_once_, 1, 1, 1)
 // DEF_INSTR(record_type_once_promise_, 1, 1, 1)  // env-bitmap optimization
 // disabled
-// Records are classified along {simple-leaf, leaf-that-notifies, inner} x
-// {always, once} x {no NoRecord dependents, source}. The SIMPLE-LEAF family is
-// the plain record_type_ / record_type_once_; these also serve as the
-// pre-patch placeholders, and untracked records (recordTypeUntracked) stay
-// record_type_. The compiler post-pass specializes the rest by (isLeaf,
-// isRoot, isSource):
-//   simple leaf,    no-dep -> record_type_         (plain doRecord; unchanged)
-//   simple leaf,    once   -> record_type_once_    (unchanged)
-//   leaf that must         -> record_type_leaf_notify_[once_]
-//   notify related            (doRecord + notifyRelatedNodes: own parent AND
-//   nodes: a source,          any NoRecord dependents' parents, together, once
-//   a leaf w/ parent,         — the usually-empty branch is a no-op). One
-//   opcode or both                   covers all three; there is no separate
-//   _dep_
-//                             opcode for a parentless source.
+// Records are classified along {simple leaf, publishing leaf, inner} x
+// {always, once}. The SIMPLE-LEAF family is the plain record_type_ /
+// record_type_once_; these also serve as the pre-patch placeholders, and
+// untracked records (recordTypeUntracked) stay record_type_. The compiler
+// post-pass (setTypeFeedbackParents) specializes the rest:
+//   simple leaf            -> record_type_ / record_type_once_   (doRecord)
+//   leaf that publishes    -> record_type_leaf_publish_[once_]
+//     (an operand of an inner node and/or a NoRecord source; doRecord, then
+//     publish its signature to its own position and its dependents')
 //   inner node, standalone -> record_type_inner_
-//   (no parent, no deps)      (skipIfSuppressed + doRecord; nothing to notify)
-//   inner node, notifies   -> record_type_inner_notify_
-//   (non-root has a parent;   (skipIfSuppressed + doRecord +
-//   notifyRelatedNodes: a root source has deps)   own parent AND/OR dependents'
-//   parents, once —
-//                             whichever applies; the empty branch is a no-op)
-DEF_INSTR(record_type_leaf_notify_, 1, 1, 1)
-DEF_INSTR(record_type_leaf_notify_once_, 1, 1, 1)
+//     (a root with no NoRecord dependents: skip if the operand pair is
+//     unchanged, else doRecord; nothing to publish)
+//   inner node, publishes  -> record_type_inner_publish_
+//     (an operand itself, or a root source: as above, and publish either way —
+//     lastSig when suppressed)
+DEF_INSTR(record_type_leaf_publish_, 1, 1, 1)
+DEF_INSTR(record_type_leaf_publish_once_, 1, 1, 1)
 DEF_INSTR(record_type_inner_, 1, 1, 1)
-DEF_INSTR(record_type_inner_notify_, 1, 1, 1)
+DEF_INSTR(record_type_inner_publish_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)
 // Stats only: marks a NoRecord (elided) leaf so the interpreter can count its
 // executions. Exists only when RIR_RECORD_STATS is defined, so non-stats
 // builds are byte-identical. Deliberately outside the record_type_ ..
-// record_type_inner_notify_ range: it records nothing.
+// record_type_inner_publish_ range: it records nothing.
 #ifdef RIR_RECORD_STATS
 DEF_INSTR(stat_norecord_, 0, 0, 0)
 #endif

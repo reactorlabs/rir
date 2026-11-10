@@ -560,11 +560,11 @@ class CompilerContext {
                 bool publishes = v.publishes() || sourceSlots.count(slot);
                 assert(!(once && isInner));
                 if (isInner)
-                    *pc = publishes ? Opcode::record_type_inner_notify_
+                    *pc = publishes ? Opcode::record_type_inner_publish_
                                     : Opcode::record_type_inner_;
                 else if (publishes)
-                    *pc = once ? Opcode::record_type_leaf_notify_once_
-                               : Opcode::record_type_leaf_notify_;
+                    *pc = once ? Opcode::record_type_leaf_publish_once_
+                               : Opcode::record_type_leaf_publish_;
                 // Otherwise a simple leaf — and every untracked record — stays
                 // plain record_type_ / record_type_once_.
             }
@@ -572,8 +572,8 @@ class CompilerContext {
     }
 
     // Tracked: participates in the expression-tree optimization. Registered in
-    // the slot tree, so the post-pass specializes it (inner_/inner_notify_ for
-    // inner nodes, leaf_notify_* for leaves that notify a parent and/or
+    // the slot tree, so the post-pass specializes it (inner_/inner_publish_ for
+    // inner nodes, leaf_publish_* for leaves that publish to a parent and/or
     // dependents). A tracked but parent-less non-source leaf stays plain
     // record_type_ (same as untracked).
     //
@@ -708,10 +708,10 @@ class CompilerContext {
     // them pending would let popNodeForSlots propagate them upward and have the
     // *enclosing* inner node adopt them — e.g. in `v[i] + 1`, `v` and `i` would
     // become children of the `+` even though its only operand is `v[i]`. They
-    // would then be specialized to record_type_leaf_notify_ and pay the
-    // notification check on every execution, and an object-valued `v` would
+    // would then be specialized to record_type_leaf_publish_ and pay the
+    // publish on every execution, and an object-valued `v` would
     // un-suppress the `+` redundantly (the `[` result records the object and
-    // notifies anyway). Consuming them leaves them parent-less, so they stay
+    // publishes anyway). Consuming them leaves them parent-less, so they stay
     // plain record_type_.
     BC recordTypeOpaqueResult() {
         if (!mainBodyCtx_ || !Compiler::isRecordlessLeafEnabled()) {
@@ -731,9 +731,9 @@ class CompilerContext {
     // Untracked: genuinely outside the analysis — the slot is never a def, a
     // source, or an inner-node operand. Just emits a record_type_ and registers
     // nowhere, so the post-pass leaves it untouched (isLeaf && isRoot &&
-    // !isSource). It records on every execution, never notifies a parent, is
-    // never suppressed, and is never NoRecord/RecordOnce. Reserved for the few
-    // records that are truly internal: the colon (`m:n`) operand casts, the
+    // !isSource). It records on every execution, never publishes to a parent,
+    // is never suppressed, and is never NoRecord/RecordOnce. Reserved for the
+    // few records that are truly internal: the colon (`m:n`) operand casts, the
     // super-assign target read-for-update, and the ldvar fallback while
     // compiling default formal args (no main-body context to analyse).
     // NB: opaque *value results* (call / `[[` / `for` / replacement-fn) are NOT
@@ -749,7 +749,7 @@ class CompilerContext {
 
     // Register a slot that the leaf optimization allocated directly (emitting
     // record_type_ / record_type_once_) as a leaf child in the expression tree,
-    // so its parent pointer is wired and its record notifies the parent.
+    // so its parent pointer is wired and its record publishes to the parent.
     // Mirrors the registerSlot(false) that recordType() does for the non-leaf-
     // opt path.
     void registerLeafSlot(uint32_t slotIdx) {
@@ -2914,8 +2914,8 @@ static void emitRecordTypeForVar(CompilerContext& ctx, CodeStream& cs,
             allocatedSlot = slot;
             ctx.defUseAnalysis().trackUseDef(name, slot);
             // Wire this leaf into the expression tree so its single recording
-            // notifies the parent (RecordOnce records an invariant type, so one
-            // notification is sufficient — see merge analysis).
+            // publishes to the parent (RecordOnce records an invariant type, so
+            // one publish is sufficient — see merge analysis).
             ctx.registerLeafSlot((uint32_t)slot);
             auto& bitmapSize = ctx.code.top()->recordTypeOnceBitmapSize;
             if (ctx.defUseAnalysis().isRangeBasedForLoopVar(name)) {

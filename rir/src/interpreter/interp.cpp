@@ -2053,31 +2053,31 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // any. Two shapes reach here:
     //   always (raw immediate = slot idx):
     //     record_type_              — plain leaf / untracked
-    //     record_type_leaf_notify_  — leaf that is a source or has a parent
+    //     record_type_leaf_publish_  — leaf that is a source or has a parent
     //   once (packed immediate, gated by the per-code `fired` bitmap):
     //     record_type_once_
-    //     record_type_leaf_notify_once_
-    // The leaf_notify_ variants matter because the post-pass rewrites a tracked
-    // non-cached leaf's record_type_[once_] into them; matching only the plain
-    // opcodes would silently drop FB for those loads. Inner-node opcodes never
-    // follow a load (a load's own record is always a leaf), and anything else
-    // (NoRecord elision, ldddvar_) means no record follows — bail.
-    // noinline so it is outlined out of the dispatch loop (the always_inline
-    // recordFbAtSlot core is inlined into it) — keeps evalRirCode codegen
-    // matched to the baseline for a fair comparison.
+    //     record_type_leaf_publish_once_
+    // The leaf_publish_ variants matter because the post-pass rewrites a
+    // tracked non-cached leaf's record_type_[once_] into them; matching only
+    // the plain opcodes would silently drop FB for those loads. Inner-node
+    // opcodes never follow a load (a load's own record is always a leaf), and
+    // anything else (NoRecord elision, ldddvar_) means no record follows —
+    // bail. noinline so it is outlined out of the dispatch loop (the
+    // always_inline recordFbAtSlot core is inlined into it) — keeps evalRirCode
+    // codegen matched to the baseline for a fair comparison.
     auto recordForceBehavior = [&](SEXP s) __attribute__((noinline)) {
         Immediate raw = *(Immediate*)(pc + 1);
         uint32_t idx;
         switch (*pc) {
         case Opcode::record_type_:
-        case Opcode::record_type_leaf_notify_:
+        case Opcode::record_type_leaf_publish_:
             idx = raw; // always: raw immediate is the slot index
             // No gate exists on this arm, so it records every time — the
             // generic counterpart of fbAlwaysRec, not of fbRecordOnceRec.
             REC_STAT(g_recStats.fbGenericRec++);
             break;
         case Opcode::record_type_once_:
-        case Opcode::record_type_leaf_notify_once_:
+        case Opcode::record_type_leaf_publish_once_:
             // once: gated by the per-code `fired` bitmap; slot idx is packed
             RECORD_TYPE_ONCE_GATE(fired, raw, {
                 REC_STAT(g_recStats.fbGenericSkip++);
@@ -2100,15 +2100,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     // directly — no opcode peek, no unpacking. The compiler emits base
     // ldvar_cached_ only for RecordAlways uses (classifyUse pairs Always solely
     // with RecordAlways), which emit recordTypeTracked → record_type_, possibly
-    // specialized by the post-pass to record_type_leaf_notify_ (still non-once,
-    // still a raw slot immediate — an ldvar record is always a leaf). The two
-    // cases that would break a blind pc+1 read — a NoRecord elision (no opcode)
-    // and a packed _once_ immediate — are exactly the ones patched away to
-    // ldvar_cached_noRecordFB_ / ldvar_cached_fbRecordOnce_. Pin that
+    // specialized by the post-pass to record_type_leaf_publish_ (still
+    // non-once, still a raw slot immediate — an ldvar record is always a leaf).
+    // The two cases that would break a blind pc+1 read — a NoRecord elision (no
+    // opcode) and a packed _once_ immediate — are exactly the ones patched away
+    // to ldvar_cached_noRecordFB_ / ldvar_cached_fbRecordOnce_. Pin that
     // invariant.
     auto recordForceBehaviorNoCheck = [&](SEXP s) __attribute__((noinline)) {
         SLOWASSERT(*pc == Opcode::record_type_ ||
-                   *pc == Opcode::record_type_leaf_notify_);
+                   *pc == Opcode::record_type_leaf_publish_);
 
         Immediate slotIdx = *(Immediate*)(pc + 1);
         recordFbAtSlot(slotIdx, s);
@@ -2125,7 +2125,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto recordForceBehaviorRecordOnceNoCheck = [&](SEXP s)
         __attribute__((noinline)) {
         SLOWASSERT(*pc == Opcode::record_type_once_ ||
-                   *pc == Opcode::record_type_leaf_notify_once_);
+                   *pc == Opcode::record_type_leaf_publish_once_);
 
         Immediate raw = *(Immediate*)(pc + 1);
         RECORD_TYPE_ONCE_GATE(fired, raw, {
@@ -2524,23 +2524,23 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         // (simple leaves are plain record_type_ / record_type_once_; only the
         // simple-leaf *source* variants below are specialized.)
-        INSTRUCTION(record_type_leaf_notify_) {
+        INSTRUCTION(record_type_leaf_publish_) {
             Immediate idx = readImmediate();
             advanceImmediate();
             // doRecord + propagate (own parent + any deps, together)
-            typeFeedback->record_type_leaf_notify(idx, ostack_top(), scratch);
+            typeFeedback->record_type_leaf_publish(idx, ostack_top(), scratch);
             REC_STAT(g_recStats.leafAlwaysRec++);
             NEXT();
         }
 
-        INSTRUCTION(record_type_leaf_notify_once_) {
+        INSTRUCTION(record_type_leaf_publish_once_) {
             uint32_t raw = readImmediate();
             advanceImmediate();
             RECORD_TYPE_ONCE_GATE(fired, raw, {
                 REC_STAT(g_recStats.leafOnceSkip++);
                 NEXT();
             });
-            typeFeedback->record_type_leaf_notify(
+            typeFeedback->record_type_leaf_publish(
                 RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), scratch);
             // A value outside the signature domain (an object, say) must keep
             // re-arming the parent on every execution: `+` may dispatch to a
@@ -2578,18 +2578,18 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(record_type_inner_notify_) {
+        INSTRUCTION(record_type_inner_publish_) {
             Immediate idx = readImmediate();
             advanceImmediate();
             // Same as record_type_inner_. A suppressed node still publishes:
             // its result's signature is the one recorded with the tuple.
             auto& slot = typeFeedback->types(idx);
             if (slot.operandsUnchanged(scratch)) {
-                REC_STAT(g_recStats.innerNotifySkip++);
+                REC_STAT(g_recStats.innerPublishSkip++);
                 typeFeedback->publish(slot, slot.lastSig, scratch);
             } else {
-                REC_STAT(g_recStats.innerNotifyRec++);
-                typeFeedback->record_type_inner_notify_when_changed(
+                REC_STAT(g_recStats.innerPublishRec++);
+                typeFeedback->record_type_inner_publish_when_changed(
                     idx, ostack_top(), scratch);
             }
             NEXT();

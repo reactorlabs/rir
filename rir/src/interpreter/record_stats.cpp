@@ -91,12 +91,12 @@ RecordSkipStats::~RecordSkipStats() {
     uint64_t leafSkip = leafOnceSkip + noRecordSkip;
     uint64_t leafShould = leafRec + leafSkip;
     uint64_t onceShould = leafOnceRec + leafOnceSkip;
-    // inner nodes (standalone + notifying)
-    uint64_t allInnerRec = innerRec + innerNotifyRec;
-    uint64_t allInnerSkip = innerSkip + innerNotifySkip;
+    // inner nodes (standalone + publishing)
+    uint64_t allInnerRec = innerRec + innerPublishRec;
+    uint64_t allInnerSkip = innerSkip + innerPublishSkip;
     uint64_t allInnerShould = allInnerRec + allInnerSkip;
     uint64_t innerShould = innerRec + innerSkip;
-    uint64_t innerNotifyShould = innerNotifyRec + innerNotifySkip;
+    uint64_t innerPublishShould = innerPublishRec + innerPublishSkip;
     // untracked records (record_type_): always fire, never skipped
     uint64_t untrackedShould = untrackedRec;
     // totals
@@ -136,8 +136,8 @@ RecordSkipStats::~RecordSkipStats() {
             row("leaves", "NoRecord", noRecordSkip, 0, noRecordSkip),
 
             row("inner", "inner_standalone", innerShould, innerRec, innerSkip),
-            row("inner", "inner_notify", innerNotifyShould, innerNotifyRec,
-                innerNotifySkip),
+            row("inner", "inner_notify", innerPublishShould, innerPublishRec,
+                innerPublishSkip),
 
             row("force_behavior", "fbgeneric", fbGenericShould, fbGenericRec,
                 0),
@@ -219,7 +219,7 @@ RecordSkipStats::~RecordSkipStats() {
             "unchanged) = %s\n",
             col(recordedTotal).c_str(), col(sigUnchangedNoOp).c_str(),
             pctStr(sigUnchangedNoOp, recordedTotal).c_str());
-    fprintf(stderr, "    (only the _notify_ paths can early-out; plain "
+    fprintf(stderr, "    (only the _publish_ paths can early-out; plain "
                     "record_type_ always does the work)\n");
 
     // Table 3: inner nodes by opcode. "skipped" = suppressed because the
@@ -238,9 +238,9 @@ RecordSkipStats::~RecordSkipStats() {
             Ws, innerShouldCol(innerShould).c_str(), W, col(innerRec).c_str(),
             W, col(innerSkip).c_str(), pctStr(innerSkip, innerShould).c_str());
     fprintf(stderr, "  %-18s | %*s | %*s | %*s | %6s\n", "inner_notify", Ws,
-            innerShouldCol(innerNotifyShould).c_str(), W,
-            col(innerNotifyRec).c_str(), W, col(innerNotifySkip).c_str(),
-            pctStr(innerNotifySkip, innerNotifyShould).c_str());
+            innerShouldCol(innerPublishShould).c_str(), W,
+            col(innerPublishRec).c_str(), W, col(innerPublishSkip).c_str(),
+            pctStr(innerPublishSkip, innerPublishShould).c_str());
 
     // Table 4: force-behavior (FB) recording — see the derivation above for
     // why the generic dispatcher gets two rows.

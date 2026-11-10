@@ -341,10 +341,10 @@ class BC {
                bc == Opcode::record_type_ ||
                bc == Opcode::record_type_once_
                // || bc == Opcode::record_type_once_promise_;  // disabled
-               || bc == Opcode::record_type_leaf_notify_ ||
-               bc == Opcode::record_type_leaf_notify_once_ ||
+               || bc == Opcode::record_type_leaf_publish_ ||
+               bc == Opcode::record_type_leaf_publish_once_ ||
                bc == Opcode::record_type_inner_ ||
-               bc == Opcode::record_type_inner_notify_;
+               bc == Opcode::record_type_inner_publish_;
     }
 
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
@@ -661,10 +661,10 @@ class BC {
         // case Opcode::record_type_once_promise_:  // disabled
         case Opcode::clear_record_type_once_bit_:
         case Opcode::clear_record_type_once_bits_range_:
-        case Opcode::record_type_leaf_notify_:
-        case Opcode::record_type_leaf_notify_once_:
+        case Opcode::record_type_leaf_publish_:
+        case Opcode::record_type_leaf_publish_once_:
         case Opcode::record_type_inner_:
-        case Opcode::record_type_inner_notify_:
+        case Opcode::record_type_inner_publish_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
