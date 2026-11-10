@@ -2542,16 +2542,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             });
             typeFeedback->record_type_leaf_publish(
                 RECORD_TYPE_ONCE_SLOT_IDX(raw), ostack_top(), scratch);
-            // A value outside the signature domain (an object, say) must keep
-            // re-arming the parent on every execution: `+` may dispatch to a
-            // method whose result type changes although `x` is not reassigned.
-            // Setting the bit would silence this leaf for the rest of the
-            // invocation and leave the parent clean. So stay armed and behave
-            // as RecordAlways while the value is unsummarisable. lastSig is
-            // this execution's signature on every path out of the record.
-            if (typeFeedback->types(RECORD_TYPE_ONCE_SLOT_IDX(raw)).lastSig !=
-                ObservedValues::SigAlwaysDirty)
-                RECORD_TYPE_ONCE_SET(fired, raw);
+            // Set even for a value outside the signature domain (an object,
+            // say), whose parent must record on every execution: `+` may
+            // dispatch to a method whose result type changes although `x` is
+            // not reassigned. The 0 published here does that by itself. scratch
+            // and fired are both per activation and nothing else writes this
+            // leaf's positions, so while the bit is set they keep the 0, and a
+            // pair with a 0 is never matched (storeTuple). Clearing the bit
+            // (enclosing loop) re-records and republishes.
+            RECORD_TYPE_ONCE_SET(fired, raw);
             REC_STAT(g_recStats.leafOnceRec++);
             NEXT();
         }
