@@ -573,7 +573,10 @@ class CompilerContext {
                 bool isInner = v.arity > 0;
                 bool publishes = v.publishes() || sourceSlots.count(slot);
                 assert(!(once && isInner));
-                if (isInner)
+                if (isInner && v.arity == 1)
+                    *pc = publishes ? Opcode::record_type_inner1_publish_
+                                    : Opcode::record_type_inner1_;
+                else if (isInner)
                     *pc = publishes ? Opcode::record_type_inner_publish_
                                     : Opcode::record_type_inner_;
                 else if (publishes)

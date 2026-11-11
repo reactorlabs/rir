@@ -478,17 +478,23 @@ DEF_INSTR(record_type_once_, 1, 1, 1)
 //   inner node, publishes  -> record_type_inner_publish_
 //     (an operand itself, or a root source: as above, and publish either way —
 //     lastSig when suppressed)
+//   one-operand inner node -> record_type_inner1_[publish_]
+//     (the other side a constant: as the two above, but compares only its one
+//     operand position. A separate opcode rather than an arity test, so the
+//     suppression check costs nothing extra per execution)
 DEF_INSTR(record_type_leaf_publish_, 1, 1, 1)
 DEF_INSTR(record_type_leaf_publish_once_, 1, 1, 1)
 DEF_INSTR(record_type_inner_, 1, 1, 1)
 DEF_INSTR(record_type_inner_publish_, 1, 1, 1)
+DEF_INSTR(record_type_inner1_, 1, 1, 1)
+DEF_INSTR(record_type_inner1_publish_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
 DEF_INSTR(clear_record_type_once_bit_, 1, 0, 0)
 DEF_INSTR(clear_record_type_once_bits_range_, 1, 0, 0)
 // Stats only: marks a NoRecord (elided) leaf so the interpreter can count its
 // executions. Exists only when RIR_RECORD_STATS is defined, so non-stats
 // builds are byte-identical. Deliberately outside the record_type_ ..
-// record_type_inner_publish_ range: it records nothing.
+// record_type_inner1_publish_ range: it records nothing.
 #ifdef RIR_RECORD_STATS
 DEF_INSTR(stat_norecord_, 0, 0, 0)
 #endif

@@ -147,7 +147,9 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     // code just suppresses no inner record.
     for (Opcode* pc = code->code(); pc < code->endCode(); pc = BC::next(pc)) {
         if (*pc == Opcode::record_type_inner_ ||
-            *pc == Opcode::record_type_inner_publish_)
+            *pc == Opcode::record_type_inner_publish_ ||
+            *pc == Opcode::record_type_inner1_ ||
+            *pc == Opcode::record_type_inner1_publish_)
             *pc = Opcode::record_type_;
     }
 

@@ -2601,6 +2601,37 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
+        // One-operand inner nodes (the other side a constant): the same two
+        // handlers, comparing the single operand position. Counted with the
+        // two-operand ones.
+        INSTRUCTION(record_type_inner1_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            if (typeFeedback->types(idx).operandUnchanged(scratch)) {
+                REC_STAT(g_recStats.innerSkip++);
+            } else {
+                REC_STAT(g_recStats.innerRec++);
+                typeFeedback->record_type_inner_when_changed(idx, ostack_top(),
+                                                             scratch);
+            }
+            NEXT();
+        }
+
+        INSTRUCTION(record_type_inner1_publish_) {
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            auto& slot = typeFeedback->types(idx);
+            if (slot.operandUnchanged(scratch)) {
+                REC_STAT(g_recStats.innerPublishSkip++);
+                typeFeedback->publish(slot, slot.lastSig, scratch);
+            } else {
+                REC_STAT(g_recStats.innerPublishRec++);
+                typeFeedback->record_type_inner_publish_when_changed(
+                    idx, ostack_top(), scratch);
+            }
+            NEXT();
+        }
+
         INSTRUCTION(call_) {
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length();

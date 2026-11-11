@@ -216,7 +216,7 @@ struct ObservedValues {
     // at most one slot (finishNodeForSlots), so two positions always suffice.
     // An inner node gets one position per operand: a one-operand node (the
     // other side a constant) gets one, and compares one byte
-    // (operandsUnchanged tests arity).
+    // (operandUnchanged, record_type_inner1_[publish_]).
     static constexpr unsigned MaxArity = 2;
     // A `tuple` that no current tuple can equal: no signature is 0xFF (the
     // widest is 131, see signatureOf), so neither byte can match. Stored while
@@ -556,7 +556,7 @@ struct ObservedValues {
     // and a RecordOnce leaf fires on its first execution in the activation.
     // Each case that breaks this is handled where it arises:
     //  * a one-operand node has no second operand: it compares one byte
-    //    (operandsUnchanged tests arity), never the byte after it;
+    //    (operandUnchanged, the inner1 opcodes), never the byte after it;
     //  * a deopt resumes the Code mid-expression, after operands that ran in
     //    native code: evalRirCode zeroes scratch when entered with initialPC,
     //    and a 0 never matches;
@@ -565,21 +565,27 @@ struct ObservedValues {
     //    to a plain record_type_ (Code::deserialize, setTypeFeedbackParents).
 
     // Would a record add nothing? True iff the current operand signatures
-    // equal the tuple last recorded here. Reads only this node's own
-    // positions: a one-operand node (the other side a constant, e.g.
-    // `x + 1L`) has one, and compares it with the first byte of `tuple`; the
-    // byte after it belongs to no operand of this node and may be unwritten.
-    // arity sits in the same 16-byte slot, so the test adds no cache line.
+    // equal the tuple last recorded here. Two-operand inner node
+    // (record_type_inner_[publish_]).
     __attribute__((always_inline)) bool
     operandsUnchanged(const uint8_t* scratch) const {
-        if (arity == 1) {
-            uint8_t t;
-            memcpy(&t, &tuple, sizeof(t));
-            return scratch[tupleBase] == t;
-        }
+        SLOWASSERT(arity == 2);
         uint16_t cur;
         memcpy(&cur, scratch + tupleBase, sizeof(cur));
         return cur == tuple;
+    }
+
+    // Same, for a one-operand inner node (the other side a constant, e.g.
+    // `x + 1L`; record_type_inner1_[publish_]): compares its one position
+    // with the first byte of `tuple`. The byte after that position belongs to
+    // no operand of this node and may be unwritten, so it is never read. The
+    // arity is chosen by the opcode, so neither compare tests it.
+    __attribute__((always_inline)) bool
+    operandUnchanged(const uint8_t* scratch) const {
+        SLOWASSERT(arity == 1);
+        uint8_t t;
+        memcpy(&t, &tuple, sizeof(t));
+        return scratch[tupleBase] == t;
     }
 
     // Caller-guarded on !operandsUnchanged: the interpreter tests it inline,
@@ -830,7 +836,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // and no NoRecord dependents (not a source). Nothing to publish, so it
     // skips the signature entirely — just doRecord.
     //
-    // `_when_changed`: the interpreter tests operandsUnchanged inline before
+    // `_when_changed`: the interpreter tests operands[s]Unchanged inline before
     // calling, so reaching here already means the node must record. Do not
     // call otherwise. Takes only `idx`, not the slot the caller already
     // resolved for its test: handing the reference over was measured 0.23%
