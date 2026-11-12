@@ -2567,7 +2567,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // The handler redoes types(idx) rather than taking the slot from
             // here — passing it was measured slower, see the note on
             // record_type_inner_when_changed.
-            if (typeFeedback->types(idx).operandsUnchanged(scratch)) {
+            // Expected true, as RECORD_TYPE_ONCE_GATE's test: keeps the
+            // record call off the fall-through path of the dispatch loop.
+            if (__builtin_expect(
+                    typeFeedback->types(idx).operandsUnchanged(scratch), 1)) {
                 REC_STAT(g_recStats.innerSkip++);
             } else {
                 REC_STAT(g_recStats.innerRec++);
@@ -2583,7 +2586,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // Same as record_type_inner_. A suppressed node still publishes:
             // its result's signature is the one recorded with the tuple.
             auto& slot = typeFeedback->types(idx);
-            if (slot.operandsUnchanged(scratch)) {
+            if (__builtin_expect(slot.operandsUnchanged(scratch), 1)) {
                 REC_STAT(g_recStats.innerPublishSkip++);
                 typeFeedback->publish(slot, slot.lastSig, scratch);
             } else {

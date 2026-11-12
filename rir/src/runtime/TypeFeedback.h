@@ -808,7 +808,13 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // callee-saved register across the call, which costs more than redoing
     // types(idx) — a single scaled lea from a loop-invariant base and an index
     // that was just decoded.
-    __attribute__((noinline)) void
+    //
+    // cold: an inner node is suppressed on the overwhelming majority of its
+    // executions, so this call is rare. Moves it, and the branch to it, out of
+    // evalRirCode's hot path (together with the __builtin_expect on the
+    // interpreter's operandsUnchanged test). Not for record_type /
+    // record_type_leaf_publish: leaves record on every execution.
+    __attribute__((noinline, cold)) void
     record_type_inner_when_changed(uint32_t idx, const SEXP e,
                                    const uint8_t* scratch) {
         types(idx).recordInner(e, scratch);
@@ -821,7 +827,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // handles both, so one opcode covers both.
     //
     // `_when_changed` as above: caller-guarded, so this always records.
-    __attribute__((noinline)) void
+    // cold as above.
+    __attribute__((noinline, cold)) void
     record_type_inner_publish_when_changed(uint32_t idx, const SEXP e,
                                            uint8_t* scratch) {
         ObservedValues& slot = types(idx);
